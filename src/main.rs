@@ -4,7 +4,7 @@ use std::process::ExitCode;
 
 use lexopt::prelude::*;
 
-use rask::{ButtonPreset, EntryResult, FileSelectResult, Icon, ProgressResult, entry, file_select, message, password, progress};
+use rask::{ButtonPreset, CalendarResult, EntryResult, FileSelectResult, Icon, ListResult, ProgressResult, calendar, entry, file_select, list, message, password, progress};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -36,6 +36,17 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut save_mode = false;
     let mut filename = String::new();
 
+    // List options
+    let mut columns: Vec<String> = Vec::new();
+    let mut list_values: Vec<String> = Vec::new();
+    let mut checklist = false;
+    let mut radiolist = false;
+
+    // Calendar options
+    let mut cal_year: Option<u32> = None;
+    let mut cal_month: Option<u32> = None;
+    let mut cal_day: Option<u32> = None;
+
     // Dialog type
     let mut dialog_type: Option<DialogType> = None;
 
@@ -59,6 +70,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("password") => dialog_type = Some(DialogType::Password),
             Long("progress") => dialog_type = Some(DialogType::Progress),
             Long("file-selection") => dialog_type = Some(DialogType::FileSelection),
+            Long("list") => dialog_type = Some(DialogType::List),
+            Long("calendar") => dialog_type = Some(DialogType::Calendar),
 
             // Common options
             Long("title") => title = parser.value()?.string()?,
@@ -81,14 +94,21 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("save") => save_mode = true,
             Long("filename") => filename = parser.value()?.string()?,
 
-            // TODO: Add more dialog types
-            Long("list") | Long("calendar") => {
-                return Err(format!("dialog type not yet implemented: {:?}", arg).into());
-            }
+            // List options
+            Long("column") => columns.push(parser.value()?.string()?),
+            Long("checklist") => checklist = true,
+            Long("radiolist") => radiolist = true,
+
+            // Calendar options
+            Long("year") => cal_year = Some(parser.value()?.string()?.parse()?),
+            Long("month") => cal_month = Some(parser.value()?.string()?.parse()?),
+            Long("day") => cal_day = Some(parser.value()?.string()?.parse()?),
 
             Value(val) => {
-                // Positional argument - treat as text if text is empty
-                if text.is_empty() {
+                // Positional arguments - for list dialog these are row values
+                if dialog_type == Some(DialogType::List) {
+                    list_values.push(val.string()?);
+                } else if text.is_empty() {
                     text = val.string()?;
                 }
             }
@@ -175,6 +195,76 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             let result = builder.show()?;
             handle_file_select_result(result)
         }
+        DialogType::List => {
+            let mut builder = list();
+            if !title.is_empty() {
+                builder = builder.title(&title);
+            }
+            if !text.is_empty() {
+                builder = builder.text(&text);
+            }
+            for col in &columns {
+                builder = builder.column(col);
+            }
+            if checklist {
+                builder = builder.checklist();
+            } else if radiolist {
+                builder = builder.radiolist();
+            }
+
+            // Build rows from list_values based on column count
+            let cols = columns.len().max(1);
+            for chunk in list_values.chunks(cols) {
+                builder = builder.row(chunk.iter().cloned().collect());
+            }
+
+            let result = builder.show()?;
+            handle_list_result(result)
+        }
+        DialogType::Calendar => {
+            let mut builder = calendar();
+            if !title.is_empty() {
+                builder = builder.title(&title);
+            }
+            if !text.is_empty() {
+                builder = builder.text(&text);
+            }
+            if let Some(y) = cal_year {
+                builder = builder.year(y);
+            }
+            if let Some(m) = cal_month {
+                builder = builder.month(m);
+            }
+            if let Some(d) = cal_day {
+                builder = builder.day(d);
+            }
+            let result = builder.show()?;
+            handle_calendar_result(result)
+        }
+    }
+}
+
+fn handle_list_result(result: ListResult) -> Result<i32, Box<dyn std::error::Error>> {
+    match result {
+        ListResult::Selected(items) => {
+            for item in items {
+                println!("{}", item);
+            }
+            Ok(0)
+        }
+        ListResult::Cancelled => Ok(1),
+        ListResult::Closed => Ok(255),
+    }
+}
+
+fn handle_calendar_result(result: CalendarResult) -> Result<i32, Box<dyn std::error::Error>> {
+    match result {
+        CalendarResult::Selected { year, month, day } => {
+            println!("{:04}-{:02}-{:02}", year, month, day);
+            Ok(0)
+        }
+        CalendarResult::Cancelled => Ok(1),
+        CalendarResult::Closed => Ok(255),
     }
 }
 
@@ -214,6 +304,8 @@ enum DialogType {
     Password,
     Progress,
     FileSelection,
+    List,
+    Calendar,
 }
 
 fn print_help() {
@@ -221,7 +313,7 @@ fn print_help() {
         r#"rask {VERSION} - Display simple GUI dialogs from the command line
 
 USAGE:
-    rask [OPTIONS] --<dialog-type> [TEXT]
+    rask [OPTIONS] --<dialog-type> [VALUES...]
 
 DIALOG TYPES:
     --info              Display an information dialog
@@ -232,8 +324,8 @@ DIALOG TYPES:
     --password          Display a password entry dialog
     --progress          Display a progress dialog
     --file-selection    Display a file selection dialog
-    --list              Display a list dialog (not yet implemented)
-    --calendar          Display a calendar dialog (not yet implemented)
+    --list              Display a list selection dialog
+    --calendar          Display a calendar date picker
 
 OPTIONS:
     --title=TEXT        Set the dialog title
@@ -246,6 +338,12 @@ OPTIONS:
     --directory         Select directories only (file-selection)
     --save              Save mode (file-selection)
     --filename=TEXT     Default filename for save mode
+    --column=TEXT       Add a column header (list)
+    --checklist         Enable multi-select with checkboxes (list)
+    --radiolist         Enable single-select with radio buttons (list)
+    --year=N            Initial year (calendar)
+    --month=N           Initial month 1-12 (calendar)
+    --day=N             Initial day 1-31 (calendar)
     -h, --help          Print this help message
     --version           Print version information
 
@@ -255,13 +353,14 @@ EXAMPLES:
     rask --entry --text="Enter your name:" --entry-text="John"
     rask --password --text="Enter password:"
     echo "50" | rask --progress --text="Working..."
-    rask --progress --pulsate --text="Please wait..."
     rask --file-selection --title="Open File"
-    rask --file-selection --directory --title="Select Folder"
+    rask --list --column="Name" --column="Size" file1 10KB file2 20KB
+    rask --list --checklist --column="Select" --column="Item" FALSE A TRUE B
+    rask --calendar --text="Select date:"
 
 EXIT CODES:
-    0   OK/Yes button clicked, or text entered, or file selected
-    1   Cancel/No button clicked
+    0   OK/Yes clicked, text entered, file/date selected
+    1   Cancel/No clicked
     255 Dialog was closed
     100 Error occurred
 "#

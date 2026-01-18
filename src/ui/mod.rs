@@ -1,7 +1,9 @@
 //! UI components and dialog implementations.
 
+pub(crate) mod calendar;
 pub(crate) mod entry;
 pub(crate) mod file_select;
+pub(crate) mod list;
 pub(crate) mod message;
 pub(crate) mod progress;
 pub(crate) mod widgets;

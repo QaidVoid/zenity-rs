@@ -9,8 +9,10 @@ pub mod ui;
 
 pub use error::Error;
 pub use ui::{ButtonPreset, Colors, DialogResult, Icon, THEME_DARK, THEME_LIGHT};
+pub use ui::calendar::{CalendarBuilder, CalendarResult};
 pub use ui::entry::{EntryBuilder, EntryResult};
 pub use ui::file_select::{FileSelectBuilder, FileSelectResult};
+pub use ui::list::{ListBuilder, ListMode, ListResult};
 pub use ui::message::MessageBuilder;
 pub use ui::progress::{ProgressBuilder, ProgressResult};
 
@@ -83,4 +85,14 @@ pub fn progress() -> ProgressBuilder {
 /// Creates a new file selection dialog builder.
 pub fn file_select() -> FileSelectBuilder {
     FileSelectBuilder::new()
+}
+
+/// Creates a new list selection dialog builder.
+pub fn list() -> ListBuilder {
+    ListBuilder::new()
+}
+
+/// Creates a new calendar date picker dialog builder.
+pub fn calendar() -> CalendarBuilder {
+    CalendarBuilder::new()
 }
