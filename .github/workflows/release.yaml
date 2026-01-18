@@ -1,0 +1,114 @@
+name: zenity-rs release
+concurrency:
+  group: "${{ github.workflow }}-${{ github.ref }}"
+  cancel-in-progress: true
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  attestations: write
+  contents: write
+  id-token: write
+
+jobs:
+  publish-binaries:
+    name: Publish binaries
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        build:
+          - {
+              NAME: aarch64-linux,
+              TARGET: aarch64-unknown-linux-musl,
+            }
+          - {
+              NAME: x86_64-linux,
+              TARGET: x86_64-unknown-linux-musl,
+            }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set the release version
+        shell: bash
+        run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          sudo apt update -y
+          sudo apt install b3sum findutils file -y
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@nightly
+        with:
+          targets: ${{ matrix.build.TARGET }}
+
+      - name: Install Cross
+        shell: bash
+        run: |
+          cargo install cross --git "https://github.com/cross-rs/cross" --jobs="$(($(nproc)+1))"
+          hash -r &>/dev/null
+          command -v cross &>/dev/null || { echo "cross command not found" >&2; exit 1; }
+
+      - name: Build
+        env:
+          RUSTFLAGS: "-C target-feature=+crt-static \
+                      -C link-self-contained=yes \
+                      -C link-arg=-Wl,--build-id=none"
+        run: cross build --release --target "${{ matrix.build.TARGET }}" --jobs="$(($(nproc)+1))" --verbose
+
+      - name: Prepare release assets
+        shell: bash
+        run: |
+          mkdir -p release
+          cp {LICENSE,README.md} release/
+          cp "target/${{ matrix.build.TARGET }}/release/zenity-rs" release/
+
+      - name: Create release artifacts
+        env:
+          ARTIFACT: "zenity-rs-${{ matrix.build.NAME }}"
+        shell: bash
+        run: |
+          cp release/zenity-rs "${ARTIFACT}"
+          b3sum "${ARTIFACT}" > "${ARTIFACT}.b3sum"
+
+          tar -czvf "${ARTIFACT}.tar.gz" release/
+          b3sum "${ARTIFACT}.tar.gz" > "${ARTIFACT}.tar.gz.b3sum"
+          bash -c 'realpath "${ARTIFACT}" ; realpath "${ARTIFACT}.tar.gz"' | xargs -I "{}" bash -c \
+           'printf "\nFile: $(basename {})\n  Type: $(file -b {})\n  B3sum: $(b3sum {} | cut -d" " -f1)\n  SHA256sum: $(sha256sum {} | cut -d" " -f1)\n  Size: $(du -bh {} | cut -f1)\n"'
+
+      - name: Publish to GitHub
+        if: ${{ !contains(github.ref, '-') }}
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: zenity-rs-${{ matrix.build.NAME }}*
+          file_glob: true
+          overwrite: true
+          tag: ${{ github.ref }}
+          release_name: "zenity-rs v${{ env.RELEASE_VERSION }}"
+
+      - name: Publish to GitHub (pre-release)
+        if: ${{ contains(github.ref, '-') }}
+        uses: svenstaro/upload-release-action@v2
+        with:
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          file: zenity-rs-${{ matrix.build.NAME }}*
+          file_glob: true
+          overwrite: true
+          tag: ${{ github.ref }}
+          release_name: "Pre-release v${{ env.RELEASE_VERSION }}"
+          prerelease: true
+
+      - name: Attest Build Provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: "zenity-rs-v${{ env.RELEASE_VERSION }}-${{ matrix.build.NAME }}"
+          subject-path: |
+            zenity-rs-${{ matrix.build.NAME }}*
+          show-summary: true
