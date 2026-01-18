@@ -1,0 +1,45 @@
+cargo-features = ["panic-immediate-abort"]
+
+[package]
+name = "rask"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.70"
+license = "MIT"
+description = "Display simple GUI dialogs from the command line"
+keywords = ["zenity", "dialog", "gui", "cli"]
+categories = ["command-line-utilities", "gui"]
+
+[features]
+default = ["x11", "wayland"]
+x11 = ["dep:x11rb", "dep:kbvm"]
+wayland = ["dep:wayland-client", "dep:wayland-protocols", "dep:memmap2", "dep:tempfile", "dep:kbvm"]
+
+[dependencies]
+# Rendering
+tiny-skia = "0.11"
+ab_glyph = { version = "0.2", features = ["libm"] }
+
+# CLI
+lexopt = "0.3"
+
+# Misc
+bitflags = "2.4"
+dirs = "6"
+
+# X11 backend (optional)
+x11rb = { version = "0.13", default-features = false, features = ["xkb"], optional = true }
+kbvm = { version = "0.1", features = ["x11"], optional = true }
+
+# Wayland backend (optional)
+wayland-client = { version = "0.31", default-features = false, optional = true }
+wayland-protocols = { version = "0.32", default-features = false, features = ["client", "staging"], optional = true }
+memmap2 = { version = "0.9", optional = true }
+tempfile = { version = "3", optional = true }
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "immediate-abort"
+strip = true
