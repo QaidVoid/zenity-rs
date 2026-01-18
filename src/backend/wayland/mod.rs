@@ -305,6 +305,14 @@ impl Window for WaylandWindow {
         }
 
         self.conn.flush()?;
+
+        // Try to prepare for reading new events
+        if let Some(guard) = self.event_queue.prepare_read() {
+            // Try to read events - this may fail if no data is available
+            // The guard is consumed by read() call, so we don't need to cancel it
+            let _ = guard.read();
+        }
+
         self.event_queue.dispatch_pending(&mut self.state)?;
 
         Ok(self.state.pending_events.pop_front())
