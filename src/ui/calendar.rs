@@ -11,6 +11,7 @@ const PADDING: u32 = 16;
 const CELL_SIZE: u32 = 36;
 const HEADER_HEIGHT: u32 = 40;
 const DAY_HEADER_HEIGHT: u32 = 28;
+const DROPDOWN_ITEM_HEIGHT: u32 = 24;
 
 /// Calendar dialog result.
 #[derive(Debug, Clone)]
@@ -41,6 +42,13 @@ impl CalendarResult {
             _ => None,
         }
     }
+}
+
+#[derive(Clone, Copy, PartialEq)]
+enum DropdownState {
+    None,
+    Month,
+    Year,
 }
 
 /// Calendar dialog builder.
@@ -143,147 +151,16 @@ impl CalendarBuilder {
         let mut mouse_x = 0i32;
         let mut mouse_y = 0i32;
         let mut hovered_day: Option<u32> = None;
-
-        // Draw function
-        let draw = |canvas: &mut Canvas,
-                    colors: &Colors,
-                    font: &Font,
-                    text: &str,
-                    year: u32,
-                    month: u32,
-                    selected_day: u32,
-                    hovered_day: Option<u32>,
-                    ok_button: &Button,
-                    cancel_button: &Button| {
-            canvas.fill(colors.window_bg);
-
-            // Draw text prompt
-            if !text.is_empty() {
-                let tc = font.render(text).with_color(colors.text).finish();
-                canvas.draw_canvas(&tc, PADDING as i32, text_y);
-            }
-
-            // Calendar background
-            let cal_h = HEADER_HEIGHT + DAY_HEADER_HEIGHT + CELL_SIZE * 6;
-            canvas.fill_rounded_rect(
-                calendar_x as f32, calendar_y as f32,
-                grid_width as f32, cal_h as f32,
-                8.0, colors.input_bg,
-            );
-
-            // Header with month/year and navigation
-            let header_y = calendar_y;
-            let header_bg = darken(colors.input_bg, 0.03);
-            canvas.fill_rounded_rect(
-                calendar_x as f32, header_y as f32,
-                grid_width as f32, HEADER_HEIGHT as f32,
-                8.0, header_bg,
-            );
-            // Cover bottom corners
-            canvas.fill_rect(
-                calendar_x as f32, (header_y + HEADER_HEIGHT as i32 - 8) as f32,
-                grid_width as f32, 8.0,
-                header_bg,
-            );
-
-            // Navigation arrows
-            let nav_color = colors.text;
-            let prev_month = font.render("<").with_color(nav_color).finish();
-            canvas.draw_canvas(&prev_month, calendar_x + 12, header_y + 12);
-
-            let next_month = font.render(">").with_color(nav_color).finish();
-            canvas.draw_canvas(&next_month, calendar_x + grid_width as i32 - 20, header_y + 12);
-
-            // Month/Year text
-            let month_name = month_name(month);
-            let header_text = format!("{} {}", month_name, year);
-            let ht = font.render(&header_text).with_color(colors.text).finish();
-            let ht_x = calendar_x + (grid_width as i32 - ht.width() as i32) / 2;
-            canvas.draw_canvas(&ht, ht_x, header_y + 12);
-
-            // Day headers
-            let day_header_y = header_y + HEADER_HEIGHT as i32;
-            let days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
-            for (i, day) in days.iter().enumerate() {
-                let dx = calendar_x + (i as u32 * CELL_SIZE) as i32;
-                let dt = font.render(day).with_color(rgb(140, 140, 140)).finish();
-                let dtx = dx + (CELL_SIZE as i32 - dt.width() as i32) / 2;
-                canvas.draw_canvas(&dt, dtx, day_header_y + 6);
-            }
-
-            // Calendar grid
-            let grid_y = day_header_y + DAY_HEADER_HEIGHT as i32;
-            let first_day = first_day_of_month(year, month);
-            let days_in_month = days_in_month(year, month);
-            let today = current_date();
-
-            for day in 1..=days_in_month {
-                let cell_idx = (first_day + day - 1) as i32;
-                let row = cell_idx / 7;
-                let col = cell_idx % 7;
-
-                let cx = calendar_x + col * CELL_SIZE as i32;
-                let cy = grid_y + row * CELL_SIZE as i32;
-
-                let is_selected = day == selected_day;
-                let is_hovered = hovered_day == Some(day);
-                let is_today = year == today.0 && month == today.1 && day == today.2;
-
-                // Cell background
-                if is_selected {
-                    canvas.fill_rounded_rect(
-                        (cx + 2) as f32, (cy + 2) as f32,
-                        (CELL_SIZE - 4) as f32, (CELL_SIZE - 4) as f32,
-                        4.0, colors.input_border_focused,
-                    );
-                } else if is_hovered {
-                    canvas.fill_rounded_rect(
-                        (cx + 2) as f32, (cy + 2) as f32,
-                        (CELL_SIZE - 4) as f32, (CELL_SIZE - 4) as f32,
-                        4.0, darken(colors.input_bg, 0.08),
-                    );
-                }
-
-                // Today indicator (ring)
-                if is_today && !is_selected {
-                    canvas.stroke_rounded_rect(
-                        (cx + 4) as f32, (cy + 4) as f32,
-                        (CELL_SIZE - 8) as f32, (CELL_SIZE - 8) as f32,
-                        4.0, colors.input_border_focused, 2.0,
-                    );
-                }
-
-                // Day number
-                let day_str = day.to_string();
-                let text_color = if is_selected {
-                    rgb(255, 255, 255)
-                } else if col == 0 {
-                    rgb(200, 100, 100) // Sunday in red-ish
-                } else {
-                    colors.text
-                };
-                let dt = font.render(&day_str).with_color(text_color).finish();
-                let dtx = cx + (CELL_SIZE as i32 - dt.width() as i32) / 2;
-                let dty = cy + (CELL_SIZE as i32 - dt.height() as i32) / 2;
-                canvas.draw_canvas(&dt, dtx, dty);
-            }
-
-            // Border
-            canvas.stroke_rounded_rect(
-                calendar_x as f32, calendar_y as f32,
-                grid_width as f32, cal_h as f32,
-                8.0, colors.input_border, 1.0,
-            );
-
-            // Buttons
-            ok_button.draw_to(canvas, colors, font);
-            cancel_button.draw_to(canvas, colors, font);
-        };
+        let mut dropdown = DropdownState::None;
+        let mut dropdown_hover: Option<usize> = None;
+        let mut year_scroll_offset: i32 = 0;
 
         // Initial draw
-        draw(
-            &mut canvas, colors, &font, &self.text,
+        draw_calendar(
+            &mut canvas, colors, &font, &self.text, text_y,
+            calendar_x, calendar_y, grid_width,
             year, month, selected_day, hovered_day,
+            dropdown, dropdown_hover, year_scroll_offset,
             &ok_button, &cancel_button,
         );
         window.set_contents(&canvas)?;
@@ -302,49 +179,112 @@ impl CalendarBuilder {
                     mouse_x = pos.x as i32;
                     mouse_y = pos.y as i32;
 
-                    let old_hovered = hovered_day;
-                    hovered_day = None;
-
-                    // Check if over grid
-                    if mouse_x >= calendar_x && mouse_x < calendar_x + grid_width as i32
-                        && mouse_y >= grid_y && mouse_y < grid_y + (CELL_SIZE * 6) as i32
-                    {
-                        let col = (mouse_x - calendar_x) / CELL_SIZE as i32;
-                        let row = (mouse_y - grid_y) / CELL_SIZE as i32;
-                        let cell_idx = row * 7 + col;
-
-                        let first_day = first_day_of_month(year, month);
-                        let days_in = days_in_month(year, month);
-
-                        let day = cell_idx - first_day as i32 + 1;
-                        if day >= 1 && day <= days_in as i32 {
-                            hovered_day = Some(day as u32);
+                    // Handle dropdown hover
+                    if dropdown != DropdownState::None {
+                        let old_hover = dropdown_hover;
+                        dropdown_hover = get_dropdown_hover(
+                            dropdown, mouse_x, mouse_y,
+                            calendar_x, calendar_y,
+                        );
+                        if old_hover != dropdown_hover {
+                            needs_redraw = true;
                         }
-                    }
+                    } else {
+                        // Handle day hover
+                        let old_hovered = hovered_day;
+                        hovered_day = None;
 
-                    if old_hovered != hovered_day {
-                        needs_redraw = true;
+                        if mouse_x >= calendar_x && mouse_x < calendar_x + grid_width as i32
+                            && mouse_y >= grid_y && mouse_y < grid_y + (CELL_SIZE * 6) as i32
+                        {
+                            let col = (mouse_x - calendar_x) / CELL_SIZE as i32;
+                            let row = (mouse_y - grid_y) / CELL_SIZE as i32;
+                            let cell_idx = row * 7 + col;
+
+                            let first_day = first_day_of_month(year, month);
+                            let days_in = days_in_month(year, month);
+
+                            let day = cell_idx - first_day as i32 + 1;
+                            if day >= 1 && day <= days_in as i32 {
+                                hovered_day = Some(day as u32);
+                            }
+                        }
+
+                        if old_hovered != hovered_day {
+                            needs_redraw = true;
+                        }
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left) => {
                     let header_y = calendar_y;
 
-                    // Check navigation
-                    if mouse_y >= header_y && mouse_y < header_y + HEADER_HEIGHT as i32 {
-                        // Previous month
-                        if mouse_x >= calendar_x && mouse_x < calendar_x + 32 {
+                    // Handle dropdown selection
+                    if dropdown != DropdownState::None {
+                        if let Some(idx) = dropdown_hover {
+                            match dropdown {
+                                DropdownState::Month => {
+                                    month = idx as u32 + 1;
+                                    selected_day = selected_day.min(days_in_month(year, month));
+                                }
+                                DropdownState::Year => {
+                                    let base_year = year as i32 - 5 + year_scroll_offset;
+                                    year = (base_year + idx as i32).max(1) as u32;
+                                    selected_day = selected_day.min(days_in_month(year, month));
+                                }
+                                DropdownState::None => {}
+                            }
+                        }
+                        dropdown = DropdownState::None;
+                        dropdown_hover = None;
+                        needs_redraw = true;
+                    }
+                    // Check header clicks
+                    else if mouse_y >= header_y && mouse_y < header_y + HEADER_HEIGHT as i32 {
+                        // Calculate actual positions based on text widths
+                        let month_name = month_name(month);
+                        let month_text_width = font.render(month_name).finish().width() as i32;
+                        let year_str = year.to_string();
+                        let year_text_width = font.render(&year_str).finish().width() as i32;
+
+                        let prev_arrow_end = calendar_x + 28;
+                        let month_x = calendar_x + 35;
+                        let month_end = month_x + month_text_width;
+                        let year_x = month_x + month_text_width + 8;
+                        let year_end = year_x + year_text_width;
+                        let today_x = calendar_x + grid_width as i32 - 70;
+                        let next_arrow_start = calendar_x + grid_width as i32 - 24;
+
+                        // Check in order from left to right
+                        if mouse_x < prev_arrow_end {
+                            // Previous month
                             if month == 1 {
                                 month = 12;
                                 year -= 1;
                             } else {
                                 month -= 1;
                             }
-                            // Clamp selected day
                             selected_day = selected_day.min(days_in_month(year, month));
                             needs_redraw = true;
-                        }
-                        // Next month
-                        else if mouse_x >= calendar_x + grid_width as i32 - 32 {
+                        } else if mouse_x >= month_x && mouse_x < month_end + 5 {
+                            // Month click
+                            dropdown = DropdownState::Month;
+                            dropdown_hover = Some((month - 1) as usize);
+                            needs_redraw = true;
+                        } else if mouse_x >= year_x && mouse_x < year_end + 5 {
+                            // Year click
+                            dropdown = DropdownState::Year;
+                            dropdown_hover = Some(5); // Current year is at index 5
+                            year_scroll_offset = 0;
+                            needs_redraw = true;
+                        } else if mouse_x >= today_x && mouse_x < next_arrow_start {
+                            // Today click
+                            let today = current_date();
+                            year = today.0;
+                            month = today.1;
+                            selected_day = today.2;
+                            needs_redraw = true;
+                        } else if mouse_x >= next_arrow_start {
+                            // Next month
                             if month == 12 {
                                 month = 1;
                                 year += 1;
@@ -355,11 +295,25 @@ impl CalendarBuilder {
                             needs_redraw = true;
                         }
                     }
-
                     // Check day click
-                    if let Some(day) = hovered_day {
+                    else if let Some(day) = hovered_day {
                         selected_day = day;
                         needs_redraw = true;
+                    }
+                }
+                WindowEvent::Scroll(dir) => {
+                    if dropdown == DropdownState::Year {
+                        match dir {
+                            crate::backend::ScrollDirection::Up => {
+                                year_scroll_offset -= 1;
+                                needs_redraw = true;
+                            }
+                            crate::backend::ScrollDirection::Down => {
+                                year_scroll_offset += 1;
+                                needs_redraw = true;
+                            }
+                            _ => {}
+                        }
                     }
                 }
                 WindowEvent::KeyPress(key_event) => {
@@ -370,76 +324,130 @@ impl CalendarBuilder {
                     const KEY_RETURN: u32 = 0xff0d;
                     const KEY_ESCAPE: u32 = 0xff1b;
 
-                    match key_event.keysym {
-                        KEY_LEFT => {
-                            if selected_day > 1 {
-                                selected_day -= 1;
-                            } else {
-                                // Previous month
-                                if month == 1 {
-                                    month = 12;
-                                    year -= 1;
-                                } else {
-                                    month -= 1;
-                                }
-                                selected_day = days_in_month(year, month);
+                    // Handle dropdown keyboard navigation
+                    if dropdown != DropdownState::None {
+                        let max_items = match dropdown {
+                            DropdownState::Month => 12,
+                            DropdownState::Year => 11,
+                            DropdownState::None => 0,
+                        };
+
+                        match key_event.keysym {
+                            KEY_ESCAPE => {
+                                dropdown = DropdownState::None;
+                                dropdown_hover = None;
+                                needs_redraw = true;
                             }
-                            needs_redraw = true;
-                        }
-                        KEY_RIGHT => {
-                            if selected_day < days_in_month(year, month) {
-                                selected_day += 1;
-                            } else {
-                                // Next month
-                                if month == 12 {
-                                    month = 1;
-                                    year += 1;
-                                } else {
-                                    month += 1;
+                            KEY_UP => {
+                                let current = dropdown_hover.unwrap_or(0);
+                                if current > 0 {
+                                    dropdown_hover = Some(current - 1);
+                                } else if dropdown == DropdownState::Year {
+                                    // Scroll up for year dropdown
+                                    year_scroll_offset -= 1;
                                 }
-                                selected_day = 1;
+                                needs_redraw = true;
                             }
-                            needs_redraw = true;
-                        }
-                        KEY_UP => {
-                            if selected_day > 7 {
-                                selected_day -= 7;
-                            } else {
-                                // Previous month
-                                if month == 1 {
-                                    month = 12;
-                                    year -= 1;
-                                } else {
-                                    month -= 1;
+                            KEY_DOWN => {
+                                let current = dropdown_hover.unwrap_or(0);
+                                if current + 1 < max_items {
+                                    dropdown_hover = Some(current + 1);
+                                } else if dropdown == DropdownState::Year {
+                                    // Scroll down for year dropdown
+                                    year_scroll_offset += 1;
                                 }
-                                let days_prev = days_in_month(year, month);
-                                selected_day = days_prev - (7 - selected_day);
+                                needs_redraw = true;
                             }
-                            needs_redraw = true;
-                        }
-                        KEY_DOWN => {
-                            let days_in = days_in_month(year, month);
-                            if selected_day + 7 <= days_in {
-                                selected_day += 7;
-                            } else {
-                                let overflow = selected_day + 7 - days_in;
-                                if month == 12 {
-                                    month = 1;
-                                    year += 1;
-                                } else {
-                                    month += 1;
+                            KEY_RETURN => {
+                                if let Some(idx) = dropdown_hover {
+                                    match dropdown {
+                                        DropdownState::Month => {
+                                            month = idx as u32 + 1;
+                                            selected_day = selected_day.min(days_in_month(year, month));
+                                        }
+                                        DropdownState::Year => {
+                                            let base_year = year as i32 - 5 + year_scroll_offset;
+                                            year = (base_year + idx as i32).max(1) as u32;
+                                            selected_day = selected_day.min(days_in_month(year, month));
+                                        }
+                                        DropdownState::None => {}
+                                    }
                                 }
-                                selected_day = overflow;
+                                dropdown = DropdownState::None;
+                                dropdown_hover = None;
+                                needs_redraw = true;
                             }
-                            needs_redraw = true;
+                            _ => {}
                         }
-                        KEY_RETURN => {
-                            return Ok(CalendarResult::Selected { year, month, day: selected_day });
+                    } else {
+                        match key_event.keysym {
+                            KEY_LEFT => {
+                                if selected_day > 1 {
+                                    selected_day -= 1;
+                                } else {
+                                    if month == 1 {
+                                        month = 12;
+                                        year -= 1;
+                                    } else {
+                                        month -= 1;
+                                    }
+                                    selected_day = days_in_month(year, month);
+                                }
+                                needs_redraw = true;
+                            }
+                            KEY_RIGHT => {
+                                if selected_day < days_in_month(year, month) {
+                                    selected_day += 1;
+                                } else {
+                                    if month == 12 {
+                                        month = 1;
+                                        year += 1;
+                                    } else {
+                                        month += 1;
+                                    }
+                                    selected_day = 1;
+                                }
+                                needs_redraw = true;
+                            }
+                            KEY_UP => {
+                                if selected_day > 7 {
+                                    selected_day -= 7;
+                                } else {
+                                    if month == 1 {
+                                        month = 12;
+                                        year -= 1;
+                                    } else {
+                                        month -= 1;
+                                    }
+                                    let days_prev = days_in_month(year, month);
+                                    selected_day = days_prev - (7 - selected_day);
+                                }
+                                needs_redraw = true;
+                            }
+                            KEY_DOWN => {
+                                let days_in = days_in_month(year, month);
+                                if selected_day + 7 <= days_in {
+                                    selected_day += 7;
+                                } else {
+                                    let overflow = selected_day + 7 - days_in;
+                                    if month == 12 {
+                                        month = 1;
+                                        year += 1;
+                                    } else {
+                                        month += 1;
+                                    }
+                                    selected_day = overflow;
+                                }
+                                needs_redraw = true;
+                            }
+                            KEY_RETURN => {
+                                return Ok(CalendarResult::Selected { year, month, day: selected_day });
+                            }
+                            KEY_ESCAPE => {
+                                return Ok(CalendarResult::Cancelled);
+                            }
+                            _ => {}
                         }
-                        KEY_ESCAPE => {
-                            return Ok(CalendarResult::Cancelled);
-                        }
-                        _ => {}
                     }
                 }
                 _ => {}
@@ -468,15 +476,364 @@ impl CalendarBuilder {
             }
 
             if needs_redraw {
-                draw(
-                    &mut canvas, colors, &font, &self.text,
+                draw_calendar(
+                    &mut canvas, colors, &font, &self.text, text_y,
+                    calendar_x, calendar_y, grid_width,
                     year, month, selected_day, hovered_day,
+                    dropdown, dropdown_hover, year_scroll_offset,
                     &ok_button, &cancel_button,
                 );
                 window.set_contents(&canvas)?;
             }
         }
     }
+}
+
+fn draw_calendar(
+    canvas: &mut Canvas,
+    colors: &Colors,
+    font: &Font,
+    text: &str,
+    text_y: i32,
+    calendar_x: i32,
+    calendar_y: i32,
+    grid_width: u32,
+    year: u32,
+    month: u32,
+    selected_day: u32,
+    hovered_day: Option<u32>,
+    dropdown: DropdownState,
+    dropdown_hover: Option<usize>,
+    year_scroll_offset: i32,
+    ok_button: &Button,
+    cancel_button: &Button,
+) {
+    canvas.fill(colors.window_bg);
+
+    // Draw text prompt
+    if !text.is_empty() {
+        let tc = font.render(text).with_color(colors.text).finish();
+        canvas.draw_canvas(&tc, PADDING as i32, text_y);
+    }
+
+    // Calendar background
+    let cal_h = HEADER_HEIGHT + DAY_HEADER_HEIGHT + CELL_SIZE * 6;
+    canvas.fill_rounded_rect(
+        calendar_x as f32, calendar_y as f32,
+        grid_width as f32, cal_h as f32,
+        8.0, colors.input_bg,
+    );
+
+    // Header with month/year and navigation
+    let header_y = calendar_y;
+    let header_bg = darken(colors.input_bg, 0.03);
+    canvas.fill_rounded_rect(
+        calendar_x as f32, header_y as f32,
+        grid_width as f32, HEADER_HEIGHT as f32,
+        8.0, header_bg,
+    );
+    // Cover bottom corners
+    canvas.fill_rect(
+        calendar_x as f32, (header_y + HEADER_HEIGHT as i32 - 8) as f32,
+        grid_width as f32, 8.0,
+        header_bg,
+    );
+
+    // Navigation arrows
+    let nav_color = colors.text;
+
+    // Previous arrow
+    let prev_arrow = font.render("<").with_color(nav_color).finish();
+    canvas.draw_canvas(&prev_arrow, calendar_x + 10, header_y + 12);
+
+    // Next arrow
+    let next_arrow = font.render(">").with_color(nav_color).finish();
+    canvas.draw_canvas(&next_arrow, calendar_x + grid_width as i32 - 18, header_y + 12);
+
+    // Month name (clickable)
+    let month_name_str = month_name(month);
+    let month_text = font.render(month_name_str).with_color(colors.text).finish();
+    let month_x = calendar_x + 35;
+    canvas.draw_canvas(&month_text, month_x, header_y + 12);
+
+    // Year (clickable)
+    let year_str = year.to_string();
+    let year_text = font.render(&year_str).with_color(colors.text).finish();
+    let year_x = month_x + month_text.width() as i32 + 8;
+    canvas.draw_canvas(&year_text, year_x, header_y + 12);
+
+    // "Today" link (right side) - green color for action
+    let today_color = rgb(80, 160, 100);
+    let today_text = font.render("Today").with_color(today_color).finish();
+    let today_x = calendar_x + grid_width as i32 - 24 - today_text.width() as i32 - 8;
+    canvas.draw_canvas(&today_text, today_x, header_y + 12);
+
+    // Day headers
+    let day_header_y = header_y + HEADER_HEIGHT as i32;
+    let days = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+    for (i, day) in days.iter().enumerate() {
+        let dx = calendar_x + (i as u32 * CELL_SIZE) as i32;
+        let dt = font.render(day).with_color(rgb(140, 140, 140)).finish();
+        let dtx = dx + (CELL_SIZE as i32 - dt.width() as i32) / 2;
+        canvas.draw_canvas(&dt, dtx, day_header_y + 6);
+    }
+
+    // Calendar grid
+    let grid_y = day_header_y + DAY_HEADER_HEIGHT as i32;
+    let first_day = first_day_of_month(year, month);
+    let days_in_month = days_in_month(year, month);
+    let today = current_date();
+
+    for day in 1..=days_in_month {
+        let cell_idx = (first_day + day - 1) as i32;
+        let row = cell_idx / 7;
+        let col = cell_idx % 7;
+
+        let cx = calendar_x + col * CELL_SIZE as i32;
+        let cy = grid_y + row * CELL_SIZE as i32;
+
+        let is_selected = day == selected_day;
+        let is_hovered = hovered_day == Some(day);
+        let is_today = year == today.0 && month == today.1 && day == today.2;
+
+        // Cell background
+        if is_selected {
+            canvas.fill_rounded_rect(
+                (cx + 2) as f32, (cy + 2) as f32,
+                (CELL_SIZE - 4) as f32, (CELL_SIZE - 4) as f32,
+                4.0, colors.input_border_focused,
+            );
+        } else if is_hovered {
+            canvas.fill_rounded_rect(
+                (cx + 2) as f32, (cy + 2) as f32,
+                (CELL_SIZE - 4) as f32, (CELL_SIZE - 4) as f32,
+                4.0, darken(colors.input_bg, 0.08),
+            );
+        }
+
+        // Today indicator (ring)
+        if is_today && !is_selected {
+            canvas.stroke_rounded_rect(
+                (cx + 4) as f32, (cy + 4) as f32,
+                (CELL_SIZE - 8) as f32, (CELL_SIZE - 8) as f32,
+                4.0, colors.input_border_focused, 2.0,
+            );
+        }
+
+        // Day number
+        let day_str = day.to_string();
+        let text_color = if is_selected {
+            rgb(255, 255, 255)
+        } else if col == 0 {
+            rgb(200, 100, 100) // Sunday in red-ish
+        } else {
+            colors.text
+        };
+        let dt = font.render(&day_str).with_color(text_color).finish();
+        let dtx = cx + (CELL_SIZE as i32 - dt.width() as i32) / 2;
+        let dty = cy + (CELL_SIZE as i32 - dt.height() as i32) / 2;
+        canvas.draw_canvas(&dt, dtx, dty);
+    }
+
+    // Border
+    canvas.stroke_rounded_rect(
+        calendar_x as f32, calendar_y as f32,
+        grid_width as f32, cal_h as f32,
+        8.0, colors.input_border, 1.0,
+    );
+
+    // Buttons (draw before dropdowns so dropdowns appear on top)
+    ok_button.draw_to(canvas, colors, font);
+    cancel_button.draw_to(canvas, colors, font);
+
+    // Draw dropdowns on top of everything
+    if dropdown == DropdownState::Month {
+        draw_month_dropdown(canvas, colors, font, calendar_x, calendar_y, month, dropdown_hover);
+    } else if dropdown == DropdownState::Year {
+        draw_year_dropdown(canvas, colors, font, calendar_x, calendar_y, year, year_scroll_offset, dropdown_hover);
+    }
+}
+
+fn draw_month_dropdown(
+    canvas: &mut Canvas,
+    colors: &Colors,
+    font: &Font,
+    calendar_x: i32,
+    calendar_y: i32,
+    current_month: u32,
+    hover: Option<usize>,
+) {
+    let dropdown_x = calendar_x + 30;
+    let dropdown_y = calendar_y + HEADER_HEIGHT as i32;
+    let dropdown_w = 100;
+    let dropdown_h = 6 * DROPDOWN_ITEM_HEIGHT; // Show 6 items at a time
+
+    // Background with shadow effect
+    canvas.fill_rounded_rect(
+        (dropdown_x + 3) as f32, (dropdown_y + 3) as f32,
+        dropdown_w as f32, (dropdown_h * 2) as f32,
+        6.0, rgb(0, 0, 0),
+    );
+    canvas.fill_rounded_rect(
+        dropdown_x as f32, dropdown_y as f32,
+        dropdown_w as f32, (dropdown_h * 2) as f32,
+        6.0, colors.window_bg,
+    );
+
+    // Items
+    for i in 0..12 {
+        let item_y = dropdown_y + (i as u32 * DROPDOWN_ITEM_HEIGHT) as i32;
+        let is_current = i + 1 == current_month as usize;
+        let is_hovered = hover == Some(i);
+
+        // Hover background - subtle gray
+        if is_hovered {
+            canvas.fill_rounded_rect(
+                (dropdown_x + 4) as f32, (item_y + 2) as f32,
+                (dropdown_w - 8) as f32, (DROPDOWN_ITEM_HEIGHT - 4) as f32,
+                4.0, rgb(70, 130, 180), // Steel blue for hover
+            );
+        }
+
+        // Current month gets a checkmark
+        let name = month_name(i as u32 + 1);
+        let display_name = if is_current {
+            format!("{} *", name)
+        } else {
+            name.to_string()
+        };
+
+        let text_color = if is_hovered {
+            rgb(255, 255, 255)
+        } else if is_current {
+            rgb(70, 180, 130) // Teal for current
+        } else {
+            colors.text
+        };
+        let tc = font.render(&display_name).with_color(text_color).finish();
+        canvas.draw_canvas(&tc, dropdown_x + 10, item_y + 4);
+    }
+
+    // Border
+    canvas.stroke_rounded_rect(
+        dropdown_x as f32, dropdown_y as f32,
+        dropdown_w as f32, (dropdown_h * 2) as f32,
+        6.0, colors.input_border, 1.0,
+    );
+}
+
+fn draw_year_dropdown(
+    canvas: &mut Canvas,
+    colors: &Colors,
+    font: &Font,
+    calendar_x: i32,
+    calendar_y: i32,
+    current_year: u32,
+    scroll_offset: i32,
+    hover: Option<usize>,
+) {
+    let dropdown_x = calendar_x + 100;
+    let dropdown_y = calendar_y + HEADER_HEIGHT as i32;
+    let dropdown_w = 70;
+    let visible_years = 11usize;
+    let dropdown_h = visible_years as u32 * DROPDOWN_ITEM_HEIGHT;
+
+    // Background with shadow
+    canvas.fill_rounded_rect(
+        (dropdown_x + 3) as f32, (dropdown_y + 3) as f32,
+        dropdown_w as f32, dropdown_h as f32,
+        6.0, rgb(0, 0, 0),
+    );
+    canvas.fill_rounded_rect(
+        dropdown_x as f32, dropdown_y as f32,
+        dropdown_w as f32, dropdown_h as f32,
+        6.0, colors.window_bg,
+    );
+
+    // Years centered around current year
+    let base_year = current_year as i32 - 5 + scroll_offset;
+
+    for i in 0..visible_years {
+        let yr = base_year + i as i32;
+        if yr < 1 { continue; }
+
+        let item_y = dropdown_y + (i as u32 * DROPDOWN_ITEM_HEIGHT) as i32;
+        let is_current = yr == current_year as i32;
+        let is_hovered = hover == Some(i);
+
+        // Hover background
+        if is_hovered {
+            canvas.fill_rounded_rect(
+                (dropdown_x + 4) as f32, (item_y + 2) as f32,
+                (dropdown_w - 8) as f32, (DROPDOWN_ITEM_HEIGHT - 4) as f32,
+                4.0, rgb(70, 130, 180), // Steel blue for hover
+            );
+        }
+
+        let yr_str = if is_current {
+            format!("* {} *", yr)
+        } else {
+            yr.to_string()
+        };
+
+        let text_color = if is_hovered {
+            rgb(255, 255, 255)
+        } else if is_current {
+            rgb(70, 180, 130) // Teal for current
+        } else {
+            colors.text
+        };
+        let tc = font.render(&yr_str).with_color(text_color).finish();
+        let tx = dropdown_x + (dropdown_w as i32 - tc.width() as i32) / 2;
+        canvas.draw_canvas(&tc, tx, item_y + 4);
+    }
+
+    // Border
+    canvas.stroke_rounded_rect(
+        dropdown_x as f32, dropdown_y as f32,
+        dropdown_w as f32, dropdown_h as f32,
+        6.0, colors.input_border, 1.0,
+    );
+}
+
+fn get_dropdown_hover(
+    dropdown: DropdownState,
+    mouse_x: i32,
+    mouse_y: i32,
+    calendar_x: i32,
+    calendar_y: i32,
+) -> Option<usize> {
+    let dropdown_y = calendar_y + HEADER_HEIGHT as i32;
+
+    match dropdown {
+        DropdownState::Month => {
+            let dropdown_x = calendar_x + 30;
+            let dropdown_w = 100;
+            let dropdown_h = (12 * DROPDOWN_ITEM_HEIGHT) as i32;
+
+            if mouse_x >= dropdown_x && mouse_x < dropdown_x + dropdown_w as i32
+                && mouse_y >= dropdown_y && mouse_y < dropdown_y + dropdown_h
+            {
+                let idx = (mouse_y - dropdown_y) / DROPDOWN_ITEM_HEIGHT as i32;
+                return Some(idx as usize);
+            }
+        }
+        DropdownState::Year => {
+            let dropdown_x = calendar_x + 100;
+            let dropdown_w = 70;
+            let visible_years = 11;
+            let dropdown_h = (visible_years * DROPDOWN_ITEM_HEIGHT) as i32;
+
+            if mouse_x >= dropdown_x && mouse_x < dropdown_x + dropdown_w as i32
+                && mouse_y >= dropdown_y && mouse_y < dropdown_y + dropdown_h
+            {
+                let idx = (mouse_y - dropdown_y) / DROPDOWN_ITEM_HEIGHT as i32;
+                return Some(idx as usize);
+            }
+        }
+        DropdownState::None => {}
+    }
+    None
 }
 
 impl Default for CalendarBuilder {
