@@ -79,6 +79,7 @@ pub(super) struct WaylandState {
     // Input state
     last_serial: u32,
     modifier_mask: kbvm::ModifierMask,
+    keyboard_group: u32,
 
     // Keyboard handling
     lookup_table: Option<LookupTable>,
@@ -103,6 +104,7 @@ impl WaylandState {
             closed: false,
             last_serial: 0,
             modifier_mask: kbvm::ModifierMask::NONE,
+            keyboard_group: 0,
             lookup_table: None,
             pending_events: VecDeque::new(),
         }
@@ -567,8 +569,9 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
                 }
 
                 if let Some(ref lookup_table) = state.lookup_table {
+                    let group = kbvm::GroupIndex(state.keyboard_group);
                     let lookup =
-                        lookup_table.lookup(kbvm::GroupIndex::ZERO, state.modifier_mask, keycode);
+                        lookup_table.lookup(group, state.modifier_mask, keycode);
 
                     let keysym = lookup
                         .clone()
@@ -579,11 +582,7 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
 
                     match key_state {
                         WEnum::Value(wl_keyboard::KeyState::Pressed) => {
-                            state
-                                .pending_events
-                                .push_back(WindowEvent::KeyPress(KeyEvent { keysym, modifiers }));
-                        }
-                        WEnum::Value(wl_keyboard::KeyState::Released) => {
+                            // Emit TextInput for printable characters on key press
                             let ch: Option<char> =
                                 lookup.into_iter().flat_map(|p| p.char()).next();
 
@@ -596,6 +595,11 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
 
                             state
                                 .pending_events
+                                .push_back(WindowEvent::KeyPress(KeyEvent { keysym, modifiers }));
+                        }
+                        WEnum::Value(wl_keyboard::KeyState::Released) => {
+                            state
+                                .pending_events
                                 .push_back(WindowEvent::KeyRelease(KeyEvent { keysym, modifiers }));
                         }
                         _ => {}
@@ -606,10 +610,12 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
                 mods_depressed,
                 mods_latched,
                 mods_locked,
+                group,
                 ..
             } => {
                 let combined = mods_depressed | mods_latched | mods_locked;
                 state.modifier_mask = kbvm::ModifierMask(combined);
+                state.keyboard_group = group;
             }
             wl_keyboard::Event::Enter { serial, .. } => {
                 state.last_serial = serial;

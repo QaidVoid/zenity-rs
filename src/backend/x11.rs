@@ -85,6 +85,7 @@ pub(crate) struct X11Window {
     window: xproto::Window,
     gc: xproto::Gcontext,
     lookup_table: LookupTable,
+    xkb_group: u8,
 }
 
 impl X11Window {
@@ -191,6 +192,7 @@ impl X11Window {
             window,
             gc,
             lookup_table,
+            xkb_group: 0,
         };
         win.set_class(WM_CLASS)?;
         win.set_window_type(WindowType::Dialog)?;
@@ -246,24 +248,10 @@ impl X11Window {
                 let keycode = kbvm::Keycode::from_x11(press.detail.into());
                 let mods = convert_to_kbvm_mods(press.state);
 
-                let keysym = self
-                    .lookup_table
-                    .lookup(kbvm::GroupIndex::ZERO, mods, keycode)
-                    .into_iter()
-                    .next()
-                    .map(|p| p.keysym().0)
-                    .unwrap_or(0);
-
-                WindowEvent::KeyPress(KeyEvent { keysym, modifiers })
-            }
-            Event::KeyRelease(release) if release.event == self.window => {
-                let modifiers = convert_modifiers(release.state);
-                let keycode = kbvm::Keycode::from_x11(release.detail.into());
-                let mods = convert_to_kbvm_mods(release.state);
-
+                let group = kbvm::GroupIndex(self.xkb_group as u32);
                 let lookup = self
                     .lookup_table
-                    .lookup(kbvm::GroupIndex::ZERO, mods, keycode);
+                    .lookup(group, mods, keycode);
 
                 let keysym = lookup
                     .clone()
@@ -272,15 +260,29 @@ impl X11Window {
                     .map(|p| p.keysym().0)
                     .unwrap_or(0);
 
-                // Get character from lookup
+                // Get character from lookup and emit TextInput for printable characters
                 let ch: Option<char> = lookup.into_iter().flat_map(|p| p.char()).next();
-
-                // Emit TextInput for printable characters
                 if let Some(c) = ch {
                     if !c.is_control() && !modifiers.contains(Modifiers::CTRL) {
                         return Some(WindowEvent::TextInput(c));
                     }
                 }
+
+                WindowEvent::KeyPress(KeyEvent { keysym, modifiers })
+            }
+            Event::KeyRelease(release) if release.event == self.window => {
+                let modifiers = convert_modifiers(release.state);
+                let keycode = kbvm::Keycode::from_x11(release.detail.into());
+                let mods = convert_to_kbvm_mods(release.state);
+
+                let group = kbvm::GroupIndex(self.xkb_group as u32);
+                let keysym = self
+                    .lookup_table
+                    .lookup(group, mods, keycode)
+                    .into_iter()
+                    .next()
+                    .map(|p| p.keysym().0)
+                    .unwrap_or(0);
 
                 WindowEvent::KeyRelease(KeyEvent { keysym, modifiers })
             }
