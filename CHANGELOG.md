@@ -1,4 +1,10 @@
 
+## [0.1.2](https://github.com/QaidVoid/zenity-rs/compare/v0.1.1...v0.1.2) - 2026-01-19
+
+### Other
+
+- Bring back cargo config - ([d55adbd](https://github.com/QaidVoid/zenity-rs/commit/d55adbd98f08cb889a3fd68c71cf2ddc8cdc44aa))
+
 ## [0.1.1](https://github.com/QaidVoid/zenity-rs/compare/v0.1.0...v0.1.1) - 2026-01-19
 
 ### Other
