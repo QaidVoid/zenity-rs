@@ -71,6 +71,8 @@ pub struct FileSelectBuilder {
     save: bool,
     filename: String,
     start_path: Option<PathBuf>,
+    width: Option<u32>,
+    height: Option<u32>,
     colors: Option<&'static Colors>,
 }
 
@@ -82,6 +84,8 @@ impl FileSelectBuilder {
             save: false,
             filename: String::new(),
             start_path: None,
+            width: None,
+            height: None,
             colors: None,
         }
     }
@@ -116,11 +120,25 @@ impl FileSelectBuilder {
         self
     }
 
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn show(self) -> Result<FileSelectResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
+        // Use custom dimensions if provided, otherwise use defaults
+        let logical_width = self.width.unwrap_or(BASE_WINDOW_WIDTH);
+        let logical_height = self.height.unwrap_or(BASE_WINDOW_HEIGHT);
+
         // Create window with LOGICAL dimensions first
-        let mut window = create_window(BASE_WINDOW_WIDTH as u16, BASE_WINDOW_HEIGHT as u16)?;
+        let mut window = create_window(logical_width as u16, logical_height as u16)?;
         let title = if self.title.is_empty() {
             if self.directory { "Select Directory" }
             else if self.save { "Save File" }
@@ -137,8 +155,8 @@ impl FileSelectBuilder {
         let font = Font::load(scale);
 
         // Scale dimensions for physical rendering
-        let window_width = (BASE_WINDOW_WIDTH as f32 * scale) as u32;
-        let window_height = (BASE_WINDOW_HEIGHT as f32 * scale) as u32;
+        let window_width = (logical_width as f32 * scale) as u32;
+        let window_height = (logical_height as f32 * scale) as u32;
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let sidebar_width = (BASE_SIDEBAR_WIDTH as f32 * scale) as u32;
         let toolbar_height = (BASE_TOOLBAR_HEIGHT as f32 * scale) as u32;

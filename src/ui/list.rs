@@ -54,6 +54,8 @@ pub struct ListBuilder {
     columns: Vec<String>,
     rows: Vec<Vec<String>>,
     mode: ListMode,
+    width: Option<u32>,
+    height: Option<u32>,
     colors: Option<&'static Colors>,
 }
 
@@ -65,6 +67,8 @@ impl ListBuilder {
             columns: Vec::new(),
             rows: Vec::new(),
             mode: ListMode::Single,
+            width: None,
+            height: None,
             colors: None,
         }
     }
@@ -111,6 +115,16 @@ impl ListBuilder {
 
     pub fn colors(mut self, colors: &'static Colors) -> Self {
         self.colors = Some(colors);
+        self
+    }
+
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = Some(height);
         self
     }
 
@@ -166,13 +180,17 @@ impl ListBuilder {
         // Calculate logical total width
         let logical_checkbox_col = if self.mode != ListMode::Single { BASE_CHECKBOX_SIZE + 16 } else { 0 };
         let logical_content_width: u32 = logical_col_widths.iter().sum::<u32>() + logical_checkbox_col;
-        let logical_width = (logical_content_width + BASE_PADDING * 2).clamp(BASE_MIN_WIDTH, BASE_MAX_WIDTH);
+        let calc_width = (logical_content_width + BASE_PADDING * 2).clamp(BASE_MIN_WIDTH, BASE_MAX_WIDTH);
 
         // Calculate logical height
         let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
         let logical_header_height = if columns.is_empty() { 0 } else { BASE_ROW_HEIGHT };
         let logical_list_height = (num_rows as u32 * BASE_ROW_HEIGHT).clamp(BASE_ROW_HEIGHT * 3, BASE_MAX_HEIGHT - 100);
-        let logical_height = (BASE_PADDING * 2 + logical_text_height + logical_header_height + logical_list_height + 50).clamp(BASE_MIN_HEIGHT, BASE_MAX_HEIGHT);
+        let calc_height = (BASE_PADDING * 2 + logical_text_height + logical_header_height + logical_list_height + 50).clamp(BASE_MIN_HEIGHT, BASE_MAX_HEIGHT);
+
+        // Use custom dimensions if provided, otherwise use calculated defaults
+        let logical_width = self.width.unwrap_or(calc_width);
+        let logical_height = self.height.unwrap_or(calc_height);
 
         // Create window with LOGICAL dimensions
         let mut window = create_window(logical_width as u16, logical_height as u16)?;

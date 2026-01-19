@@ -54,6 +54,8 @@ pub struct ProgressBuilder {
     percentage: u32,
     pulsate: bool,
     auto_close: bool,
+    width: Option<u32>,
+    height: Option<u32>,
     colors: Option<&'static Colors>,
 }
 
@@ -65,6 +67,8 @@ impl ProgressBuilder {
             percentage: 0,
             pulsate: false,
             auto_close: false,
+            width: None,
+            height: None,
             colors: None,
         }
     }
@@ -99,6 +103,16 @@ impl ProgressBuilder {
         self
     }
 
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn show(self) -> Result<ProgressResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
@@ -107,11 +121,15 @@ impl ProgressBuilder {
         let temp_button = Button::new("Cancel", &temp_font, 1.0);
         let temp_bar = ProgressBar::new(BASE_BAR_WIDTH, 1.0);
 
-        let logical_width = (BASE_BAR_WIDTH + BASE_PADDING * 2) as u16;
-        let logical_height = (BASE_PADDING * 3 + BASE_TEXT_HEIGHT + 10 + temp_bar.height() + 10 + BASE_BUTTON_HEIGHT) as u16;
+        let calc_width = BASE_BAR_WIDTH + BASE_PADDING * 2;
+        let calc_height = BASE_PADDING * 3 + BASE_TEXT_HEIGHT + 10 + temp_bar.height() + 10 + BASE_BUTTON_HEIGHT;
         drop(temp_font);
         drop(temp_button);
         drop(temp_bar);
+
+        // Use custom dimensions if provided, otherwise use calculated defaults
+        let logical_width = self.width.unwrap_or(calc_width) as u16;
+        let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions
         let mut window = create_window(logical_width, logical_height)?;

@@ -26,6 +26,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut text = String::new();
     let mut entry_text = String::new();
     let mut timeout: Option<u32> = None;
+    let mut width: Option<u32> = None;
+    let mut height: Option<u32> = None;
 
     // Progress options
     let mut percentage: u32 = 0;
@@ -85,6 +87,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 }
             }
             Long("timeout") => timeout = Some(parser.value()?.string()?.parse()?),
+            Long("width") => width = Some(parser.value()?.string()?.parse()?),
+            Long("height") => height = Some(parser.value()?.string()?.parse()?),
 
             // Progress options
             Long("percentage") => percentage = parser.value()?.string()?.parse()?,
@@ -139,6 +143,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if let Some(t) = timeout {
                 builder = builder.timeout(t);
             }
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
             let result = builder.show()?;
             Ok(result.exit_code())
         }
@@ -150,6 +160,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .buttons(ButtonPreset::Ok);
             if let Some(t) = timeout {
                 builder = builder.timeout(t);
+            }
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
             }
             let result = builder.show()?;
             Ok(result.exit_code())
@@ -163,6 +179,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if let Some(t) = timeout {
                 builder = builder.timeout(t);
             }
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
             let result = builder.show()?;
             Ok(result.exit_code())
         }
@@ -175,32 +197,56 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if let Some(t) = timeout {
                 builder = builder.timeout(t);
             }
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
             let result = builder.show()?;
             Ok(result.exit_code())
         }
         DialogType::Entry => {
-            let result = entry()
+            let mut builder = entry()
                 .title(if title.is_empty() { "Entry" } else { &title })
                 .text(&text)
-                .entry_text(&entry_text)
-                .show()?;
+                .entry_text(&entry_text);
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
+            let result = builder.show()?;
             handle_entry_result(result)
         }
         DialogType::Password => {
-            let result = password()
+            let mut builder = password()
                 .title(if title.is_empty() { "Password" } else { &title })
-                .text(&text)
-                .show()?;
+                .text(&text);
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
+            let result = builder.show()?;
             handle_entry_result(result)
         }
         DialogType::Progress => {
-            let result = progress()
+            let mut builder = progress()
                 .title(if title.is_empty() { "Progress" } else { &title })
                 .text(&text)
                 .percentage(percentage)
                 .pulsate(pulsate)
-                .auto_close(auto_close)
-                .show()?;
+                .auto_close(auto_close);
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
+            let result = builder.show()?;
             handle_progress_result(result)
         }
         DialogType::FileSelection => {
@@ -211,6 +257,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             builder = builder.directory(directory_mode).save(save_mode);
             if !filename.is_empty() {
                 builder = builder.filename(&filename);
+            }
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
             }
             let result = builder.show()?;
             handle_file_select_result(result)
@@ -238,6 +290,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.row(chunk.iter().cloned().collect());
             }
 
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
+            }
             let result = builder.show()?;
             handle_list_result(result)
         }
@@ -257,6 +315,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             }
             if let Some(d) = cal_day {
                 builder = builder.day(d);
+            }
+            if let Some(w) = width {
+                builder = builder.width(w);
+            }
+            if let Some(h) = height {
+                builder = builder.height(h);
             }
             let result = builder.show()?;
             handle_calendar_result(result)
@@ -350,6 +414,8 @@ DIALOG TYPES:
 OPTIONS:
     --title=TEXT        Set the dialog title
     --text=TEXT         Set the dialog text/prompt
+    --width=N           Set the dialog width
+    --height=N          Set the dialog height
     --timeout=N         Auto-close after N seconds (exit code 5)
     --entry-text=TEXT   Set default text for entry dialog
     --hide-text         Hide entered text (password mode)

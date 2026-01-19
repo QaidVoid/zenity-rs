@@ -22,6 +22,8 @@ pub struct MessageBuilder {
     icon: Option<Icon>,
     buttons: ButtonPreset,
     timeout: Option<u32>,
+    width: Option<u32>,
+    height: Option<u32>,
     colors: Option<&'static Colors>,
 }
 
@@ -33,6 +35,8 @@ impl MessageBuilder {
             icon: None,
             buttons: ButtonPreset::Ok,
             timeout: None,
+            width: None,
+            height: None,
             colors: None,
         }
     }
@@ -68,6 +72,16 @@ impl MessageBuilder {
         self
     }
 
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn show(self) -> Result<DialogResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
@@ -93,9 +107,13 @@ impl MessageBuilder {
         };
         let logical_content_width = logical_icon_width + temp_text.width();
         let logical_inner_width = logical_content_width.max(logical_buttons_width);
-        let logical_width = (logical_inner_width + BASE_PADDING * 2).max(BASE_MIN_WIDTH) as u16;
+        let calc_width = (logical_inner_width + BASE_PADDING * 2).max(BASE_MIN_WIDTH);
         let logical_text_height = temp_text.height().max(BASE_ICON_SIZE);
-        let logical_height = (BASE_PADDING * 3 + logical_text_height + 32) as u16;
+        let calc_height = BASE_PADDING * 3 + logical_text_height + 32;
+
+        // Use custom dimensions if provided, otherwise use calculated defaults
+        let logical_width = self.width.unwrap_or(calc_width) as u16;
+        let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions - window will handle physical scaling
         let mut window = create_window(logical_width, logical_height)?;

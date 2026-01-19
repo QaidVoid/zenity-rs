@@ -39,6 +39,8 @@ pub struct EntryBuilder {
     text: String,
     entry_text: String,
     hide_text: bool,
+    width: Option<u32>,
+    height: Option<u32>,
     colors: Option<&'static Colors>,
 }
 
@@ -49,6 +51,8 @@ impl EntryBuilder {
             text: String::new(),
             entry_text: String::new(),
             hide_text: false,
+            width: None,
+            height: None,
             colors: None,
         }
     }
@@ -78,6 +82,16 @@ impl EntryBuilder {
         self
     }
 
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn show(self) -> Result<EntryResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
@@ -94,18 +108,22 @@ impl EntryBuilder {
 
         let logical_buttons_width = temp_ok.width() + temp_cancel.width() + BASE_BUTTON_SPACING;
         let logical_content_width = BASE_INPUT_WIDTH.max(logical_buttons_width);
-        let logical_width = (logical_content_width + BASE_PADDING * 2) as u16;
-        let logical_height = (BASE_PADDING * 3
+        let calc_width = logical_content_width + BASE_PADDING * 2;
+        let calc_height = BASE_PADDING * 3
             + temp_prompt_height
             + (if temp_prompt_height > 0 { 10 } else { 0 })
             + temp_input.height()
             + 10
-            + 32) as u16;
+            + 32;
 
         drop(temp_font);
         drop(temp_ok);
         drop(temp_cancel);
         drop(temp_input);
+
+        // Use custom dimensions if provided, otherwise use calculated defaults
+        let logical_width = self.width.unwrap_or(calc_width) as u16;
+        let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions
         let mut window = create_window(logical_width, logical_height)?;

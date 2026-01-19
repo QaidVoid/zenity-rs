@@ -58,6 +58,8 @@ pub struct CalendarBuilder {
     year: Option<u32>,
     month: Option<u32>,
     day: Option<u32>,
+    width: Option<u32>,
+    height: Option<u32>,
     colors: Option<&'static Colors>,
 }
 
@@ -69,6 +71,8 @@ impl CalendarBuilder {
             year: None,
             month: None,
             day: None,
+            width: None,
+            height: None,
             colors: None,
         }
     }
@@ -106,14 +110,28 @@ impl CalendarBuilder {
         self
     }
 
+    pub fn width(mut self, width: u32) -> Self {
+        self.width = Some(width);
+        self
+    }
+
+    pub fn height(mut self, height: u32) -> Self {
+        self.height = Some(height);
+        self
+    }
+
     pub fn show(self) -> Result<CalendarResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Calculate logical dimensions at scale 1.0
         let logical_grid_width = BASE_CELL_SIZE * 7;
         let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
-        let logical_width = logical_grid_width + BASE_PADDING * 2;
-        let logical_height = BASE_PADDING * 2 + logical_text_height + BASE_HEADER_HEIGHT + BASE_DAY_HEADER_HEIGHT + BASE_CELL_SIZE * 6 + 50;
+        let calc_width = logical_grid_width + BASE_PADDING * 2;
+        let calc_height = BASE_PADDING * 2 + logical_text_height + BASE_HEADER_HEIGHT + BASE_DAY_HEADER_HEIGHT + BASE_CELL_SIZE * 6 + 50;
+
+        // Use custom dimensions if provided, otherwise use calculated defaults
+        let logical_width = self.width.unwrap_or(calc_width);
+        let logical_height = self.height.unwrap_or(calc_height);
 
         // Create window with LOGICAL dimensions
         let mut window = create_window(logical_width as u16, logical_height as u16)?;
