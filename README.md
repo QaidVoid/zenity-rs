@@ -10,6 +10,8 @@ A lightweight, pure Rust implementation for displaying GUI dialogs from the comm
 - **File selection**: Open/save dialogs with directory navigation
 - **List selection**: Single-select, checklist, and radiolist modes
 - **Calendar**: Date picker dialog
+- **Text info**: Display scrollable text from file or stdin
+- **Scale**: Slider to select a numeric value
 
 ### Highlights
 
@@ -116,11 +118,42 @@ zenity-rs --calendar --text="Select a date"
 zenity-rs --calendar --year=2024 --month=12 --day=25
 ```
 
+### Text Info
+
+```bash
+# Display file contents
+zenity-rs --text-info --filename=README.md --title="Read Me"
+
+# Display from stdin
+cat LICENSE | zenity-rs --text-info --title="License"
+
+# With checkbox (for agreements)
+zenity-rs --text-info --filename=LICENSE --checkbox="I accept the terms"
+```
+
+### Scale
+
+```bash
+# Basic slider
+zenity-rs --scale --text="Select volume:"
+
+# With custom range and initial value
+zenity-rs --scale --text="Brightness:" --value=75 --min-value=0 --max-value=100
+
+# With step increment
+zenity-rs --scale --text="Select:" --min-value=0 --max-value=1000 --step=10
+
+# Hide the value display
+zenity-rs --scale --text="Level:" --hide-value
+```
+
 ### Common Options
 
 ```bash
 --title=TEXT      # Set dialog title
 --text=TEXT       # Set dialog text/prompt
+--width=N         # Set dialog width
+--height=N        # Set dialog height
 --timeout=N       # Auto-close after N seconds
 ```
 
