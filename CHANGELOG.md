@@ -1,4 +1,19 @@
 
+## [0.1.1](https://github.com/QaidVoid/zenity-rs/compare/v0.1.0...v0.1.1) - 2026-01-19
+
+### Other
+
+- Reorganize help to show options per dialog type - ([1b40ea9](https://github.com/QaidVoid/zenity-rs/commit/1b40ea9f43d71a448b68a2db1ecd9c2a3aa838e3))
+- Add text cursor to entry dialog input field - ([8208ebc](https://github.com/QaidVoid/zenity-rs/commit/8208ebc796c02e789472cce3838c34e79c10ca9d))
+- Add cursor shape support for text input fields - ([0a92d73](https://github.com/QaidVoid/zenity-rs/commit/0a92d7368c206b6f177275564d61875d2c3bebb1))
+- Add forms dialog to README - ([9044129](https://github.com/QaidVoid/zenity-rs/commit/9044129da0ba00ea48a785bb4d1ad85c5aa08c5c))
+- Add forms dialog for multiple input fields - ([dd28d45](https://github.com/QaidVoid/zenity-rs/commit/dd28d451e782dba186346657caa50a51b80bb42e))
+- Update README with text-info and scale dialogs - ([4649955](https://github.com/QaidVoid/zenity-rs/commit/464995576f297a212a159abae52b4729df728f63))
+- Add --scale dialog for selecting numeric values with a slider - ([e33341d](https://github.com/QaidVoid/zenity-rs/commit/e33341d4c7fb955b44c5f0152fe0ef5858e9504d))
+- Add --text-info dialog for displaying scrollable text - ([c6b1705](https://github.com/QaidVoid/zenity-rs/commit/c6b17057602469e0c4dab668532fe591e103d1a8))
+- Add --width and --height CLI flags for custom dialog dimensions - ([89f9497](https://github.com/QaidVoid/zenity-rs/commit/89f94979653d6702ab20364f41d70d867bd036cf))
+- Fix Wayland poll_for_event not reading events from socket - ([5f9f4d8](https://github.com/QaidVoid/zenity-rs/commit/5f9f4d8c1601ddb3f763d62a5faf34d858384bcf))
+
 ## [0.1.0] - 2026-01-18
 
 ### Other
