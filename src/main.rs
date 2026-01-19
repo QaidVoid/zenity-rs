@@ -540,76 +540,86 @@ fn print_help() {
         r#"zenity-rs {VERSION} - Display simple GUI dialogs from the command line
 
 USAGE:
-    zenity-rs [OPTIONS] --<dialog-type> [VALUES...]
+    zenity-rs --<dialog-type> [OPTIONS] [VALUES...]
 
-DIALOG TYPES:
-    --info              Display an information dialog
-    --warning           Display a warning dialog
-    --error             Display an error dialog
-    --question          Display a question dialog (Yes/No)
-    --entry             Display a text entry dialog
-    --password          Display a password entry dialog
-    --progress          Display a progress dialog
-    --file-selection    Display a file selection dialog
-    --list              Display a list selection dialog
-    --calendar          Display a calendar date picker
-    --text-info         Display scrollable text from file or stdin
-    --scale             Display a slider to select a value
-    --forms             Display a form with multiple fields
-
-OPTIONS:
+COMMON OPTIONS:
     --title=TEXT        Set the dialog title
     --text=TEXT         Set the dialog text/prompt
     --width=N           Set the dialog width
     --height=N          Set the dialog height
-    --timeout=N         Auto-close after N seconds (exit code 5)
-    --entry-text=TEXT   Set default text for entry dialog
-    --hide-text         Hide entered text (password mode)
-    --percentage=N      Initial progress percentage (0-100)
-    --pulsate           Enable pulsating progress bar
-    --auto-close        Close dialog when progress reaches 100%
-    --directory         Select directories only (file-selection)
-    --save              Save mode (file-selection)
-    --filename=TEXT     Default filename for save mode
-    --column=TEXT       Add a column header (list)
-    --checklist         Enable multi-select with checkboxes (list)
-    --radiolist         Enable single-select with radio buttons (list)
-    --year=N            Initial year (calendar)
-    --month=N           Initial month 1-12 (calendar)
-    --day=N             Initial day 1-31 (calendar)
-    --checkbox=TEXT     Add checkbox with label (text-info)
-    --value=N           Initial value (scale, default: 0)
-    --min-value=N       Minimum value (scale, default: 0)
-    --max-value=N       Maximum value (scale, default: 100)
-    --step=N            Step increment (scale, default: 1)
-    --hide-value        Hide the value display (scale)
-    --add-entry=LABEL   Add a text entry field (forms)
-    --add-password=LABEL Add a password field (forms)
-    --separator=CHAR    Output separator (forms, default: |)
     -h, --help          Print this help message
     --version           Print version information
 
+DIALOG TYPES AND OPTIONS:
+
+  Message Dialogs:
+    --info              Display an information dialog
+    --warning           Display a warning dialog
+    --error             Display an error dialog
+    --question          Display a question dialog (Yes/No)
+      --timeout=N       Auto-close after N seconds (exit code 5)
+
+  --entry               Display a text entry dialog
+      --entry-text=TEXT Set default text
+      --hide-text       Hide entered text (password mode)
+
+  --password            Display a password entry dialog (same as --entry --hide-text)
+
+  --progress            Display a progress dialog (reads percentage from stdin)
+      --percentage=N    Initial progress percentage (0-100)
+      --pulsate         Enable pulsating/indeterminate mode
+      --auto-close      Close dialog when progress reaches 100%
+
+  --file-selection      Display a file selection dialog
+      --directory       Select directories only
+      --save            Save mode (allows entering new filename)
+      --filename=TEXT   Default filename/path
+
+  --list                Display a list selection dialog
+      --column=TEXT     Add a column header (can be repeated)
+      --checklist       Enable multi-select with checkboxes
+      --radiolist       Enable single-select with radio buttons
+      [VALUES...]       Row values (number must match column count)
+
+  --calendar            Display a calendar date picker
+      --year=N          Initial year
+      --month=N         Initial month (1-12)
+      --day=N           Initial day (1-31)
+
+  --text-info           Display scrollable text from file or stdin
+      --filename=TEXT   Read text from file (otherwise reads stdin)
+      --checkbox=TEXT   Add checkbox with label (for agreements)
+
+  --scale               Display a slider to select a numeric value
+      --value=N         Initial value (default: 0)
+      --min-value=N     Minimum value (default: 0)
+      --max-value=N     Maximum value (default: 100)
+      --step=N          Step increment (default: 1)
+      --hide-value      Hide the numeric value display
+
+  --forms               Display a form with multiple input fields
+      --add-entry=LABEL Add a text entry field (can be repeated)
+      --add-password=LABEL Add a password field (can be repeated)
+      --separator=CHAR  Output separator (default: |)
+
 EXAMPLES:
     zenity-rs --info --text="Operation completed"
-    zenity-rs --question --text="Do you want to continue?" --timeout=10
-    zenity-rs --entry --text="Enter your name:" --entry-text="John"
+    zenity-rs --question --text="Continue?" --timeout=10
+    zenity-rs --entry --text="Enter name:" --entry-text="John"
     zenity-rs --password --text="Enter password:"
-    echo "50" | zenity-rs --progress --text="Working..."
-    zenity-rs --file-selection --title="Open File"
+    echo "50" | zenity-rs --progress --text="Working..." --auto-close
+    zenity-rs --file-selection --save --filename="output.txt"
     zenity-rs --list --column="Name" --column="Size" file1 10KB file2 20KB
-    zenity-rs --list --checklist --column="Select" --column="Item" FALSE A TRUE B
-    zenity-rs --calendar --text="Select date:"
-    zenity-rs --text-info --filename=README.md --title="Read Me"
-    cat LICENSE | zenity-rs --text-info --title="License"
-    zenity-rs --text-info --filename=LICENSE --checkbox="I accept the terms"
-    zenity-rs --scale --text="Select volume:" --value=50 --min-value=0 --max-value=100
-    zenity-rs --forms --text="Enter details:" --add-entry="Name" --add-entry="Email" --add-password="Password"
+    zenity-rs --calendar --text="Select date:" --year=2024 --month=12
+    zenity-rs --text-info --filename=LICENSE --checkbox="I accept"
+    zenity-rs --scale --text="Volume:" --value=50 --max-value=100
+    zenity-rs --forms --add-entry="Name" --add-password="Password"
 
 EXIT CODES:
-    0   OK/Yes clicked, text entered, file/date selected
-    1   Cancel/No clicked
+    0   OK/Yes clicked, or value selected
+    1   Cancel/No clicked, or checkbox unchecked
     5   Timeout reached
-    255 Dialog was closed
+    255 Dialog was closed (ESC or window close)
     100 Error occurred
 "#
     );
