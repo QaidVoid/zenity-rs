@@ -166,9 +166,20 @@ impl ListBuilder {
             self.columns.iter().map(|s| s.as_str()).collect()
         };
 
+        // Adjust hidden column indices for radiolist/checklist mode
+        // In these modes, zenity's column 1 is TRUE/FALSE which we strip,
+        // so user's column N becomes internal index N-2 (N-1 for 0-based, then -1 for stripped column)
+        let adjusted_hidden: Vec<usize> = if self.mode != ListMode::Single {
+            self.hidden_columns.iter()
+                .filter_map(|&col| col.checked_sub(1)) // Subtract 1 more for stripped TRUE/FALSE column
+                .collect()
+        } else {
+            self.hidden_columns.clone()
+        };
+
         // Determine which columns are visible (not hidden)
         let visible_col_indices: Vec<usize> = (0..all_columns.len())
-            .filter(|i| !self.hidden_columns.contains(i))
+            .filter(|i| !adjusted_hidden.contains(i))
             .collect();
 
         // Get visible columns only
