@@ -145,6 +145,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("add-password") => form_passwords.push(parser.value()?.string()?),
             Long("separator") => separator = parser.value()?.string()?,
 
+            // Ignored options (for compatibility with zenity)
+            Long("modal") => { /* Ignored */ }
+
             Value(val) => {
                 // Positional arguments - for list dialog these are row values
                 if dialog_type == Some(DialogType::List) {
