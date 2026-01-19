@@ -1,4 +1,12 @@
 
+## [0.1.2](https://github.com/QaidVoid/zenity-rs/compare/v0.1.1...v0.1.2) - 2026-01-19
+
+### Other
+
+- Fix --hide-column index for radiolist/checklist mode - ([4cf13e9](https://github.com/QaidVoid/zenity-rs/commit/4cf13e9fd5967fc10ff50307dcebe3b4f7ab1c8e))
+- Add --hide-column option for list dialogs - ([b6cfa2f](https://github.com/QaidVoid/zenity-rs/commit/b6cfa2f8d23199f7be484d1adcd0df9e3c1934d3))
+- Improve message dialog text handling - ([90d7296](https://github.com/QaidVoid/zenity-rs/commit/90d72965c79b56ae2422df05dd97ca1b2249b630))
+
 ## [0.1.1](https://github.com/QaidVoid/zenity-rs/compare/v0.1.0...v0.1.1) - 2026-01-19
 
 ### Other
