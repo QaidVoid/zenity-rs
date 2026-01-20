@@ -391,13 +391,7 @@ impl ListBuilder {
             let mut data_y_local = 0i32;
             if !columns.is_empty() {
                 let header_bg = darken(colors.input_bg, 0.05);
-                list_canvas.fill_rect(
-                    0.0,
-                    0.0,
-                    list_w as f32,
-                    row_height as f32,
-                    header_bg,
-                );
+                list_canvas.fill_rect(0.0, 0.0, list_w as f32, row_height as f32, header_bg);
 
                 let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
                 for (i, col) in columns.iter().enumerate() {
@@ -405,18 +399,18 @@ impl ListBuilder {
                     let col_width = col_widths.get(i).copied().unwrap_or((100.0 * scale) as u32);
                     let mut w: f32 = font.render(&display_col).measure().0;
                     while w > (col_width as f32 - 16.0 * scale) && !display_col.is_empty() {
-                        display_col = display_col[..display_col.len().saturating_sub(1)].to_string();
+                        display_col =
+                            display_col[..display_col.len().saturating_sub(1)].to_string();
                         w = font.render(&display_col).measure().0;
                     }
                     if display_col.len() < col.len() {
                         display_col += "...";
                     }
-                    let tc = font.render(&display_col).with_color(rgb(140, 140, 140)).finish();
-                    list_canvas.draw_canvas(
-                        &tc,
-                        cx + (8.0 * scale) as i32,
-                        (6.0 * scale) as i32,
-                    );
+                    let tc = font
+                        .render(&display_col)
+                        .with_color(rgb(140, 140, 140))
+                        .finish();
+                    list_canvas.draw_canvas(&tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
                     cx += col_width as i32;
                 }
 
@@ -460,13 +454,7 @@ impl ListBuilder {
                     colors.input_bg
                 };
 
-                list_canvas.fill_rect(
-                    1.0,
-                    ry as f32,
-                    (list_w - 2) as f32,
-                    row_height as f32,
-                    bg,
-                );
+                list_canvas.fill_rect(1.0, ry as f32, (list_w - 2) as f32, row_height as f32, bg);
 
                 // Checkbox/Radio
                 if mode != ListMode::Single {
@@ -510,7 +498,8 @@ impl ListBuilder {
                         let col_width = col_widths[ci];
                         let mut w: f32 = font.render(&display_cell).measure().0;
                         while w > (col_width as f32 - 16.0 * scale) && !display_cell.is_empty() {
-                            display_cell = display_cell[..display_cell.len().saturating_sub(1)].to_string();
+                            display_cell =
+                                display_cell[..display_cell.len().saturating_sub(1)].to_string();
                             w = font.render(&display_cell).measure().0;
                         }
                         if display_cell.len() < cell.len() {
@@ -708,77 +697,77 @@ impl ListBuilder {
                         needs_redraw = true;
                     }
                 }
-                 WindowEvent::Scroll(direction) => {
-                     if h_scroll_mode {
-                         // Shift + wheel: horizontal scroll
-                         match direction {
-                             crate::backend::ScrollDirection::Up => {
-                                 if total_content_width > list_w {
-                                     h_scroll_offset = h_scroll_offset.saturating_sub(100);
-                                     needs_redraw = true;
-                                 }
-                             }
-                             crate::backend::ScrollDirection::Down => {
-                                 if total_content_width > list_w {
-                                     let max_scroll = total_content_width.saturating_sub(list_w);
-                                     h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
-                                     needs_redraw = true;
-                                 }
-                             }
-                             _ => {}
-                         }
-                     } else {
-                         // Normal wheel: vertical scroll
-                         match direction {
-                             crate::backend::ScrollDirection::Up => {
-                                 if scroll_offset > 0 {
-                                     scroll_offset = scroll_offset.saturating_sub(2);
-                                     needs_redraw = true;
-                                 }
-                             }
-                             crate::backend::ScrollDirection::Down => {
-                                 if scroll_offset + data_visible < rows.len() {
-                                     scroll_offset = (scroll_offset + 2)
-                                         .min(rows.len().saturating_sub(data_visible));
-                                     needs_redraw = true;
-                                 }
-                             }
-                             crate::backend::ScrollDirection::Left => {
-                                 if total_content_width > list_w {
-                                     h_scroll_offset = h_scroll_offset.saturating_sub(100);
-                                     needs_redraw = true;
-                                 }
-                             }
-                             crate::backend::ScrollDirection::Right => {
-                                 if total_content_width > list_w {
-                                     let max_scroll = total_content_width.saturating_sub(list_w);
-                                     h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
-                                     needs_redraw = true;
-                                 }
-                             }
-                         }
-                     }
-                 }
+                WindowEvent::Scroll(direction) => {
+                    if h_scroll_mode {
+                        // Shift + wheel: horizontal scroll
+                        match direction {
+                            crate::backend::ScrollDirection::Up => {
+                                if total_content_width > list_w {
+                                    h_scroll_offset = h_scroll_offset.saturating_sub(100);
+                                    needs_redraw = true;
+                                }
+                            }
+                            crate::backend::ScrollDirection::Down => {
+                                if total_content_width > list_w {
+                                    let max_scroll = total_content_width.saturating_sub(list_w);
+                                    h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
+                                    needs_redraw = true;
+                                }
+                            }
+                            _ => {}
+                        }
+                    } else {
+                        // Normal wheel: vertical scroll
+                        match direction {
+                            crate::backend::ScrollDirection::Up => {
+                                if scroll_offset > 0 {
+                                    scroll_offset = scroll_offset.saturating_sub(2);
+                                    needs_redraw = true;
+                                }
+                            }
+                            crate::backend::ScrollDirection::Down => {
+                                if scroll_offset + data_visible < rows.len() {
+                                    scroll_offset = (scroll_offset + 2)
+                                        .min(rows.len().saturating_sub(data_visible));
+                                    needs_redraw = true;
+                                }
+                            }
+                            crate::backend::ScrollDirection::Left => {
+                                if total_content_width > list_w {
+                                    h_scroll_offset = h_scroll_offset.saturating_sub(100);
+                                    needs_redraw = true;
+                                }
+                            }
+                            crate::backend::ScrollDirection::Right => {
+                                if total_content_width > list_w {
+                                    let max_scroll = total_content_width.saturating_sub(list_w);
+                                    h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
+                                    needs_redraw = true;
+                                }
+                            }
+                        }
+                    }
+                }
                 WindowEvent::KeyPress(key_event) => {
-                     const KEY_UP: u32 = 0xff52;
-                     const KEY_DOWN: u32 = 0xff54;
-                     const KEY_LEFT: u32 = 0xff51;
-                     const KEY_RIGHT: u32 = 0xff53;
-                     const KEY_LSHIFT: u32 = 0xffe1;
-                     const KEY_RSHIFT: u32 = 0xffe2;
-                     const KEY_SPACE: u32 = 0x20;
-                     const KEY_RETURN: u32 = 0xff0d;
-                     const KEY_ESCAPE: u32 = 0xff1b;
+                    const KEY_UP: u32 = 0xff52;
+                    const KEY_DOWN: u32 = 0xff54;
+                    const KEY_LEFT: u32 = 0xff51;
+                    const KEY_RIGHT: u32 = 0xff53;
+                    const KEY_LSHIFT: u32 = 0xffe1;
+                    const KEY_RSHIFT: u32 = 0xffe2;
+                    const KEY_SPACE: u32 = 0x20;
+                    const KEY_RETURN: u32 = 0xff0d;
+                    const KEY_ESCAPE: u32 = 0xff1b;
 
-                     // Handle shift for scroll mode
-                     if key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT {
-                         h_scroll_mode = true;
-                         continue;
-                     } else {
-                         h_scroll_mode = false;
-                     }
+                    // Handle shift for scroll mode
+                    if key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT {
+                        h_scroll_mode = true;
+                        continue;
+                    } else {
+                        h_scroll_mode = false;
+                    }
 
-                     match key_event.keysym {
+                    match key_event.keysym {
                         KEY_UP => {
                             if self.mode == ListMode::Single {
                                 if let Some(sel) = single_selected {
@@ -795,35 +784,35 @@ impl ListBuilder {
                                 }
                             }
                         }
-                         KEY_DOWN => {
-                             if self.mode == ListMode::Single {
-                                 if let Some(sel) = single_selected {
-                                     if sel + 1 < rows.len() {
-                                         single_selected = Some(sel + 1);
-                                         if sel + 1 >= scroll_offset + data_visible {
-                                             scroll_offset = sel + 2 - data_visible;
-                                         }
-                                         needs_redraw = true;
-                                     }
-                                 } else if !rows.is_empty() {
-                                     single_selected = Some(0);
-                                     needs_redraw = true;
-                                 }
-                             }
-                         }
-                         KEY_LEFT => {
-                             if total_content_width > list_w {
-                                 h_scroll_offset = h_scroll_offset.saturating_sub(100);
-                                 needs_redraw = true;
-                             }
-                         }
-                         KEY_RIGHT => {
-                             if total_content_width > list_w {
-                                 let max_scroll = total_content_width.saturating_sub(list_w);
-                                 h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
-                                 needs_redraw = true;
-                             }
-                         }
+                        KEY_DOWN => {
+                            if self.mode == ListMode::Single {
+                                if let Some(sel) = single_selected {
+                                    if sel + 1 < rows.len() {
+                                        single_selected = Some(sel + 1);
+                                        if sel + 1 >= scroll_offset + data_visible {
+                                            scroll_offset = sel + 2 - data_visible;
+                                        }
+                                        needs_redraw = true;
+                                    }
+                                } else if !rows.is_empty() {
+                                    single_selected = Some(0);
+                                    needs_redraw = true;
+                                }
+                            }
+                        }
+                        KEY_LEFT => {
+                            if total_content_width > list_w {
+                                h_scroll_offset = h_scroll_offset.saturating_sub(100);
+                                needs_redraw = true;
+                            }
+                        }
+                        KEY_RIGHT => {
+                            if total_content_width > list_w {
+                                let max_scroll = total_content_width.saturating_sub(list_w);
+                                h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
+                                needs_redraw = true;
+                            }
+                        }
                         KEY_SPACE => {
                             if self.mode == ListMode::Checklist {
                                 if let Some(ri) = hovered_row.or(single_selected) {

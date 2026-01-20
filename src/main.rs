@@ -36,6 +36,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut percentage: u32 = 0;
     let mut pulsate = false;
     let mut auto_close = false;
+    let mut auto_kill = false;
 
     // File selection options
     let mut directory_mode = false;
@@ -116,6 +117,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("percentage") => percentage = parser.value()?.string()?.parse()?,
             Long("pulsate") => pulsate = true,
             Long("auto-close") => auto_close = true,
+            Long("auto-kill") => auto_kill = true,
 
             // File selection options
             Long("directory") => directory_mode = true,
@@ -284,7 +286,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .text(&text)
                 .percentage(percentage)
                 .pulsate(pulsate)
-                .auto_close(auto_close);
+                .auto_close(auto_close)
+                .auto_kill(auto_kill);
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -587,48 +590,49 @@ DIALOG TYPES AND OPTIONS:
       --timeout=N       Auto-close after N seconds (exit code 5)
 
   --entry               Display a text entry dialog
-      --entry-text=TEXT Set default text
-      --hide-text       Hide entered text (password mode)
+    --entry-text=TEXT Set default text
+    --hide-text       Hide entered text (password mode)
 
   --password            Display a password entry dialog (same as --entry --hide-text)
 
   --progress            Display a progress dialog (reads percentage from stdin)
-      --percentage=N    Initial progress percentage (0-100)
-      --pulsate         Enable pulsating/indeterminate mode
-      --auto-close      Close dialog when progress reaches 100%
+    --percentage=N    Initial progress percentage (0-100)
+    --pulsate         Enable pulsating/indeterminate mode
+    --auto-close      Close dialog when progress reaches 100%
+    --auto-kill       Kill parent process if Cancel button is pressed
 
   --file-selection      Display a file selection dialog
-      --directory       Select directories only
-      --save            Save mode (allows entering new filename)
-      --filename=TEXT   Default filename/path
+    --directory       Select directories only
+    --save            Save mode (allows entering new filename)
+    --filename=TEXT   Default filename/path
 
   --list                Display a list selection dialog
-      --column=TEXT     Add a column header (can be repeated)
-      --checklist       Enable multi-select with checkboxes
-      --radiolist       Enable single-select with radio buttons
-      --hide-column=N   Hide column N (1-based, can be repeated)
-      [VALUES...]       Row values (number must match column count)
+    --column=TEXT     Add a column header (can be repeated)
+    --checklist       Enable multi-select with checkboxes
+    --radiolist       Enable single-select with radio buttons
+    --hide-column=N   Hide column N (1-based, can be repeated)
+    [VALUES...]       Row values (number must match column count)
 
   --calendar            Display a calendar date picker
-      --year=N          Initial year
-      --month=N         Initial month (1-12)
-      --day=N           Initial day (1-31)
+    --year=N          Initial year
+    --month=N         Initial month (1-12)
+    --day=N           Initial day (1-31)
 
   --text-info           Display scrollable text from file or stdin
-      --filename=TEXT   Read text from file (otherwise reads stdin)
-      --checkbox=TEXT   Add checkbox with label (for agreements)
+    --filename=TEXT   Read text from file (otherwise reads stdin)
+    --checkbox=TEXT   Add checkbox with label (for agreements)
 
   --scale               Display a slider to select a numeric value
-      --value=N         Initial value (default: 0)
-      --min-value=N     Minimum value (default: 0)
-      --max-value=N     Maximum value (default: 100)
-      --step=N          Step increment (default: 1)
-      --hide-value      Hide the numeric value display
+    --value=N         Initial value (default: 0)
+    --min-value=N     Minimum value (default: 0)
+    --max-value=N     Maximum value (default: 100)
+    --step=N          Step increment (default: 1)
+    --hide-value      Hide the numeric value display
 
   --forms               Display a form with multiple input fields
-      --add-entry=LABEL Add a text entry field (can be repeated)
-      --add-password=LABEL Add a password field (can be repeated)
-      --separator=CHAR  Output separator (default: |)
+    --add-entry=LABEL Add a text entry field (can be repeated)
+    --add-password=LABEL Add a password field (can be repeated)
+    --separator=CHAR  Output separator (default: |)
 
 EXAMPLES:
     zenity-rs --info --text="Operation completed"

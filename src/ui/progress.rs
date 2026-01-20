@@ -7,6 +7,9 @@ use std::{
     time::Duration,
 };
 
+#[cfg(unix)]
+use libc::{getppid, kill, SIGTERM};
+
 use crate::{
     backend::{create_window, Window, WindowEvent},
     error::Error,
@@ -58,6 +61,7 @@ pub struct ProgressBuilder {
     percentage: u32,
     pulsate: bool,
     auto_close: bool,
+    auto_kill: bool,
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
@@ -71,6 +75,7 @@ impl ProgressBuilder {
             percentage: 0,
             pulsate: false,
             auto_close: false,
+            auto_kill: false,
             width: None,
             height: None,
             colors: None,
@@ -99,6 +104,11 @@ impl ProgressBuilder {
 
     pub fn auto_close(mut self, auto_close: bool) -> Self {
         self.auto_close = auto_close;
+        self
+    }
+
+    pub fn auto_kill(mut self, auto_kill: bool) -> Self {
+        self.auto_kill = auto_kill;
         self
     }
 
@@ -356,6 +366,12 @@ impl ProgressBuilder {
                 cancel_button.process_event(&event);
 
                 if cancel_button.was_clicked() {
+                    if self.auto_kill {
+                        #[cfg(unix)]
+                        unsafe {
+                            kill(getppid(), SIGTERM);
+                        }
+                    }
                     return Ok(ProgressResult::Cancelled);
                 }
             }

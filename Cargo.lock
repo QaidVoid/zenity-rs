@@ -766,6 +766,7 @@ dependencies = [
  "dirs",
  "kbvm",
  "lexopt",
+ "libc",
  "memmap2",
  "tempfile",
  "tiny-skia",

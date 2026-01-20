@@ -34,6 +34,7 @@ lexopt = "0.3"
 # Misc
 bitflags = "2.4"
 dirs = "6"
+libc = "0.2"
 
 # X11 backend (optional)
 x11rb = { version = "0.13", default-features = false, features = ["xkb"], optional = true }
