@@ -198,7 +198,14 @@ impl X11Window {
             .map_err(|_| Error::X11(X11Error::NoVisual))?;
         let lookup_table = keymap.to_builder().build_lookup_table();
 
-        // Create cursors from the cursor font
+        // Create cursors from the cursor font for the default arrow only.
+        // IMPORTANT: do NOT set any window cursor during creation — letting the
+        // compositor/WM choose the initial cursor allows it to follow themes.
+        //
+        // We'll create a glyph cursor for the I-beam so we can explicitly set it
+        // when entering text fields. When leaving the text field we'll clear the
+        // window cursor (set cursor to 0) so the compositor can restore the
+        // themed default pointer.
         let cursor_font = conn.generate_id()?;
         conn.open_font(cursor_font, b"cursor")?;
 
@@ -233,12 +240,6 @@ impl X11Window {
         )?;
 
         conn.close_font(cursor_font)?;
-
-        // Set default cursor on window
-        conn.change_window_attributes(
-            window,
-            &xproto::ChangeWindowAttributesAux::new().cursor(cursor_default),
-        )?;
 
         let win = X11Window {
             atoms,
@@ -531,16 +532,20 @@ impl Window for X11Window {
             return Ok(());
         }
 
-        let cursor = match shape {
-            CursorShape::Default => self.cursor_default,
+        // When entering a text field set an I-beam glyph cursor.
+        // When leaving (switching back to Default) clear the window cursor
+        // (cursor = 0) so the compositor/WM can restore the themed default.
+        let cursor_id: u32 = match shape {
             CursorShape::Text => self.cursor_text,
+            CursorShape::Default => 0, // clear the cursor attribute
         };
 
         self.conn.change_window_attributes(
             self.window,
-            &xproto::ChangeWindowAttributesAux::new().cursor(cursor),
+            &xproto::ChangeWindowAttributesAux::new().cursor(cursor_id),
         )?;
         self.conn.flush()?;
+
         self.current_cursor = shape;
         Ok(())
     }
