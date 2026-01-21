@@ -1,4 +1,18 @@
 
+## [0.1.3](https://github.com/QaidVoid/zenity-rs/compare/v0.1.2...v0.1.3) - 2026-01-21
+
+### Fixed
+
+- Fix cursor theme when switching from I beam ([#6](https://github.com/QaidVoid/zenity-rs/pull/6)) - ([ffbc51e](https://github.com/QaidVoid/zenity-rs/commit/ffbc51e149fbcdd079c6008bc60cd9428055e7c2))
+
+### Other
+
+- Add --no-cancel and --time-remaining on progress - ([ddddb11](https://github.com/QaidVoid/zenity-rs/commit/ddddb11aca5ccdc5dfec981479589b2a3a49f17a))
+- Add --auto-kill option to progress dialog - ([1e29c63](https://github.com/QaidVoid/zenity-rs/commit/1e29c63d5e317caf8a97a5bbd78909eaa5560291))
+- Add horizontal scrolling and text clipping to list dialog - ([d09eab0](https://github.com/QaidVoid/zenity-rs/commit/d09eab04cab4fa741cf930c604e9e0027b71e416))
+- Format code - ([f99f51b](https://github.com/QaidVoid/zenity-rs/commit/f99f51bce3c6b36672d1ed2992cabe2e1e3f4b3e))
+- Ignore --modal flag for zenity compatibility - ([be82f30](https://github.com/QaidVoid/zenity-rs/commit/be82f3068ec461a24ed3eedc2e8f9a64d4b6ad7b))
+
 ## [0.1.2](https://github.com/QaidVoid/zenity-rs/compare/v0.1.1...v0.1.2) - 2026-01-19
 
 ### Other
