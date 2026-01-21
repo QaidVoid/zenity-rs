@@ -62,6 +62,8 @@ pub struct ProgressBuilder {
     pulsate: bool,
     auto_close: bool,
     auto_kill: bool,
+    no_cancel: bool,
+    show_time_remaining: bool,
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
@@ -76,6 +78,8 @@ impl ProgressBuilder {
             pulsate: false,
             auto_close: false,
             auto_kill: false,
+            no_cancel: false,
+            show_time_remaining: false,
             width: None,
             height: None,
             colors: None,
@@ -127,6 +131,16 @@ impl ProgressBuilder {
         self
     }
 
+    pub fn no_cancel(mut self, no_cancel: bool) -> Self {
+        self.no_cancel = no_cancel;
+        self
+    }
+
+    pub fn time_remaining(mut self, show_time_remaining: bool) -> Self {
+        self.show_time_remaining = show_time_remaining;
+        self
+    }
+
     pub fn show(self) -> Result<ProgressResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
@@ -136,8 +150,14 @@ impl ProgressBuilder {
         let temp_bar = ProgressBar::new(BASE_BAR_WIDTH, 1.0);
 
         let calc_width = BASE_BAR_WIDTH + BASE_PADDING * 2;
-        let calc_height =
-            BASE_PADDING * 3 + BASE_TEXT_HEIGHT + 10 + temp_bar.height() + 10 + BASE_BUTTON_HEIGHT;
+        let time_remaining_height = if self.show_time_remaining { 24 } else { 0 };
+        let calc_height = BASE_PADDING * 3
+            + BASE_TEXT_HEIGHT
+            + time_remaining_height
+            + 10
+            + temp_bar.height()
+            + 10
+            + BASE_BUTTON_HEIGHT;
         drop(temp_font);
         drop(temp_button);
         drop(temp_bar);
@@ -159,13 +179,16 @@ impl ProgressBuilder {
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
-        let mut cancel_button = Button::new("Cancel", &font, scale);
+        let mut cancel_button = if self.no_cancel {
+            None
+        } else {
+            Some(Button::new("Cancel", &font, scale))
+        };
 
         // Scale dimensions for physical rendering
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let bar_width = (BASE_BAR_WIDTH as f32 * scale) as u32;
         let text_height = (BASE_TEXT_HEIGHT as f32 * scale) as u32;
-        let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
 
         // Calculate physical dimensions
         let physical_width = (logical_width as f32 * scale) as u32;
@@ -181,14 +204,21 @@ impl ProgressBuilder {
         // Current status text
         let mut status_text = self.text.clone();
 
+        // Time remaining calculation
+        let start_time = std::time::Instant::now();
+        let mut time_remaining_text = String::new();
+
         // Position elements in physical coordinates
         let text_y = padding as i32;
-        let bar_y = text_y + text_height as i32 + 10;
+        let time_remaining_offset = if self.show_time_remaining { 24 } else { 0 };
+        let bar_y = text_y + text_height as i32 + 10 + time_remaining_offset;
         progress_bar.set_position(padding as i32, bar_y);
 
         let button_y = bar_y + progress_bar.height() as i32 + (10.0 * scale) as i32;
-        let button_x = physical_width as i32 - padding as i32 - cancel_button.width() as i32;
-        cancel_button.set_position(button_x, button_y);
+        if let Some(ref mut cancel_button) = cancel_button {
+            let button_x = physical_width as i32 - padding as i32 - cancel_button.width() as i32;
+            cancel_button.set_position(button_x, button_y);
+        }
 
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);
@@ -232,10 +262,12 @@ impl ProgressBuilder {
                     colors: &Colors,
                     font: &Font,
                     status_text: &str,
+                    time_remaining_text: &str,
                     progress_bar: &ProgressBar,
-                    cancel_button: &Button,
+                    cancel_button: &Option<Button>,
                     padding: u32,
-                    text_y: i32| {
+                    text_y: i32,
+                    show_time_remaining: bool| {
             canvas.fill(colors.window_bg);
 
             // Draw status text
@@ -244,11 +276,42 @@ impl ProgressBuilder {
                 canvas.draw_canvas(&text_canvas, padding as i32, text_y);
             }
 
+            // Draw time remaining text
+            if show_time_remaining && !time_remaining_text.is_empty() {
+                let text_canvas = font
+                    .render(time_remaining_text)
+                    .with_color(colors.text)
+                    .finish();
+                let time_remaining_y = if !status_text.is_empty() {
+                    text_y + 24
+                } else {
+                    text_y
+                };
+                canvas.draw_canvas(&text_canvas, padding as i32, time_remaining_y);
+            }
+
             // Draw progress bar
             progress_bar.draw(canvas, colors);
 
             // Draw cancel button
-            cancel_button.draw_to(canvas, colors, font);
+            if let Some(ref button) = cancel_button {
+                button.draw_to(canvas, colors, font);
+            }
+        };
+
+        let format_time_remaining = |seconds: f64| -> String {
+            if seconds < 60.0 {
+                format!("{:.0}s remaining", seconds)
+            } else if seconds < 3600.0 {
+                let mins = (seconds / 60.0).floor();
+                let secs = seconds % 60.0;
+                format!("{:.0}m {:.0}s remaining", mins, secs)
+            } else {
+                let hours = (seconds / 3600.0).floor();
+                let mins = ((seconds % 3600.0) / 60.0).floor();
+                let secs = seconds % 60.0;
+                format!("{:.0}h {:.0}m {:.0}s remaining", hours, mins, secs)
+            }
         };
 
         // Initial draw
@@ -257,10 +320,12 @@ impl ProgressBuilder {
             colors,
             &font,
             &status_text,
+            &time_remaining_text,
             &progress_bar,
             &cancel_button,
             padding,
             text_y,
+            self.show_time_remaining,
         );
         window.set_contents(&canvas)?;
         window.show()?;
@@ -270,23 +335,36 @@ impl ProgressBuilder {
 
         // Event loop with timeout for animation
         loop {
+            let mut needs_redraw = false;
+
             // Check for stdin messages
             loop {
                 match rx.try_recv() {
                     Ok(StdinMessage::Progress(p)) => {
                         progress_bar.set_percentage(p);
+                        if self.show_time_remaining && !self.pulsate && p > 0 {
+                            let elapsed = start_time.elapsed().as_secs_f64();
+                            let progress_fraction = p as f64 / 100.0;
+                            let estimated_total = elapsed / progress_fraction;
+                            let remaining = (estimated_total - elapsed).max(0.0);
+                            time_remaining_text = format_time_remaining(remaining);
+                        }
+                        needs_redraw = true;
                         if p >= 100 && auto_close {
                             return Ok(ProgressResult::Completed);
                         }
                     }
                     Ok(StdinMessage::Text(t)) => {
                         status_text = t;
+                        needs_redraw = true;
                     }
                     Ok(StdinMessage::Pulsate) => {
                         progress_bar.set_pulsating(true);
+                        needs_redraw = true;
                     }
                     Ok(StdinMessage::Done) => {
                         stdin_done = true;
+                        needs_redraw = true;
                         if auto_close {
                             return Ok(ProgressResult::Completed);
                         }
@@ -294,6 +372,7 @@ impl ProgressBuilder {
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
                         stdin_done = true;
+                        needs_redraw = true;
                         if auto_close {
                             return Ok(ProgressResult::Completed);
                         }
@@ -315,10 +394,12 @@ impl ProgressBuilder {
                             colors,
                             &font,
                             &status_text,
+                            &time_remaining_text,
                             &progress_bar,
                             &cancel_button,
                             padding,
                             text_y,
+                            self.show_time_remaining,
                         );
                         window.set_contents(&canvas)?;
                         std::thread::sleep(Duration::from_millis(16));
@@ -326,18 +407,10 @@ impl ProgressBuilder {
                     }
                 }
             } else {
-                // Block waiting for events if not pulsating
-                if stdin_done {
-                    Some(window.wait_for_event()?)
-                } else {
-                    // Poll with short sleep to check stdin
-                    match window.poll_for_event()? {
-                        Some(e) => Some(e),
-                        None => {
-                            std::thread::sleep(Duration::from_millis(50));
-                            continue;
-                        }
-                    }
+                // Poll with short sleep to check stdin
+                match window.poll_for_event()? {
+                    Some(e) => Some(e),
+                    None => None,
                 }
             };
 
@@ -347,47 +420,48 @@ impl ProgressBuilder {
                         return Ok(ProgressResult::Closed);
                     }
                     WindowEvent::RedrawRequested => {
-                        draw(
-                            &mut canvas,
-                            colors,
-                            &font,
-                            &status_text,
-                            &progress_bar,
-                            &cancel_button,
-                            padding,
-                            text_y,
-                        );
-                        window.set_contents(&canvas)?;
+                        needs_redraw = true;
                     }
                     _ => {}
                 }
 
                 // Process button events
-                cancel_button.process_event(&event);
+                if let Some(ref mut cancel_button) = cancel_button {
+                    cancel_button.process_event(&event);
 
-                if cancel_button.was_clicked() {
-                    if self.auto_kill {
-                        #[cfg(unix)]
-                        unsafe {
-                            kill(getppid(), SIGTERM);
+                    if cancel_button.was_clicked() {
+                        if self.auto_kill {
+                            #[cfg(unix)]
+                            unsafe {
+                                kill(getppid(), SIGTERM);
+                            }
                         }
+                        return Ok(ProgressResult::Cancelled);
                     }
-                    return Ok(ProgressResult::Cancelled);
                 }
             }
 
-            // Redraw if needed
-            draw(
-                &mut canvas,
-                colors,
-                &font,
-                &status_text,
-                &progress_bar,
-                &cancel_button,
-                padding,
-                text_y,
-            );
-            window.set_contents(&canvas)?;
+            // Redraw if needed (this ensures progress updates even when not focused)
+            if needs_redraw {
+                draw(
+                    &mut canvas,
+                    colors,
+                    &font,
+                    &status_text,
+                    &time_remaining_text,
+                    &progress_bar,
+                    &cancel_button,
+                    padding,
+                    text_y,
+                    self.show_time_remaining,
+                );
+                window.set_contents(&canvas)?;
+            }
+
+            // Short sleep to prevent CPU spinning when idle
+            if !needs_redraw && !progress_bar.is_pulsating() {
+                std::thread::sleep(Duration::from_millis(50));
+            }
         }
     }
 }

@@ -37,6 +37,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut pulsate = false;
     let mut auto_close = false;
     let mut auto_kill = false;
+    let mut no_cancel = false;
+    let mut time_remaining = false;
 
     // File selection options
     let mut directory_mode = false;
@@ -118,6 +120,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("pulsate") => pulsate = true,
             Long("auto-close") => auto_close = true,
             Long("auto-kill") => auto_kill = true,
+            Long("no-cancel") => no_cancel = true,
+            Long("time-remaining") => time_remaining = true,
 
             // File selection options
             Long("directory") => directory_mode = true,
@@ -287,7 +291,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .percentage(percentage)
                 .pulsate(pulsate)
                 .auto_close(auto_close)
-                .auto_kill(auto_kill);
+                .auto_kill(auto_kill)
+                .no_cancel(no_cancel)
+                .time_remaining(time_remaining);
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -600,6 +606,8 @@ DIALOG TYPES AND OPTIONS:
     --pulsate         Enable pulsating/indeterminate mode
     --auto-close      Close dialog when progress reaches 100%
     --auto-kill       Kill parent process if Cancel button is pressed
+    --no-cancel       Hide Cancel button
+    --time-remaining  Show estimated time remaining
 
   --file-selection      Display a file selection dialog
     --directory       Select directories only
