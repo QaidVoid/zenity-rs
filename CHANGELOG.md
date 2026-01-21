@@ -1,4 +1,16 @@
 
+## [0.1.4](https://github.com/QaidVoid/zenity-rs/compare/v0.1.3...v0.1.4) - 2026-01-21
+
+### Fixed
+
+- Set wayland appid as zenity - ([b735560](https://github.com/QaidVoid/zenity-rs/commit/b735560cad6baf30c2b6fd7738ec2a2bed80feac))
+- Use display_rows for col_widths calculation when columns are hidden - ([176fa91](https://github.com/QaidVoid/zenity-rs/commit/176fa91a9c415d85f9c6f70c4b0b1f1b54561ca9))
+
+### Other
+
+- Make window class same as original zenity ([#7](https://github.com/QaidVoid/zenity-rs/pull/7)) - ([b85f389](https://github.com/QaidVoid/zenity-rs/commit/b85f3897073021a11bf7dc4ee81f50d411f1d40f))
+- Remove truncation logic in list - ([076dd69](https://github.com/QaidVoid/zenity-rs/commit/076dd696a9949e5016bf420d9c41f83f9a4a04ce))
+
 ## [0.1.3](https://github.com/QaidVoid/zenity-rs/compare/v0.1.2...v0.1.3) - 2026-01-21
 
 ### Fixed

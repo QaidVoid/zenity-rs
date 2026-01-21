@@ -759,7 +759,7 @@ checksum = "bec9e4a500ca8864c5b47b8b482a73d62e4237670e5b5f1d6b9e3cae50f28f2b"
 
 [[package]]
 name = "zenity-rs"
-version = "0.1.3"
+version = "0.1.4"
 dependencies = [
  "ab_glyph",
  "bitflags 2.10.0",
