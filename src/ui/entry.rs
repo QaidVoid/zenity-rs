@@ -138,13 +138,19 @@ impl EntryBuilder {
         // Get the actual scale factor from the window (compositor scale)
         let scale = window.scale_factor();
 
+        // Calculate physical dimensions from logical dimensions
+        let physical_width = (logical_width as f32 * scale) as u32;
+        let physical_height = (logical_height as f32 * scale) as u32;
+
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
 
         // Scale dimensions for physical rendering
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let button_spacing = (BASE_BUTTON_SPACING as f32 * scale) as u32;
-        let input_width = (BASE_INPUT_WIDTH as f32 * scale) as u32;
+
+        // Input should fill available width
+        let input_width = physical_width - (padding * 2);
 
         // Create buttons at physical scale
         let mut ok_button = Button::new("OK", &font, scale);
@@ -164,21 +170,6 @@ impl EntryBuilder {
         };
         let prompt_height = prompt_canvas.as_ref().map(|c| c.height()).unwrap_or(0);
 
-        // Calculate physical dimensions
-        let buttons_width = ok_button.width() + cancel_button.width() + button_spacing;
-        let content_width = input_width.max(buttons_width);
-        let width = content_width + padding * 2;
-        let height = padding * 3
-            + prompt_height
-            + (if prompt_height > 0 {
-                (10.0 * scale) as u32
-            } else {
-                0
-            })
-            + input.height()
-            + (10.0 * scale) as u32
-            + (32.0 * scale) as u32;
-
         // Position elements in physical coordinates
         let mut y = padding as i32;
         let prompt_y = y;
@@ -191,14 +182,14 @@ impl EntryBuilder {
         y += input.height() as i32 + (10.0 * scale) as i32;
 
         // Button positions (right-aligned)
-        let mut button_x = width as i32 - padding as i32;
+        let mut button_x = physical_width as i32 - padding as i32;
         button_x -= cancel_button.width() as i32;
         cancel_button.set_position(button_x, y);
         button_x -= button_spacing as i32 + ok_button.width() as i32;
         ok_button.set_position(button_x, y);
 
         // Create canvas at PHYSICAL dimensions
-        let mut canvas = Canvas::new(width, height);
+        let mut canvas = Canvas::new(physical_width, physical_height);
 
         // Draw function
         let draw = |canvas: &mut Canvas,
