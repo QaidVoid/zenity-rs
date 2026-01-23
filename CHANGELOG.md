@@ -1,4 +1,18 @@
 
+## [0.1.5](https://github.com/QaidVoid/zenity-rs/compare/v0.1.4...v0.1.5) - 2026-01-23
+
+### Added
+
+- Add --multiple and --separator options for file selection dialog - ([fd58857](https://github.com/QaidVoid/zenity-rs/commit/fd588570f062709516184bfdeae43e78ba672009))
+- Add --file-filter option for file selection dialog - ([ec94246](https://github.com/QaidVoid/zenity-rs/commit/ec9424611f5c28eb68776f6afa7aa106d46ec7c0))
+- Add dialog borders and subtle shadow - ([7b6485f](https://github.com/QaidVoid/zenity-rs/commit/7b6485fc7b6c2cad8fea96e0546e6b7bc9a7c517))
+
+### Fixed
+
+- Improve wayland detection ([#11](https://github.com/QaidVoid/zenity-rs/pull/11)) - ([3ad3c2d](https://github.com/QaidVoid/zenity-rs/commit/3ad3c2df06cdb49d806bb83c7528fb3b917bfbd3))
+- Make entry dialog respect custom width/height parameters - ([072c358](https://github.com/QaidVoid/zenity-rs/commit/072c358b2d5f15ca517bcd12d7f8b1173688c02d))
+- Make default calendar title same as gtk zenity ([#9](https://github.com/QaidVoid/zenity-rs/pull/9)) - ([dd0f89c](https://github.com/QaidVoid/zenity-rs/commit/dd0f89c37e23eb34bbe161cfec7596d0fb06f68d))
+
 ## [0.1.4](https://github.com/QaidVoid/zenity-rs/compare/v0.1.3...v0.1.4) - 2026-01-21
 
 ### Fixed
