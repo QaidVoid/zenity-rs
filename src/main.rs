@@ -32,6 +32,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut width: Option<u32> = None;
     let mut height: Option<u32> = None;
 
+    // Shared options (for list, forms, file-selector)
+    let mut separator = String::from("|");
+
     // Progress options
     let mut percentage: u32 = 0;
     let mut pulsate = false;
@@ -45,7 +48,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut save_mode = false;
     let mut multiple_mode = false;
     let mut filename = String::new();
-    let mut file_separator: Option<String> = None;
     let mut file_filters: Vec<zenity_rs::FileFilter> = Vec::new();
 
     // List options
@@ -73,7 +75,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // Forms options
     let mut form_entries: Vec<String> = Vec::new();
     let mut form_passwords: Vec<String> = Vec::new();
-    let mut separator = String::from("|");
 
     // Dialog type
     let mut dialog_type: Option<DialogType> = None;
@@ -117,6 +118,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("timeout") => timeout = Some(parser.value()?.string()?.parse()?),
             Long("width") => width = Some(parser.value()?.string()?.parse()?),
             Long("height") => height = Some(parser.value()?.string()?.parse()?),
+            Long("separator") => separator = parser.value()?.string()?,
 
             // Progress options
             Long("percentage") => percentage = parser.value()?.string()?.parse()?,
@@ -131,7 +133,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("save") => save_mode = true,
             Long("multiple") => multiple_mode = true,
             Long("filename") => filename = parser.value()?.string()?,
-            Long("separator") => file_separator = Some(parser.value()?.string()?),
             Long("file-filter") => {
                 let pattern = parser.value()?.string()?;
                 file_filters.push(zenity_rs::FileFilter {
@@ -163,7 +164,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             // Forms options
             Long("add-entry") => form_entries.push(parser.value()?.string()?),
             Long("add-password") => form_passwords.push(parser.value()?.string()?),
-            Long("separator") => separator = parser.value()?.string()?,
 
             // Ignored options (for compatibility with zenity)
             Long("modal") => { /* Ignored */ }
@@ -323,7 +323,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .directory(directory_mode)
                 .save(save_mode)
                 .multiple(multiple_mode)
-                .separator(&file_separator.as_deref().unwrap_or(" "));
+                .separator(&separator);
             if !filename.is_empty() {
                 builder = builder.filename(&filename);
             }
@@ -337,7 +337,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_file_select_result(result, file_separator.as_deref().unwrap_or(" "))
+            handle_file_select_result(result, &separator)
         }
         DialogType::List => {
             let mut builder = list();
@@ -362,7 +362,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             // Build rows from list_values based on column count
             let cols = columns.len().max(1);
             for chunk in list_values.chunks(cols) {
-                builder = builder.row(chunk.iter().cloned().collect());
+                builder = builder.row(chunk.to_vec());
             }
 
             if let Some(w) = width {
