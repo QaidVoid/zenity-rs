@@ -1,4 +1,10 @@
 
+## [0.1.8](https://github.com/QaidVoid/zenity-rs/compare/v0.1.7...v0.1.8) - 2026-01-23
+
+### Fixed
+
+- Backend selection bug when WAYLAND_DISPLAY is set - ([c397c8b](https://github.com/QaidVoid/zenity-rs/commit/c397c8b2426691e680302d244c2ee36890c7f780))
+
 ## [0.1.7](https://github.com/QaidVoid/zenity-rs/compare/v0.1.6...v0.1.7) - 2026-01-23
 
 ### Added
