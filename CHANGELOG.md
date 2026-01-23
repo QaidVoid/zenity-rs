@@ -1,4 +1,16 @@
 
+## [0.1.6](https://github.com/QaidVoid/zenity-rs/compare/v0.1.5...v0.1.6) - 2026-01-23
+
+### Added
+
+- Add --multiple to list and fix modifier state tracking - ([d825911](https://github.com/QaidVoid/zenity-rs/commit/d825911ed208072ae61286602876fcd374ad7721))
+- Add --separator support for list - ([04f6f10](https://github.com/QaidVoid/zenity-rs/commit/04f6f109b710bea552a9714823b51af5312fa509))
+
+### Fixed
+
+- Share same separator with different options - ([299e2f8](https://github.com/QaidVoid/zenity-rs/commit/299e2f876b03f3673675da7345cbb917a6e099d6))
+- Traverse symlink for metadata - ([eaff044](https://github.com/QaidVoid/zenity-rs/commit/eaff044f0ffe040700590c54eab373ad00e70ed6))
+
 ## [0.1.5](https://github.com/QaidVoid/zenity-rs/compare/v0.1.4...v0.1.5) - 2026-01-23
 
 ### Added
