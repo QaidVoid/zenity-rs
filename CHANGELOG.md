@@ -1,4 +1,11 @@
 
+## [0.1.7](https://github.com/QaidVoid/zenity-rs/compare/v0.1.6...v0.1.7) - 2026-01-23
+
+### Added
+
+- Support multiple patterns and named file filters - ([7ad187b](https://github.com/QaidVoid/zenity-rs/commit/7ad187b8931f2adfbf4f05d64d735fea781c6568))
+- Add --no-wrap option - ([a8b13e3](https://github.com/QaidVoid/zenity-rs/commit/a8b13e3b1ee5498a904440f22b96d8c1810bcbe7))
+
 ## [0.1.6](https://github.com/QaidVoid/zenity-rs/compare/v0.1.5...v0.1.6) - 2026-01-23
 
 ### Added
