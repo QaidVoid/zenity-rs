@@ -650,10 +650,13 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                     0x112 => MouseButton::Middle,
                     _ => return,
                 };
+                let modifiers = convert_wayland_modifiers(state.modifier_mask);
                 let event = match btn_state {
-                    WEnum::Value(wl_pointer::ButtonState::Pressed) => WindowEvent::ButtonPress(mb),
+                    WEnum::Value(wl_pointer::ButtonState::Pressed) => {
+                        WindowEvent::ButtonPress(mb, modifiers)
+                    }
                     WEnum::Value(wl_pointer::ButtonState::Released) => {
-                        WindowEvent::ButtonRelease(mb)
+                        WindowEvent::ButtonRelease(mb, modifiers)
                     }
                     _ => return,
                 };

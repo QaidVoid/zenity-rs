@@ -48,6 +48,8 @@ pub enum ListMode {
     Checklist,
     /// Multiple selection with radio buttons (single select visually).
     Radiolist,
+    /// Multiple selection without checkboxes.
+    Multiple,
 }
 
 /// List dialog builder.
@@ -118,6 +120,12 @@ impl ListBuilder {
         self
     }
 
+    /// Enable multiple mode (multi-select without checkboxes).
+    pub fn multiple(mut self) -> Self {
+        self.mode = ListMode::Multiple;
+        self
+    }
+
     pub fn colors(mut self, colors: &'static Colors) -> Self {
         self.colors = Some(colors);
         self
@@ -146,39 +154,50 @@ impl ListBuilder {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Process rows - for checklist/radiolist, first column is TRUE/FALSE
-        let (rows, mut selected): (Vec<Vec<String>>, Vec<bool>) = if self.mode != ListMode::Single {
-            let mut processed_rows = Vec::new();
-            let mut selections = Vec::new();
+        let (rows, mut selected): (Vec<Vec<String>>, Vec<bool>) = match self.mode {
+            ListMode::Checklist | ListMode::Radiolist => {
+                let mut processed_rows = Vec::new();
+                let mut selections = Vec::new();
 
-            for row in &self.rows {
-                if !row.is_empty() {
-                    let is_selected = row[0].eq_ignore_ascii_case("true");
-                    selections.push(is_selected);
-                    processed_rows.push(row[1..].to_vec());
+                for row in &self.rows {
+                    if !row.is_empty() {
+                        let is_selected = row[0].eq_ignore_ascii_case("true");
+                        selections.push(is_selected);
+                        processed_rows.push(row[1..].to_vec());
+                    }
                 }
+                (processed_rows, selections)
             }
-            (processed_rows, selections)
-        } else {
-            (self.rows.clone(), vec![false; self.rows.len()])
+            ListMode::Single | ListMode::Multiple => {
+                (self.rows.clone(), vec![false; self.rows.len()])
+            }
         };
 
         // Columns - skip first column header for checklist/radiolist
-        let all_columns: Vec<&str> = if self.mode != ListMode::Single && !self.columns.is_empty() {
-            self.columns[1..].iter().map(|s| s.as_str()).collect()
-        } else {
-            self.columns.iter().map(|s| s.as_str()).collect()
+        let all_columns: Vec<&str> = match self.mode {
+            ListMode::Checklist | ListMode::Radiolist => {
+                if !self.columns.is_empty() {
+                    self.columns[1..].iter().map(|s| s.as_str()).collect()
+                } else {
+                    vec![]
+                }
+            }
+            ListMode::Single | ListMode::Multiple => {
+                self.columns.iter().map(|s| s.as_str()).collect()
+            }
         };
 
         // Adjust hidden column indices for radiolist/checklist mode
         // In these modes, zenity's column 1 is TRUE/FALSE which we strip,
         // so user's column N becomes internal index N-2 (N-1 for 0-based, then -1 for stripped column)
-        let adjusted_hidden: Vec<usize> = if self.mode != ListMode::Single {
-            self.hidden_columns
-                .iter()
-                .filter_map(|&col| col.checked_sub(1)) // Subtract 1 more for stripped TRUE/FALSE column
-                .collect()
-        } else {
-            self.hidden_columns.clone()
+        let adjusted_hidden: Vec<usize> = match self.mode {
+            ListMode::Checklist | ListMode::Radiolist => {
+                self.hidden_columns
+                    .iter()
+                    .filter_map(|&col| col.checked_sub(1)) // Subtract 1 more for stripped TRUE/FALSE column
+                    .collect()
+            }
+            ListMode::Single | ListMode::Multiple => self.hidden_columns.clone(),
         };
 
         // Determine which columns are visible (not hidden)
@@ -438,7 +457,9 @@ impl ListBuilder {
                 let is_hovered = hovered_row == Some(ri);
                 let is_selected = match mode {
                     ListMode::Single => single_selected == Some(ri),
-                    _ => selected.get(ri).copied().unwrap_or(false),
+                    ListMode::Multiple | ListMode::Checklist | ListMode::Radiolist => {
+                        selected.get(ri).copied().unwrap_or(false)
+                    }
                 };
 
                 let bg = if is_selected {
@@ -454,7 +475,7 @@ impl ListBuilder {
                 list_canvas.fill_rect(1.0, ry as f32, (list_w - 2) as f32, row_height as f32, bg);
 
                 // Checkbox/Radio
-                if mode != ListMode::Single {
+                if mode == ListMode::Checklist || mode == ListMode::Radiolist {
                     let check_x = (8.0 * scale) as i32 - h_scroll_offset as i32;
                     let check_y = ry + ((row_height - checkbox_size) / 2) as i32;
                     let checked = selected.get(ri).copied().unwrap_or(false);
@@ -628,7 +649,6 @@ impl ListBuilder {
         } else {
             visible_rows.saturating_sub(1)
         };
-
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
@@ -659,11 +679,26 @@ impl ListBuilder {
                         needs_redraw = true;
                     }
                 }
-                WindowEvent::ButtonPress(MouseButton::Left) => {
+                WindowEvent::ButtonPress(MouseButton::Left, mods) => {
                     if let Some(ri) = hovered_row {
                         match self.mode {
                             ListMode::Single => {
                                 single_selected = Some(ri);
+                            }
+                            ListMode::Multiple => {
+                                // Only toggle selection if Ctrl is held, otherwise select only this item
+                                if mods.contains(crate::backend::Modifiers::CTRL) {
+                                    if let Some(sel) = selected.get_mut(ri) {
+                                        *sel = !*sel;
+                                    }
+                                } else {
+                                    for s in selected.iter_mut() {
+                                        *s = false;
+                                    }
+                                    if let Some(sel) = selected.get_mut(ri) {
+                                        *sel = true;
+                                    }
+                                }
                             }
                             ListMode::Checklist => {
                                 if let Some(sel) = selected.get_mut(ri) {
@@ -768,6 +803,20 @@ impl ListBuilder {
                                     single_selected = Some(0);
                                     needs_redraw = true;
                                 }
+                            } else if self.mode == ListMode::Multiple {
+                                let last_selected = selected.iter().position(|&s| s);
+                                if let Some(last) = last_selected {
+                                    if last > 0 {
+                                        single_selected = Some(last - 1);
+                                        if last - 1 < scroll_offset {
+                                            scroll_offset = last - 1;
+                                        }
+                                        needs_redraw = true;
+                                    }
+                                } else if !rows.is_empty() {
+                                    single_selected = Some(0);
+                                    needs_redraw = true;
+                                }
                             }
                         }
                         KEY_DOWN => {
@@ -777,6 +826,20 @@ impl ListBuilder {
                                         single_selected = Some(sel + 1);
                                         if sel + 1 >= scroll_offset + data_visible {
                                             scroll_offset = sel + 2 - data_visible;
+                                        }
+                                        needs_redraw = true;
+                                    }
+                                } else if !rows.is_empty() {
+                                    single_selected = Some(0);
+                                    needs_redraw = true;
+                                }
+                            } else if self.mode == ListMode::Multiple {
+                                let last_selected = selected.iter().position(|&s| s);
+                                if let Some(last) = last_selected {
+                                    if last + 1 < rows.len() {
+                                        single_selected = Some(last + 1);
+                                        if last + 1 >= scroll_offset + data_visible {
+                                            scroll_offset = last + 2 - data_visible;
                                         }
                                         needs_redraw = true;
                                     }
@@ -800,7 +863,7 @@ impl ListBuilder {
                             }
                         }
                         KEY_SPACE => {
-                            if self.mode == ListMode::Checklist {
+                            if self.mode == ListMode::Checklist || self.mode == ListMode::Multiple {
                                 if let Some(ri) = hovered_row.or(single_selected) {
                                     if let Some(sel) = selected.get_mut(ri) {
                                         *sel = !*sel;
@@ -817,6 +880,15 @@ impl ListBuilder {
                             return Ok(ListResult::Cancelled);
                         }
                         _ => {}
+                    }
+                }
+                WindowEvent::KeyRelease(key_event) => {
+                    const KEY_LSHIFT: u32 = 0xffe1;
+                    const KEY_RSHIFT: u32 = 0xffe2;
+
+                    // Handle shift release for scroll mode
+                    if key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT {
+                        h_scroll_mode = false;
                     }
                 }
                 _ => {}
@@ -901,7 +973,7 @@ fn get_result(
                 }
             }
         }
-        _ => {
+        ListMode::Multiple | ListMode::Checklist | ListMode::Radiolist => {
             for (i, &sel) in selected.iter().enumerate() {
                 if sel {
                     if let Some(row) = rows.get(i) {

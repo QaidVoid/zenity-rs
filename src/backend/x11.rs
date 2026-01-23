@@ -366,13 +366,19 @@ impl X11Window {
                 match e.detail {
                     4 => return Some(WindowEvent::Scroll(ScrollDirection::Up)),
                     5 => return Some(WindowEvent::Scroll(ScrollDirection::Down)),
-                    _ => mouse_button(e.detail).map(WindowEvent::ButtonPress)?,
+                    _ => {
+                        let mods = convert_modifiers(e.state);
+                        mouse_button(e.detail).map(|mb| WindowEvent::ButtonPress(mb, mods))?
+                    }
                 }
             }
             Event::ButtonRelease(e) => {
                 match e.detail {
                     4 | 5 => return None,
-                    _ => mouse_button(e.detail).map(WindowEvent::ButtonRelease)?,
+                    _ => {
+                        let mods = convert_modifiers(e.state);
+                        mouse_button(e.detail).map(|mb| WindowEvent::ButtonRelease(mb, mods))?
+                    }
                 }
             }
             _ => return None,

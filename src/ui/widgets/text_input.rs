@@ -300,7 +300,7 @@ impl Widget for TextInput {
 
     fn process_event(&mut self, event: &WindowEvent) -> bool {
         match event {
-            WindowEvent::ButtonPress(crate::backend::MouseButton::Left) => {
+            WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
                 // Check if clicked inside
                 // Focus handling is done by the dialog
                 false

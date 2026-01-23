@@ -732,7 +732,7 @@ impl FileSelectBuilder {
                         needs_redraw = true;
                     }
                 }
-                WindowEvent::ButtonPress(MouseButton::Left) => {
+                WindowEvent::ButtonPress(MouseButton::Left, _) => {
                     // Toolbar buttons
                     let nav_y = padding as i32 + (4.0 * scale) as i32;
                     let btn_size = (28.0 * scale) as i32;

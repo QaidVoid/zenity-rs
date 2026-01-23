@@ -34,6 +34,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
 
     // Shared options (for list, forms, file-selector)
     let mut separator = String::from("|");
+    let mut multiple_mode = false;
 
     // Progress options
     let mut percentage: u32 = 0;
@@ -46,7 +47,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // File selection options
     let mut directory_mode = false;
     let mut save_mode = false;
-    let mut multiple_mode = false;
     let mut filename = String::new();
     let mut file_filters: Vec<zenity_rs::FileFilter> = Vec::new();
 
@@ -131,7 +131,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             // File selection options
             Long("directory") => directory_mode = true,
             Long("save") => save_mode = true,
-            Long("multiple") => multiple_mode = true,
+            Long("multiple") => {
+                multiple_mode = true;
+            }
             Long("filename") => filename = parser.value()?.string()?,
             Long("file-filter") => {
                 let pattern = parser.value()?.string()?;
@@ -354,6 +356,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.checklist();
             } else if radiolist {
                 builder = builder.radiolist();
+            } else if multiple_mode {
+                builder = builder.multiple();
             }
             for col in &hidden_columns {
                 builder = builder.hide_column(*col);
@@ -650,12 +654,13 @@ DIALOG TYPES AND OPTIONS:
     --filename=TEXT   Default filename/path
     --file-filter=PATTERN  Add file filter (e.g., "*.rs" or "*.txt")
 
-  --list                Display a list selection dialog
-    --column=TEXT     Add a column header (can be repeated)
-    --checklist       Enable multi-select with checkboxes
-    --radiolist       Enable single-select with radio buttons
-    --hide-column=N   Hide column N (1-based, can be repeated)
-    [VALUES...]       Row values (number must match column count)
+   --list                Display a list selection dialog
+     --column=TEXT     Add a column header (can be repeated)
+     --checklist       Enable multi-select with checkboxes
+     --radiolist       Enable single-select with radio buttons
+     --multiple        Enable multi-select without checkboxes
+     --hide-column=N   Hide column N (1-based, can be repeated)
+     [VALUES...]       Row values (number must match column count)
 
   --calendar            Display a calendar date picker
     --year=N          Initial year

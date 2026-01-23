@@ -291,7 +291,7 @@ impl CalendarBuilder {
                         }
                     }
                 }
-                WindowEvent::ButtonPress(MouseButton::Left) => {
+                WindowEvent::ButtonPress(MouseButton::Left, _) => {
                     let header_y = calendar_y;
 
                     // Handle dropdown selection

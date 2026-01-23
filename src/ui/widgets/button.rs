@@ -138,11 +138,11 @@ impl Widget for Button {
                 self.pressed = false;
                 true
             }
-            WindowEvent::ButtonPress(MouseButton::Left) if self.hovered => {
+            WindowEvent::ButtonPress(MouseButton::Left, _) if self.hovered => {
                 self.pressed = true;
                 true
             }
-            WindowEvent::ButtonRelease(MouseButton::Left) => {
+            WindowEvent::ButtonRelease(MouseButton::Left, _) => {
                 if self.pressed && self.hovered {
                     self.clicked = true;
                 }

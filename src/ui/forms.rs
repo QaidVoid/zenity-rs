@@ -356,7 +356,7 @@ impl FormsBuilder {
                         CursorShape::Default
                     });
                 }
-                WindowEvent::ButtonPress(crate::backend::MouseButton::Left) => {
+                WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
                     // Check if clicking on any input field
                     for (i, input) in inputs.iter().enumerate() {
                         let ix = input.x();

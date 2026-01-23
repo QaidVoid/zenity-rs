@@ -442,7 +442,7 @@ impl ScaleBuilder {
                         }
                     }
                 }
-                WindowEvent::ButtonPress(MouseButton::Left) => {
+                WindowEvent::ButtonPress(MouseButton::Left, _) => {
                     let mx = cursor_x;
                     let my = cursor_y;
 
@@ -470,7 +470,7 @@ impl ScaleBuilder {
                         dragging = true;
                     }
                 }
-                WindowEvent::ButtonRelease(MouseButton::Left) => {
+                WindowEvent::ButtonRelease(MouseButton::Left, _) => {
                     if dragging {
                         dragging = false;
                         needs_redraw = true;
@@ -544,7 +544,7 @@ impl ScaleBuilder {
                             needs_redraw = true;
                         }
                     }
-                    WindowEvent::ButtonRelease(MouseButton::Left) => {
+                    WindowEvent::ButtonRelease(MouseButton::Left, _) => {
                         if dragging {
                             dragging = false;
                             needs_redraw = true;

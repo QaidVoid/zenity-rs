@@ -234,10 +234,10 @@ impl MessageBuilder {
                     );
                     window.set_contents(&canvas)?;
                 }
-                WindowEvent::ButtonPress(MouseButton::Left) => {
+                WindowEvent::ButtonPress(MouseButton::Left, _) => {
                     dragging = true;
                 }
-                WindowEvent::ButtonRelease(MouseButton::Left) => {
+                WindowEvent::ButtonRelease(MouseButton::Left, _) => {
                     if dragging {
                         dragging = false;
                     }

@@ -447,7 +447,7 @@ impl TextInfoBuilder {
                         }
                     }
                 }
-                WindowEvent::ButtonPress(crate::backend::MouseButton::Left) => {
+                WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
                     if checkbox_hovered {
                         checkbox_checked = !checkbox_checked;
                         needs_redraw = true;
