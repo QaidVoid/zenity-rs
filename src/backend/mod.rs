@@ -216,9 +216,12 @@ fn try_wayland(width: u16, height: u16) -> Option<AnyWindow> {
 
 #[cfg(feature = "wayland")]
 fn find_wayland_socket() -> Option<String> {
-    if std::env::var_os("WAYLAND_SOCKET").is_some() || std::env::var_os("WAYLAND_DISPLAY").is_some()
-    {
-        return None;
+    if let Ok(socket) = std::env::var("WAYLAND_SOCKET") {
+        return Some(socket);
+    }
+
+    if let Ok(display) = std::env::var("WAYLAND_DISPLAY") {
+        return Some(display);
     }
 
     let xdg_runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
