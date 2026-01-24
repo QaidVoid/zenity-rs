@@ -1,4 +1,10 @@
 
+## [0.1.9](https://github.com/QaidVoid/zenity-rs/compare/v0.1.8...v0.1.9) - 2026-01-24
+
+### Added
+
+- Show mounted drives in file selector - ([c529bc5](https://github.com/QaidVoid/zenity-rs/commit/c529bc5841fabc6b7c475706b52e3e3ae3d1b964))
+
 ## [0.1.8](https://github.com/QaidVoid/zenity-rs/compare/v0.1.7...v0.1.8) - 2026-01-23
 
 ### Fixed
