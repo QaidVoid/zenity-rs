@@ -1,4 +1,10 @@
 
+## [0.1.9](https://github.com/QaidVoid/zenity-rs/compare/v0.1.8...v0.1.9) - 2026-01-24
+
+### Other
+
+- Sync hive - ([dde4656](https://github.com/QaidVoid/zenity-rs/commit/dde465613da8a48eca548e00708c0067b500fbb3))
+
 ## [0.1.8](https://github.com/QaidVoid/zenity-rs/compare/v0.1.7...v0.1.8) - 2026-01-23
 
 ### Fixed
