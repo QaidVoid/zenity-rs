@@ -1,4 +1,7 @@
+
 mod text;
+
+use std::cell::RefCell;
 
 pub(crate) use text::Font;
 use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PixmapRef, Rect, Transform};
@@ -7,12 +10,16 @@ use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PixmapRef, Rect, Transform};
 /// Stores pixels in RGBA format internally, but can convert to ARGB for X11/Wayland.
 pub struct Canvas {
     pub(crate) pixmap: Pixmap,
+    argb_cache: RefCell<Option<Vec<u8>>>,
+    dirty: RefCell<bool>,
 }
 
 impl Canvas {
     pub fn new(width: u32, height: u32) -> Self {
         Self {
             pixmap: Pixmap::new(width, height).expect("invalid canvas dimensions"),
+            argb_cache: RefCell::new(None),
+            dirty: RefCell::new(true),
         }
     }
 
@@ -27,6 +34,7 @@ impl Canvas {
     /// Fills the entire canvas with a color.
     pub fn fill(&mut self, color: Rgba) {
         self.pixmap.fill(color.into());
+        *self.dirty.borrow_mut() = true;
     }
 
     /// Fills a rectangle with a color.
@@ -40,6 +48,7 @@ impl Canvas {
         paint.anti_alias = true;
         self.pixmap
             .fill_rect(rect, &paint, Transform::identity(), None);
+        *self.dirty.borrow_mut() = true;
     }
 
     /// Fills a rounded rectangle with a color.
@@ -55,6 +64,7 @@ impl Canvas {
             Transform::identity(),
             None,
         );
+        *self.dirty.borrow_mut() = true;
     }
 
     /// Strokes a rounded rectangle outline.
@@ -78,11 +88,13 @@ impl Canvas {
         };
         self.pixmap
             .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+        *self.dirty.borrow_mut() = true;
     }
 
     /// Draws another canvas onto this one at the given position.
     pub fn draw_canvas(&mut self, other: &Canvas, x: i32, y: i32) {
         self.draw_pixmap(other.pixmap.as_ref(), x, y);
+        *self.dirty.borrow_mut() = true;
     }
 
     /// Draws a pixmap onto this canvas at the given position.
@@ -95,28 +107,39 @@ impl Canvas {
             Transform::identity(),
             None,
         );
+        *self.dirty.borrow_mut() = true;
     }
 
     /// Returns the pixel data as ARGB (for X11/Wayland compatibility).
     /// The returned Vec has premultiplied alpha in ARGB format.
+    /// Caches the result to avoid redundant conversions.
     pub fn as_argb(&self) -> Vec<u8> {
-        let data = self.pixmap.data();
-        let mut argb = Vec::with_capacity(data.len());
+        let dirty = self.dirty.borrow();
+        let mut cache = self.argb_cache.borrow_mut();
 
-        // Convert RGBA to ARGB (premultiplied)
-        for chunk in data.chunks_exact(4) {
-            let r = chunk[0];
-            let g = chunk[1];
-            let b = chunk[2];
-            let a = chunk[3];
-            // ARGB order: B, G, R, A (little-endian u32)
-            argb.push(b);
-            argb.push(g);
-            argb.push(r);
-            argb.push(a);
+        if *dirty || cache.is_none() {
+            drop(dirty);
+            let data = self.pixmap.data();
+            let mut argb = Vec::with_capacity(data.len());
+
+            // Convert RGBA to ARGB (premultiplied)
+            for chunk in data.chunks_exact(4) {
+                let r = chunk[0];
+                let g = chunk[1];
+                let b = chunk[2];
+                let a = chunk[3];
+                // ARGB order: B, G, R, A (little-endian u32)
+                argb.push(b);
+                argb.push(g);
+                argb.push(r);
+                argb.push(a);
+            }
+
+            *cache = Some(argb);
+            *self.dirty.borrow_mut() = false;
         }
 
-        argb
+        cache.as_ref().unwrap().clone()
     }
 
     /// Fills a dialog background with subtle shadow and border.
@@ -156,6 +179,8 @@ impl Canvas {
             border_color,
             border_width,
         );
+
+        // Note: dirty flag is already set by the above methods
     }
 }
 
@@ -234,4 +259,62 @@ impl From<Rgba> for Color {
 /// Convenience function to create an RGB color.
 pub const fn rgb(r: u8, g: u8, b: u8) -> Rgba {
     Rgba::rgb(r, g, b)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_argb_caching() {
+        let mut canvas = Canvas::new(100, 100);
+        canvas.fill(rgb(255, 0, 0));
+
+        // First call should generate ARGB data
+        let argb1 = canvas.as_argb();
+
+        // Verify cache is populated and dirty flag is cleared
+        assert!(canvas.argb_cache.borrow().is_some());
+        assert!(!*canvas.dirty.borrow());
+
+        // Second call should use cached data
+        let argb2 = canvas.as_argb();
+
+        // Both should be identical
+        assert_eq!(argb1, argb2);
+
+        // Modify canvas
+        canvas.fill(rgb(0, 255, 0));
+
+        // Dirty flag should be set
+        assert!(*canvas.dirty.borrow());
+
+        // Third call should regenerate ARGB data
+        let argb3 = canvas.as_argb();
+
+        // Dirty flag should be cleared again
+        assert!(!*canvas.dirty.borrow());
+
+        // argb3 should be different from argb1/argb2 (different color)
+        assert_ne!(argb1, argb3);
+    }
+
+    #[test]
+    fn test_argb_cache_on_new_canvas() {
+        let canvas = Canvas::new(50, 50);
+
+        // New canvas should be dirty and have no cache
+        assert!(*canvas.dirty.borrow());
+        assert!(canvas.argb_cache.borrow().is_none());
+
+        // First call should populate cache
+        let argb = canvas.as_argb();
+
+        // Cache should now be populated and dirty flag cleared
+        assert!(canvas.argb_cache.borrow().is_some());
+        assert!(!*canvas.dirty.borrow());
+
+        // Verify we get the correct amount of data
+        assert_eq!(argb.len(), 50 * 50 * 4);
+    }
 }
