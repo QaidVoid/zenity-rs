@@ -27,6 +27,7 @@ const BASE_PATH_BAR_HEIGHT: u32 = 32;
 const BASE_SEARCH_WIDTH: u32 = 200;
 const BASE_ITEM_HEIGHT: u32 = 28;
 const BASE_ICON_SIZE: u32 = 20;
+const BASE_SECTION_HEADER_HEIGHT: u32 = 22;
 
 // Column widths (logical)
 const BASE_NAME_COL_WIDTH: u32 = 280;
@@ -68,6 +69,25 @@ enum QuickAccessIcon {
     Pictures,
     Music,
     Videos,
+}
+
+/// Represents a mounted drive
+#[derive(Clone)]
+struct MountPoint {
+    device: String,
+    mount_point: PathBuf,
+    label: Option<String>,
+    fs_type: String,
+}
+
+/// Icon for mount point type
+#[derive(Clone, Copy)]
+enum MountIcon {
+    UsbDrive,
+    ExternalHdd,
+    Network,
+    Optical,
+    Generic,
 }
 
 /// File filter pattern.
@@ -207,6 +227,9 @@ impl FileSelectBuilder {
         // Build quick access locations
         let quick_access = build_quick_access();
 
+        // Load mounted drives
+        let mounted_drives = get_mounted_drives();
+
         // Create UI elements at physical scale
         let mut ok_button = Button::new(if self.save { "Save" } else { "Open" }, &font, scale);
         let mut cancel_button = Button::new("Cancel", &font, scale);
@@ -232,6 +255,7 @@ impl FileSelectBuilder {
         let mut search_text = String::new();
         let mut hovered_quick_access: Option<usize> = None;
         let mut hovered_entry: Option<usize> = None;
+        let mut hovered_drive: Option<usize> = None;
 
         // Load initial directory
         load_directory(&current_dir, &mut all_entries, self.directory, show_hidden);
@@ -260,6 +284,11 @@ impl FileSelectBuilder {
         let list_y = main_y + path_bar_height as i32 + header_offset as i32;
         let list_h = main_h - path_bar_height - header_offset;
         let visible_items = (list_h / item_height) as usize;
+
+        // Calculate section heights
+        let section_header_height = (BASE_SECTION_HEADER_HEIGHT as f32 * scale) as u32;
+        let item_height_scaled = item_height;
+        let gap_between_sections = (12.0 * scale) as u32;
 
         // Position buttons
         let button_y = (window_height - padding - (32.0 * scale) as u32) as i32;
@@ -297,6 +326,8 @@ impl FileSelectBuilder {
                     cancel_button: &Button,
                     history: &[PathBuf],
                     history_index: usize,
+                    mounted_drives: &[MountPoint],
+                    hovered_drive: Option<usize>,
                     scale: f32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
@@ -398,9 +429,21 @@ impl FileSelectBuilder {
                 sidebar_bg,
             );
 
-            // Quick access items
+            // ===== PLACES SECTION =====
+            draw_section_header(
+                canvas,
+                sidebar_x,
+                sidebar_y + (8.0 * scale) as i32,
+                "PLACES",
+                colors,
+                font,
+                scale,
+            );
+
+            let places_items_start_y =
+                sidebar_y + (8.0 * scale) as i32 + section_header_height as i32;
             for (i, qa) in quick_access.iter().enumerate() {
-                let y = sidebar_y + (8.0 * scale) as i32 + (i as i32 * (32.0 * scale) as i32);
+                let y = places_items_start_y + (i as i32 * item_height_scaled as i32);
                 let is_hovered = hovered_quick_access == Some(i);
                 let is_current = qa.path == current_dir;
 
@@ -424,7 +467,6 @@ impl FileSelectBuilder {
                     );
                 }
 
-                // Icon
                 draw_quick_access_icon(
                     canvas,
                     sidebar_x + (12.0 * scale) as i32,
@@ -434,7 +476,6 @@ impl FileSelectBuilder {
                     scale,
                 );
 
-                // Name
                 let text_color = if is_current {
                     rgb(255, 255, 255)
                 } else {
@@ -446,6 +487,81 @@ impl FileSelectBuilder {
                     sidebar_x + (36.0 * scale) as i32,
                     y + (6.0 * scale) as i32,
                 );
+            }
+
+            // ===== DRIVES SECTION =====
+            if !mounted_drives.is_empty() {
+                let drives_section_y = places_items_start_y
+                    + (quick_access.len() as i32 * item_height_scaled as i32)
+                    + gap_between_sections as i32;
+
+                draw_section_header(
+                    canvas,
+                    sidebar_x,
+                    drives_section_y,
+                    "DRIVES",
+                    colors,
+                    font,
+                    scale,
+                );
+
+                let drives_items_start_y = drives_section_y + section_header_height as i32;
+                for (i, drive) in mounted_drives.iter().enumerate() {
+                    let y = drives_items_start_y + (i as i32 * item_height_scaled as i32);
+                    let is_hovered = hovered_drive == Some(i);
+                    let is_current = drive.mount_point == current_dir;
+
+                    if is_current {
+                        canvas.fill_rounded_rect(
+                            (sidebar_x + (4.0 * scale) as i32) as f32,
+                            y as f32,
+                            (sidebar_width - (8.0 * scale) as u32) as f32,
+                            28.0 * scale,
+                            4.0 * scale,
+                            colors.input_border_focused,
+                        );
+                    } else if is_hovered {
+                        canvas.fill_rounded_rect(
+                            (sidebar_x + (4.0 * scale) as i32) as f32,
+                            y as f32,
+                            (sidebar_width - (8.0 * scale) as u32) as f32,
+                            28.0 * scale,
+                            4.0 * scale,
+                            darken(colors.window_bg, 0.05),
+                        );
+                    }
+
+                    let icon = get_mount_icon(&drive.device, &drive.fs_type);
+                    draw_mount_icon(
+                        canvas,
+                        sidebar_x + (12.0 * scale) as i32,
+                        y + (6.0 * scale) as i32,
+                        icon,
+                        colors,
+                        scale,
+                    );
+
+                    let display_name = drive.label.as_deref().unwrap_or_else(|| {
+                        drive
+                            .mount_point
+                            .file_name()
+                            .and_then(|n| n.to_str())
+                            .unwrap_or(&drive.device)
+                    });
+                    let truncated_name = truncate_name(display_name, 18);
+
+                    let text_color = if is_current {
+                        rgb(255, 255, 255)
+                    } else {
+                        colors.text
+                    };
+                    let name_canvas = font.render(&truncated_name).with_color(text_color).finish();
+                    canvas.draw_canvas(
+                        &name_canvas,
+                        sidebar_x + (36.0 * scale) as i32,
+                        y + (6.0 * scale) as i32,
+                    );
+                }
             }
 
             // Main area background
@@ -678,6 +794,8 @@ impl FileSelectBuilder {
             &cancel_button,
             &history,
             history_index,
+            &mounted_drives,
+            hovered_drive,
             scale,
         );
         window.set_contents(&canvas)?;
@@ -698,20 +816,38 @@ impl FileSelectBuilder {
                     // Update hover states
                     let old_qa = hovered_quick_access;
                     let old_entry = hovered_entry;
+                    let old_drive = hovered_drive;
 
+                    // Check places hover
                     hovered_quick_access = None;
-                    hovered_entry = None;
+                    hovered_drive = None;
 
-                    // Check quick access hover
                     if mouse_x >= sidebar_x
                         && mouse_x < sidebar_x + sidebar_width as i32
                         && mouse_y >= sidebar_y
                     {
-                        let rel_y = mouse_y - sidebar_y - (8.0 * scale) as i32;
+                        let places_items_start_y =
+                            sidebar_y + (8.0 * scale) as i32 + section_header_height as i32;
+                        let rel_y = mouse_y - places_items_start_y;
                         if rel_y >= 0 {
-                            let idx = (rel_y as f32 / (32.0 * scale)) as usize;
+                            let idx = (rel_y as f32 / item_height_scaled as f32) as usize;
                             if idx < quick_access.len() {
                                 hovered_quick_access = Some(idx);
+                            }
+                        }
+
+                        if !mounted_drives.is_empty() {
+                            let drives_section_y = places_items_start_y
+                                + (quick_access.len() as i32 * item_height_scaled as i32)
+                                + gap_between_sections as i32;
+                            let drives_items_start_y =
+                                drives_section_y + section_header_height as i32;
+                            let rel_y = mouse_y - drives_items_start_y;
+                            if rel_y >= 0 {
+                                let idx = (rel_y as f32 / item_height_scaled as f32) as usize;
+                                if idx < mounted_drives.len() {
+                                    hovered_drive = Some(idx);
+                                }
                             }
                         }
                     }
@@ -729,7 +865,10 @@ impl FileSelectBuilder {
                         }
                     }
 
-                    if old_qa != hovered_quick_access || old_entry != hovered_entry {
+                    if old_qa != hovered_quick_access
+                        || old_entry != hovered_entry
+                        || old_drive != hovered_drive
+                    {
                         needs_redraw = true;
                     }
                 }
@@ -742,21 +881,20 @@ impl FileSelectBuilder {
                         if mouse_x >= padding as i32 && mouse_x < padding as i32 + btn_size {
                             if history_index > 0 {
                                 history_index -= 1;
-                                current_dir = history[history_index].clone();
-                                load_directory(
-                                    &current_dir,
+                                navigate_to_directory(
+                                    history[history_index].clone(),
+                                    &mut current_dir,
+                                    &mut history,
+                                    &mut history_index,
                                     &mut all_entries,
                                     self.directory,
                                     show_hidden,
-                                );
-                                update_filtered(
-                                    &all_entries,
                                     &search_text,
                                     &mut filtered_entries,
+                                    &mut selected_indices,
+                                    &mut scroll_offset,
                                     &self.filters,
                                 );
-                                selected_indices.clear();
-                                scroll_offset = 0;
                                 needs_redraw = true;
                             }
                         }
@@ -766,21 +904,20 @@ impl FileSelectBuilder {
                         {
                             if history_index + 1 < history.len() {
                                 history_index += 1;
-                                current_dir = history[history_index].clone();
-                                load_directory(
-                                    &current_dir,
+                                navigate_to_directory(
+                                    history[history_index].clone(),
+                                    &mut current_dir,
+                                    &mut history,
+                                    &mut history_index,
                                     &mut all_entries,
                                     self.directory,
                                     show_hidden,
-                                );
-                                update_filtered(
-                                    &all_entries,
                                     &search_text,
                                     &mut filtered_entries,
+                                    &mut selected_indices,
+                                    &mut scroll_offset,
                                     &self.filters,
                                 );
-                                selected_indices.clear();
-                                scroll_offset = 0;
                                 needs_redraw = true;
                             }
                         }
@@ -789,26 +926,20 @@ impl FileSelectBuilder {
                             && mouse_x < (padding as f32 + 96.0 * scale) as i32
                         {
                             if let Some(parent) = current_dir.parent() {
-                                navigate_to(
+                                navigate_to_directory(
                                     parent.to_path_buf(),
                                     &mut current_dir,
                                     &mut history,
                                     &mut history_index,
-                                );
-                                load_directory(
-                                    &current_dir,
                                     &mut all_entries,
                                     self.directory,
                                     show_hidden,
-                                );
-                                update_filtered(
-                                    &all_entries,
                                     &search_text,
                                     &mut filtered_entries,
+                                    &mut selected_indices,
+                                    &mut scroll_offset,
                                     &self.filters,
                                 );
-                                selected_indices.clear();
-                                scroll_offset = 0;
                                 needs_redraw = true;
                             }
                         }
@@ -817,26 +948,20 @@ impl FileSelectBuilder {
                             && mouse_x < (padding as f32 + 132.0 * scale) as i32
                         {
                             if let Some(home) = dirs::home_dir() {
-                                navigate_to(
+                                navigate_to_directory(
                                     home,
                                     &mut current_dir,
                                     &mut history,
                                     &mut history_index,
-                                );
-                                load_directory(
-                                    &current_dir,
                                     &mut all_entries,
                                     self.directory,
                                     show_hidden,
-                                );
-                                update_filtered(
-                                    &all_entries,
                                     &search_text,
                                     &mut filtered_entries,
+                                    &mut selected_indices,
+                                    &mut scroll_offset,
                                     &self.filters,
                                 );
-                                selected_indices.clear();
-                                scroll_offset = 0;
                                 needs_redraw = true;
                             }
                         }
@@ -866,29 +991,41 @@ impl FileSelectBuilder {
                     // Quick access click
                     if let Some(idx) = hovered_quick_access {
                         let qa = &quick_access[idx];
-                        if qa.path.exists() {
-                            navigate_to(
-                                qa.path.clone(),
-                                &mut current_dir,
-                                &mut history,
-                                &mut history_index,
-                            );
-                            load_directory(
-                                &current_dir,
-                                &mut all_entries,
-                                self.directory,
-                                show_hidden,
-                            );
-                            update_filtered(
-                                &all_entries,
-                                &search_text,
-                                &mut filtered_entries,
-                                &self.filters,
-                            );
-                            selected_indices.clear();
-                            scroll_offset = 0;
-                            needs_redraw = true;
-                        }
+                        navigate_to_directory(
+                            qa.path.clone(),
+                            &mut current_dir,
+                            &mut history,
+                            &mut history_index,
+                            &mut all_entries,
+                            self.directory,
+                            show_hidden,
+                            &search_text,
+                            &mut filtered_entries,
+                            &mut selected_indices,
+                            &mut scroll_offset,
+                            &self.filters,
+                        );
+                        needs_redraw = true;
+                    }
+
+                    // Drive click
+                    if let Some(idx) = hovered_drive {
+                        let drive = &mounted_drives[idx];
+                        navigate_to_directory(
+                            drive.mount_point.clone(),
+                            &mut current_dir,
+                            &mut history,
+                            &mut history_index,
+                            &mut all_entries,
+                            self.directory,
+                            show_hidden,
+                            &search_text,
+                            &mut filtered_entries,
+                            &mut selected_indices,
+                            &mut scroll_offset,
+                            &self.filters,
+                        );
+                        needs_redraw = true;
                     }
 
                     // File list click
@@ -1069,26 +1206,20 @@ impl FileSelectBuilder {
                                 } else if let Some(&sel) = selected_indices.iter().next() {
                                     let entry = &all_entries[sel];
                                     if entry.is_dir {
-                                        navigate_to(
+                                        navigate_to_directory(
                                             entry.path.clone(),
                                             &mut current_dir,
                                             &mut history,
                                             &mut history_index,
-                                        );
-                                        load_directory(
-                                            &current_dir,
                                             &mut all_entries,
                                             self.directory,
                                             show_hidden,
-                                        );
-                                        update_filtered(
-                                            &all_entries,
                                             &search_text,
                                             &mut filtered_entries,
+                                            &mut selected_indices,
+                                            &mut scroll_offset,
                                             &self.filters,
                                         );
-                                        selected_indices.clear();
-                                        scroll_offset = 0;
                                         needs_redraw = true;
                                     } else if !self.directory {
                                         return Ok(FileSelectResult::Selected(entry.path.clone()));
@@ -1097,26 +1228,20 @@ impl FileSelectBuilder {
                             }
                             KEY_BACKSPACE => {
                                 if let Some(parent) = current_dir.parent() {
-                                    navigate_to(
+                                    navigate_to_directory(
                                         parent.to_path_buf(),
                                         &mut current_dir,
                                         &mut history,
                                         &mut history_index,
-                                    );
-                                    load_directory(
-                                        &current_dir,
                                         &mut all_entries,
                                         self.directory,
                                         show_hidden,
-                                    );
-                                    update_filtered(
-                                        &all_entries,
                                         &search_text,
                                         &mut filtered_entries,
+                                        &mut selected_indices,
+                                        &mut scroll_offset,
                                         &self.filters,
                                     );
-                                    selected_indices.clear();
-                                    scroll_offset = 0;
                                     needs_redraw = true;
                                 }
                             }
@@ -1209,6 +1334,8 @@ impl FileSelectBuilder {
                     &cancel_button,
                     &history,
                     history_index,
+                    &mounted_drives,
+                    hovered_drive,
                     scale,
                 );
                 window.set_contents(&canvas)?;
@@ -1287,6 +1414,122 @@ fn build_quick_access() -> Vec<QuickAccess> {
     }
 
     items
+}
+
+fn get_mounted_drives() -> Vec<MountPoint> {
+    let mut drives = Vec::new();
+
+    let system_mounts = [
+        "/proc",
+        "/sys",
+        "/dev",
+        "/run",
+        "/boot",
+        "/efi",
+        "/sys/kernel",
+        "/dev/pts",
+        "/dev/shm",
+        "/dev/mqueue",
+    ];
+
+    let excluded_fs = [
+        "proc",
+        "sysfs",
+        "debugfs",
+        "configfs",
+        "securityfs",
+        "cgroup2",
+        "pstore",
+        "devpts",
+        "mqueue",
+        "binfmt_misc",
+        "tmpfs",
+        "shm",
+        "bpf",
+        "efivarfs",
+        "fusectl",
+        "fuse",
+    ];
+
+    if let Ok(content) = std::fs::read_to_string("/proc/mounts") {
+        for line in content.lines() {
+            let parts: Vec<&str> = line.split_whitespace().collect();
+            if parts.len() >= 3 {
+                let device = parts[0].to_string();
+                let mount_point = PathBuf::from(parts[1]);
+                let fs_type = parts[2].to_string();
+
+                let is_system = system_mounts
+                    .iter()
+                    .any(|prefix| mount_point.starts_with(prefix));
+
+                let is_excluded_fs = excluded_fs.iter().any(|fs| fs_type == *fs);
+
+                let is_fuse = fs_type == "fuse" || fs_type.starts_with("fuse.");
+
+                let is_root = mount_point.as_os_str() == "/";
+
+                let is_swap = parts.iter().any(|p| p == &"swap");
+
+                if !is_system && !is_excluded_fs && !is_fuse && !is_root && !is_swap {
+                    let label = get_volume_label(&device);
+
+                    drives.push(MountPoint {
+                        device,
+                        mount_point,
+                        label,
+                        fs_type,
+                    });
+                }
+            }
+        }
+    }
+
+    drives
+}
+
+fn get_volume_label(device: &str) -> Option<String> {
+    use std::process::Command;
+
+    let output = Command::new("lsblk")
+        .args(["-o", "LABEL", "-n", device])
+        .output()
+        .ok()?;
+
+    let label = String::from_utf8_lossy(&output.stdout).trim().to_string();
+
+    if label.is_empty() {
+        None
+    } else {
+        Some(label)
+    }
+}
+
+fn get_mount_icon(device: &str, fs_type: &str) -> MountIcon {
+    if fs_type == "nfs"
+        || fs_type == "nfs4"
+        || fs_type == "cifs"
+        || fs_type == "smbfs"
+        || fs_type == "fuse.sshfs"
+    {
+        return MountIcon::Network;
+    }
+
+    if device.starts_with("/dev/sr") || device.starts_with("/dev/scd") {
+        return MountIcon::Optical;
+    }
+
+    if device.starts_with("/dev/sd") && !device.starts_with("/dev/sda") {
+        return MountIcon::UsbDrive;
+    }
+
+    if (device.starts_with("/dev/nvme") || device.starts_with("/dev/mmc"))
+        && !device.contains("swap")
+    {
+        return MountIcon::ExternalHdd;
+    }
+
+    MountIcon::Generic
 }
 
 fn load_directory(path: &Path, entries: &mut Vec<DirEntry>, dirs_only: bool, show_hidden: bool) {
@@ -1409,6 +1652,29 @@ fn navigate_to(
     history.push(dest.clone());
     *index = history.len() - 1;
     *current = dest;
+}
+
+fn navigate_to_directory(
+    dest: PathBuf,
+    current_dir: &mut PathBuf,
+    history: &mut Vec<PathBuf>,
+    history_index: &mut usize,
+    all_entries: &mut Vec<DirEntry>,
+    directory_mode: bool,
+    show_hidden: bool,
+    search_text: &str,
+    filtered_entries: &mut Vec<usize>,
+    selected_indices: &mut HashSet<usize>,
+    scroll_offset: &mut usize,
+    filters: &[FileFilter],
+) {
+    if dest.exists() {
+        navigate_to(dest, current_dir, history, history_index);
+        load_directory(current_dir, all_entries, directory_mode, show_hidden);
+        update_filtered(all_entries, search_text, filtered_entries, filters);
+        selected_indices.clear();
+        *scroll_offset = 0;
+    }
 }
 
 fn darken(color: Rgba, amount: f32) -> Rgba {
@@ -1552,6 +1818,7 @@ fn draw_breadcrumbs(
         let display = if name.is_empty() { "/" } else { &name };
 
         let is_last = i == components.len() - 1;
+        let is_root = matches!(comp, std::path::Component::RootDir);
         let text_color = if is_last {
             colors.text
         } else {
@@ -1562,7 +1829,7 @@ fn draw_breadcrumbs(
         canvas.draw_canvas(&tc, cx, y);
         cx += tc.width() as i32;
 
-        if !is_last {
+        if !is_last && !is_root {
             let sep = font.render(" / ").with_color(rgb(100, 100, 100)).finish();
             canvas.draw_canvas(&sep, cx, y);
             cx += sep.width() as i32;
@@ -1656,5 +1923,72 @@ fn draw_quick_access_icon(
         3.0 * scale,
         color,
     );
+    let _ = colors;
+}
+
+fn draw_section_header(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    label: &str,
+    colors: &Colors,
+    font: &Font,
+    scale: f32,
+) {
+    let header_color = rgb(140, 140, 140);
+    let header_canvas = font.render(label).with_color(header_color).finish();
+    canvas.draw_canvas(&header_canvas, x + (4.0 * scale) as i32, y);
+
+    canvas.fill_rect(
+        x as f32,
+        (y + (18.0 * scale) as i32) as f32,
+        (BASE_SIDEBAR_WIDTH as f32 * scale) - (8.0 * scale),
+        1.0,
+        darken(colors.window_bg, 0.05),
+    );
+}
+
+fn draw_mount_icon(
+    canvas: &mut Canvas,
+    x: i32,
+    y: i32,
+    icon: MountIcon,
+    colors: &Colors,
+    scale: f32,
+) {
+    let icon_size = 16.0 * scale;
+    let color = match icon {
+        MountIcon::UsbDrive => rgb(100, 200, 200),
+        MountIcon::ExternalHdd => rgb(150, 150, 180),
+        MountIcon::Network => rgb(100, 150, 100),
+        MountIcon::Optical => rgb(200, 150, 100),
+        MountIcon::Generic => rgb(140, 140, 140),
+    };
+
+    canvas.fill_rounded_rect(x as f32, y as f32, icon_size, icon_size, 3.0 * scale, color);
+
+    match icon {
+        MountIcon::UsbDrive => {
+            canvas.fill_rect(
+                (x + (6.0 * scale) as i32) as f32,
+                (y + (10.0 * scale) as i32) as f32,
+                4.0 * scale,
+                4.0 * scale,
+                rgb(50, 50, 50),
+            );
+        }
+        MountIcon::Optical => {
+            canvas.fill_rounded_rect(
+                (x + (6.0 * scale) as i32) as f32,
+                (y + (6.0 * scale) as i32) as f32,
+                4.0 * scale,
+                4.0 * scale,
+                2.0 * scale,
+                rgb(50, 50, 50),
+            );
+        }
+        _ => {}
+    }
+
     let _ = colors;
 }
