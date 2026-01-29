@@ -8,12 +8,12 @@ use std::{
 };
 
 use crate::{
-    backend::{create_window, MouseButton, Window, WindowEvent},
+    backend::{MouseButton, Window, WindowEvent, create_window},
     error::Error,
-    render::{rgb, Canvas, Font, Rgba},
+    render::{Canvas, Font, Rgba, rgb},
     ui::{
-        widgets::{button::Button, text_input::TextInput, Widget},
         Colors,
+        widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
 
@@ -1472,11 +1472,7 @@ fn get_volume_label(device: &str) -> Option<String> {
 
     let label = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    if label.is_empty() {
-        None
-    } else {
-        Some(label)
-    }
+    if label.is_empty() { None } else { Some(label) }
 }
 
 fn get_mount_icon(device: &str) -> MountIcon {
@@ -1781,18 +1777,76 @@ fn draw_breadcrumbs(
     canvas: &mut Canvas,
     x: i32,
     y: i32,
-    _max_w: u32,
+    max_w: u32,
     path: &Path,
     colors: &Colors,
     font: &Font,
 ) {
-    let mut cx = x;
     let components: Vec<_> = path.components().collect();
-    let start = if components.len() > 4 {
-        components.len() - 4
+
+    // Calculate the total width needed for full breadcrumbs
+    let mut total_width = 0i32;
+    let ellipsis_width = font
+        .render("...")
+        .with_color(rgb(120, 120, 120))
+        .finish()
+        .width() as i32
+        + 8;
+    let sep_width = font
+        .render(" / ")
+        .with_color(rgb(100, 100, 100))
+        .finish()
+        .width() as i32;
+
+    for (i, comp) in components.iter().enumerate() {
+        let name = comp.as_os_str().to_string_lossy();
+        let display = if name.is_empty() { "/" } else { &name };
+        total_width += font
+            .render(display)
+            .with_color(colors.text)
+            .finish()
+            .width() as i32;
+
+        if i < components.len() - 1 && !matches!(comp, std::path::Component::RootDir) {
+            total_width += sep_width;
+        }
+    }
+
+    // Determine how many components to show
+    let num_components = components.len();
+    let components_to_show = if total_width > max_w as i32 {
+        // Try showing fewer components, starting from the end
+        (1..=num_components.min(4))
+            .rev()
+            .find(|n| {
+                let start = num_components - n;
+                let mut test_width = if start > 0 { ellipsis_width } else { 0 };
+
+                for (i, comp) in components.iter().enumerate().skip(start) {
+                    let name = comp.as_os_str().to_string_lossy();
+                    let display = if name.is_empty() { "/" } else { &name };
+                    test_width += font
+                        .render(display)
+                        .with_color(colors.text)
+                        .finish()
+                        .width() as i32;
+
+                    if i < num_components - 1 && !matches!(comp, std::path::Component::RootDir) {
+                        test_width += sep_width;
+                    }
+                }
+
+                test_width <= max_w as i32
+            })
+            .unwrap_or(1)
     } else {
-        0
+        num_components
     };
+
+    let start = num_components - components_to_show;
+
+    let mut cx = x;
+    let available_width = max_w as i32;
 
     if start > 0 {
         let tc = font.render("...").with_color(rgb(120, 120, 120)).finish();
@@ -1804,7 +1858,7 @@ fn draw_breadcrumbs(
         let name = comp.as_os_str().to_string_lossy();
         let display = if name.is_empty() { "/" } else { &name };
 
-        let is_last = i == components.len() - 1;
+        let is_last = i == num_components - 1;
         let is_root = matches!(comp, std::path::Component::RootDir);
         let text_color = if is_last {
             colors.text
@@ -1813,8 +1867,41 @@ fn draw_breadcrumbs(
         };
 
         let tc = font.render(display).with_color(text_color).finish();
-        canvas.draw_canvas(&tc, cx, y);
-        cx += tc.width() as i32;
+
+        // Check if this component would overflow
+        let remaining_width = available_width - (cx - x);
+        if tc.width() as i32 > remaining_width && is_last {
+            // Truncate the last component to fit
+            let chars: Vec<char> = display.chars().collect();
+            let ellipsis = font.render("...").with_color(text_color).finish();
+            let ellipsis_w = ellipsis.width() as i32;
+            let max_text_w = remaining_width - ellipsis_w;
+
+            if max_text_w > 0 {
+                let mut truncated = String::new();
+                let mut current_w = 0i32;
+
+                for c in chars {
+                    let c_canvas = font
+                        .render(c.to_string().as_str())
+                        .with_color(text_color)
+                        .finish();
+                    if current_w + c_canvas.width() as i32 > max_text_w {
+                        truncated.push('…');
+                        break;
+                    }
+                    truncated.push(c);
+                    current_w += c_canvas.width() as i32;
+                }
+
+                let truncated_tc = font.render(&truncated).with_color(text_color).finish();
+                canvas.draw_canvas(&truncated_tc, cx, y);
+                cx += truncated_tc.width() as i32;
+            }
+        } else {
+            canvas.draw_canvas(&tc, cx, y);
+            cx += tc.width() as i32;
+        }
 
         if !is_last && !is_root {
             let sep = font.render(" / ").with_color(rgb(100, 100, 100)).finish();
