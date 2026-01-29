@@ -1,4 +1,19 @@
 
+## [0.1.9](https://github.com/QaidVoid/zenity-rs/compare/v0.1.8...v0.1.9) - 2026-01-29
+
+### Added
+
+- Show mounted drives in file selector - ([c529bc5](https://github.com/QaidVoid/zenity-rs/commit/c529bc5841fabc6b7c475706b52e3e3ae3d1b964))
+
+### Fixed
+
+- Prevent breadcrumb overflow in file selector - ([ed819e6](https://github.com/QaidVoid/zenity-rs/commit/ed819e6f81c3dae55c2b425ec5bbbd7441f49e2c))
+- Wrap text in entry and forms dialogs - ([72fb1ca](https://github.com/QaidVoid/zenity-rs/commit/72fb1ca74842b5274b973823be51cfef992b2cb2))
+
+### Other
+
+- Use /run/mount/utab instead of /proc/mounts - ([f1916d5](https://github.com/QaidVoid/zenity-rs/commit/f1916d5a8cad5eeb2cb8cae80c79740270fe47b5))
+
 ## [0.1.8](https://github.com/QaidVoid/zenity-rs/compare/v0.1.7...v0.1.8) - 2026-01-23
 
 ### Fixed
