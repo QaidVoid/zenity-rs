@@ -1,4 +1,19 @@
 
+## [0.1.10](https://github.com/QaidVoid/zenity-rs/compare/v0.1.9...v0.1.10) - 2026-01-29
+
+### Added
+
+- Add scrollbar thumb dragging - ([61a6895](https://github.com/QaidVoid/zenity-rs/commit/61a6895a3181276ae6489b7ec119119637759fe3))
+- Add stdin support for list dialog - ([84ff3f7](https://github.com/QaidVoid/zenity-rs/commit/84ff3f7d2efad336eacef790c106bf7b9c3b06ad))
+
+### Other
+
+- Sync hive - ([b9a4fa5](https://github.com/QaidVoid/zenity-rs/commit/b9a4fa5067f28d1ff7ffdb630c084a74add30584))
+- Integrate RingBufferCache in text_info.rs - ([10c96db](https://github.com/QaidVoid/zenity-rs/commit/10c96dbfe34c28e1b46b0d4cd7bb3ee51dacabce))
+- Sync hive - ([16d3338](https://github.com/QaidVoid/zenity-rs/commit/16d3338b5e04a2b30e9b95fa8a5676f6108e484c))
+- Sync hive - ([be3d97e](https://github.com/QaidVoid/zenity-rs/commit/be3d97e43afea39bb816b598a4c8ac9b80786d4a))
+- Update build command - ([a43d42a](https://github.com/QaidVoid/zenity-rs/commit/a43d42a4b003d8c00287e1abb83ca05f837efb15))
+
 ## [0.1.9](https://github.com/QaidVoid/zenity-rs/compare/v0.1.8...v0.1.9) - 2026-01-29
 
 ### Added
