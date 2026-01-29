@@ -1,12 +1,12 @@
 //! zenity-rs - Display simple GUI dialogs from the command line.
 
-use std::process::ExitCode;
+use std::{io::IsTerminal, process::ExitCode};
 
 use lexopt::prelude::*;
 use zenity_rs::{
-    calendar, entry, file_select, forms, list, message, password, progress, scale, text_info,
     ButtonPreset, CalendarResult, EntryResult, FileSelectResult, FormsResult, Icon, ListResult,
-    ProgressResult, ScaleResult, TextInfoResult,
+    ProgressResult, ScaleResult, TextInfoResult, calendar, entry, file_select, forms, list,
+    message, password, progress, scale, text_info,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -394,10 +394,24 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.hide_column(*col);
             }
 
+            // Determine column count for rows
+            let num_columns = columns.len().max(1);
+
             // Build rows from list_values based on column count
-            let cols = columns.len().max(1);
-            for chunk in list_values.chunks(cols) {
+            for chunk in list_values.chunks(num_columns) {
                 builder = builder.row(chunk.to_vec());
+            }
+
+            // Read additional rows from stdin if data is being piped
+            // Zenity format: each line is one column value, multiple lines form one row
+            if !std::io::stdin().is_terminal() {
+                use std::io::{self, BufRead};
+                let stdin = io::stdin();
+                let lines: Vec<String> = stdin.lock().lines().filter_map(|l| l.ok()).collect();
+                // Group lines by num_columns to form rows
+                for chunk in lines.chunks(num_columns) {
+                    builder = builder.row(chunk.to_vec());
+                }
             }
 
             if let Some(w) = width {
