@@ -1,5 +1,7 @@
+mod cache;
 mod text;
 
+pub use cache::RingBufferCache;
 pub(crate) use text::Font;
 use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PixmapRef, Rect, Transform};
 
@@ -7,6 +9,19 @@ use tiny_skia::{Color, Paint, PathBuilder, Pixmap, PixmapRef, Rect, Transform};
 /// Stores pixels in RGBA format internally, but can convert to ARGB for X11/Wayland.
 pub struct Canvas {
     pub(crate) pixmap: Pixmap,
+}
+
+impl Clone for Canvas {
+    fn clone(&self) -> Self {
+        Self {
+            pixmap: Pixmap::from_vec(
+                self.pixmap.data().to_vec(),
+                tiny_skia::IntSize::from_wh(self.pixmap.width(), self.pixmap.height())
+                    .expect("invalid canvas size"),
+            )
+            .expect("failed to clone canvas"),
+        }
+    }
 }
 
 impl Canvas {

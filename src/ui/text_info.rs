@@ -3,12 +3,13 @@
 use std::io::Read;
 
 use crate::{
-    backend::{create_window, Window, WindowEvent},
+    backend::{Window, WindowEvent, create_window},
     error::Error,
-    render::{rgb, Canvas, Font},
+    render::{Canvas, Font, RingBufferCache, rgb},
+    timing,
     ui::{
-        widgets::{button::Button, Widget},
         Colors,
+        widgets::{Widget, button::Button},
     },
 };
 
@@ -223,6 +224,17 @@ impl TextInfoBuilder {
         let total_lines = wrapped_lines.len();
         let visible_lines = (text_area_h / line_height) as usize;
 
+        // Create line canvas cache with capacity for visible lines + buffer
+        let cache_capacity = visible_lines + 10;
+        let mut line_cache: RingBufferCache<Canvas> = RingBufferCache::new(cache_capacity);
+
+        // Cache invalidation function (call on window resize or theme change)
+        // Note: Currently there are no resize/theme events in WindowEvent,
+        // but when they are added, call line_cache.invalidate_all() to handle them
+        let _invalidate_cache = || {
+            line_cache.invalidate_all();
+        };
+
         // Button positions (right-aligned)
         let mut bx = physical_width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
@@ -250,6 +262,7 @@ impl TextInfoBuilder {
                     checkbox_hovered: bool,
                     ok_button: &Button,
                     cancel_button: &Button,
+                    line_cache: &mut RingBufferCache<Canvas>,
                     // Scaled parameters
                     padding: u32,
                     line_height: u32,
@@ -290,9 +303,21 @@ impl TextInfoBuilder {
             {
                 let line = &wrapped_lines[line_idx];
                 if !line.is_empty() {
-                    let tc = font.render(line).with_color(colors.text).finish();
                     let y = text_area_y + text_padding + (i as u32 * line_height) as i32;
-                    canvas.draw_canvas(&tc, text_area_x + text_padding, y);
+
+                    // Check cache for rendered line
+                    if let Some(cached_canvas) = line_cache.get(&line_idx) {
+                        // Use cached canvas
+                        canvas.draw_canvas(cached_canvas, text_area_x + text_padding, y);
+                    } else {
+                        // Cache miss - render and store
+                        let _timer = timing::Timer::new("glyph_raster_text_info_line");
+                        let tc = font.render(line).with_color(colors.text).finish();
+                        canvas.draw_canvas(&tc, text_area_x + text_padding, y);
+
+                        // Store in cache (clone the canvas for caching)
+                        line_cache.insert(line_idx, tc.clone());
+                    }
                 }
             }
 
@@ -385,6 +410,7 @@ impl TextInfoBuilder {
 
                 // Label
                 let label_x = cb_x + checkbox_size as i32 + (8.0 * scale) as i32;
+                let _timer = timing::Timer::new("glyph_raster_text_info_checkbox");
                 let tc = font.render(cb_text).with_color(colors.text).finish();
                 canvas.draw_canvas(&tc, label_x, cb_y);
             }
@@ -407,6 +433,7 @@ impl TextInfoBuilder {
             checkbox_hovered,
             &ok_button,
             &cancel_button,
+            &mut line_cache,
             padding,
             line_height,
             checkbox_size,
@@ -571,6 +598,7 @@ impl TextInfoBuilder {
                     checkbox_hovered,
                     &ok_button,
                     &cancel_button,
+                    &mut line_cache,
                     padding,
                     line_height,
                     checkbox_size,
