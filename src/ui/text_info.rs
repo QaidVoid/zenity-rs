@@ -223,6 +223,10 @@ impl TextInfoBuilder {
         let total_lines = wrapped_lines.len();
         let visible_lines = (text_area_h / line_height) as usize;
 
+        // Simple per-line Canvas cache to avoid re-rasterizing text on each redraw.
+        // Lazily populated; key is wrapped line index.
+        let mut line_cache: Vec<Option<Canvas>> = vec![None; total_lines];
+
         // Button positions (right-aligned)
         let mut bx = physical_width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
@@ -242,6 +246,7 @@ impl TextInfoBuilder {
         let draw = |canvas: &mut Canvas,
                     colors: &Colors,
                     font: &Font,
+                    line_cache: &mut Vec<Option<Canvas>>,
                     wrapped_lines: &[String],
                     scroll_offset: usize,
                     visible_lines: usize,
@@ -283,16 +288,28 @@ impl TextInfoBuilder {
                 colors.input_bg,
             );
 
-            // Draw visible lines
+            // Draw visible lines with caching
             let text_padding = (8.0 * scale) as i32;
             for (i, line_idx) in
                 (scroll_offset..wrapped_lines.len().min(scroll_offset + visible_lines)).enumerate()
             {
                 let line = &wrapped_lines[line_idx];
                 if !line.is_empty() {
-                    let tc = font.render(line).with_color(colors.text).finish();
-                    let y = text_area_y + text_padding + (i as u32 * line_height) as i32;
-                    canvas.draw_canvas(&tc, text_area_x + text_padding, y);
+                    // Lazy render into cache if missing
+                    if line_cache.get(line_idx).is_some() && line_cache[line_idx].is_none() {
+                        let tc = font.render(line).with_color(colors.text).finish();
+                        line_cache[line_idx] = Some(tc);
+                    }
+                    // Draw from cache if present
+                    if let Some(ref tc) = line_cache.get(line_idx).and_then(|o| o.as_ref()) {
+                        let y = text_area_y + text_padding + (i as u32 * line_height) as i32;
+                        canvas.draw_canvas(tc, text_area_x + text_padding, y);
+                    } else {
+                        // Fallback: if cache isn't present for some reason, render inline
+                        let tc = font.render(line).with_color(colors.text).finish();
+                        let y = text_area_y + text_padding + (i as u32 * line_height) as i32;
+                        canvas.draw_canvas(&tc, text_area_x + text_padding, y);
+                    }
                 }
             }
 
@@ -385,6 +402,7 @@ impl TextInfoBuilder {
 
                 // Label
                 let label_x = cb_x + checkbox_size as i32 + (8.0 * scale) as i32;
+                // Use cache for checkbox label as well? It's simple so render directly
                 let tc = font.render(cb_text).with_color(colors.text).finish();
                 canvas.draw_canvas(&tc, label_x, cb_y);
             }
@@ -399,6 +417,7 @@ impl TextInfoBuilder {
             &mut canvas,
             colors,
             &font,
+            &mut line_cache,
             &wrapped_lines,
             scroll_offset,
             visible_lines,
@@ -563,6 +582,7 @@ impl TextInfoBuilder {
                     &mut canvas,
                     colors,
                     &font,
+                    &mut line_cache,
                     &wrapped_lines,
                     scroll_offset,
                     visible_lines,
