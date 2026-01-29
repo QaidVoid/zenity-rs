@@ -8,12 +8,12 @@ use std::{
 };
 
 use crate::{
-    backend::{create_window, MouseButton, Window, WindowEvent},
+    backend::{MouseButton, Window, WindowEvent, create_window},
     error::Error,
-    render::{rgb, Canvas, Font, Rgba},
+    render::{Canvas, Font, Rgba, rgb},
     ui::{
-        widgets::{button::Button, text_input::TextInput, Widget},
         Colors,
+        widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
 
@@ -1472,11 +1472,7 @@ fn get_volume_label(device: &str) -> Option<String> {
 
     let label = String::from_utf8_lossy(&output.stdout).trim().to_string();
 
-    if label.is_empty() {
-        None
-    } else {
-        Some(label)
-    }
+    if label.is_empty() { None } else { Some(label) }
 }
 
 fn get_mount_icon(device: &str) -> MountIcon {

@@ -7,12 +7,12 @@ use x11rb::{
     connection::Connection as X11rbConnection,
     properties::WmSizeHints,
     protocol::{
+        Event,
         xproto::{
             self, AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _,
             CreateWindowAux, EventMask, ImageFormat, KeyButMask, PropMode, StackMode, VisualClass,
             WindowClass,
         },
-        Event,
     },
     rust_connection::RustConnection,
     wrapper::ConnectionExt as _,
@@ -25,6 +25,7 @@ use super::{
 use crate::{
     error::{Error, X11Error},
     render::Canvas,
+    timing,
 };
 
 x11rb::atom_manager! {
@@ -451,6 +452,7 @@ impl Window for X11Window {
     }
 
     fn set_contents(&mut self, canvas: &Canvas) -> Result<(), Error> {
+        let _timer = timing::Timer::new("canvas_as_argb");
         let data = canvas.as_argb();
         self.conn
             .put_image(

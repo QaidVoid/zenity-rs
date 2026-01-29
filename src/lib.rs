@@ -5,10 +5,12 @@
 pub(crate) mod backend;
 pub mod error;
 pub(crate) mod render;
+pub(crate) mod timing;
 pub mod ui;
 
 pub use error::Error;
 pub use ui::{
+    ButtonPreset, Colors, DialogResult, Icon, THEME_DARK, THEME_LIGHT,
     calendar::{CalendarBuilder, CalendarResult},
     entry::{EntryBuilder, EntryResult},
     file_select::{FileFilter, FileSelectBuilder, FileSelectResult},
@@ -18,7 +20,6 @@ pub use ui::{
     progress::{ProgressBuilder, ProgressResult},
     scale::{ScaleBuilder, ScaleResult},
     text_info::{TextInfoBuilder, TextInfoResult},
-    ButtonPreset, Colors, DialogResult, Icon, THEME_DARK, THEME_LIGHT,
 };
 
 /// Creates a new message dialog builder.

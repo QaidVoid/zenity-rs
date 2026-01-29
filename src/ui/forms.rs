@@ -1,12 +1,12 @@
 //! Forms dialog implementation for multiple input fields.
 
 use crate::{
-    backend::{create_window, CursorShape, Window, WindowEvent},
+    backend::{CursorShape, Window, WindowEvent, create_window},
     error::Error,
     render::{Canvas, Font},
     ui::{
-        widgets::{button::Button, text_input::TextInput, Widget},
         Colors,
+        widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
 

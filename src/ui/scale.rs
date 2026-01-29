@@ -1,12 +1,12 @@
 //! Scale dialog implementation for selecting a numeric value with a slider.
 
 use crate::{
-    backend::{create_window, MouseButton, Window, WindowEvent},
+    backend::{MouseButton, Window, WindowEvent, create_window},
     error::Error,
     render::{Canvas, Font},
     ui::{
-        widgets::{button::Button, Widget},
         Colors,
+        widgets::{Widget, button::Button},
     },
 };
 

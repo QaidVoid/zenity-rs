@@ -1,7 +1,7 @@
-use ab_glyph::{point, Font as _, Glyph, OutlinedGlyph, PxScaleFont, ScaleFont};
+use ab_glyph::{Font as _, Glyph, OutlinedGlyph, PxScaleFont, ScaleFont, point};
 use tiny_skia::Pixmap;
 
-use super::{rgb, Canvas, Rgba};
+use super::{Canvas, Rgba, rgb};
 
 const FALLBACK_FONT: &[u8] = include_bytes!("../../assets/Cantarell-Regular.ttf");
 

@@ -3,12 +3,12 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    backend::{create_window, MouseButton, Window, WindowEvent},
+    backend::{MouseButton, Window, WindowEvent, create_window},
     error::Error,
-    render::{rgb, Canvas, Font},
+    render::{Canvas, Font, rgb},
     ui::{
-        widgets::{button::Button, Widget},
         ButtonPreset, Colors, DialogResult, Icon,
+        widgets::{Widget, button::Button},
     },
 };
 

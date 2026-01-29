@@ -9,6 +9,7 @@ use std::{
 
 use kbvm::lookup::LookupTable;
 use wayland_client::{
+    Connection as WaylandConnection, Dispatch, EventQueue, QueueHandle, WEnum,
     protocol::{
         wl_buffer::{self, WlBuffer},
         wl_callback::{self, WlCallback},
@@ -22,7 +23,6 @@ use wayland_client::{
         wl_shm_pool::WlShmPool,
         wl_surface::WlSurface,
     },
-    Connection as WaylandConnection, Dispatch, EventQueue, QueueHandle, WEnum,
 };
 use wayland_protocols::xdg::shell::client::{
     xdg_surface::{self, XdgSurface},
@@ -32,12 +32,13 @@ use wayland_protocols::xdg::shell::client::{
 
 use self::shm::ShmPool;
 use super::{
-    CursorPos, CursorShape, DisplayConnection, KeyEvent, Modifiers, MouseButton, ScrollDirection,
-    Window, WindowEvent, DEFAULT_SCALE,
+    CursorPos, CursorShape, DEFAULT_SCALE, DisplayConnection, KeyEvent, Modifiers, MouseButton,
+    ScrollDirection, Window, WindowEvent,
 };
 use crate::{
     error::{Error, WaylandError},
     render::Canvas,
+    timing,
 };
 
 /// Wayland connection wrapper.
@@ -304,6 +305,7 @@ impl Window for WaylandWindow {
 
     fn set_contents(&mut self, canvas: &Canvas) -> Result<(), Error> {
         // Copy pixel data from Canvas to shared memory buffer
+        let _timer = timing::Timer::new("canvas_as_argb");
         let src = canvas.as_argb();
         let dst = self.shm_pool.data_mut();
         dst[..src.len()].copy_from_slice(&src);
@@ -312,6 +314,7 @@ impl Window for WaylandWindow {
         if let Some(surface) = &self.state.surface {
             surface.attach(Some(&self.buffer), 0, 0);
             surface.damage_buffer(0, 0, self.physical_width, self.physical_height);
+            let _timer = timing::Timer::new("wayland_commit");
             surface.commit();
         }
 

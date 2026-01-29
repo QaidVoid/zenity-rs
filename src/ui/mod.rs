@@ -11,7 +11,7 @@ pub(crate) mod scale;
 pub(crate) mod text_info;
 pub(crate) mod widgets;
 
-use crate::render::{rgb, Rgba};
+use crate::render::{Rgba, rgb};
 
 /// Color theme for dialogs.
 #[derive(Debug, Clone, Copy)]

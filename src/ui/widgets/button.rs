@@ -1,6 +1,6 @@
 //! Button widget.
 
-use super::{point_in_rect, Widget};
+use super::{Widget, point_in_rect};
 use crate::{
     backend::{MouseButton, WindowEvent},
     render::{Canvas, Font},

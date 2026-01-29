@@ -8,15 +8,15 @@ use std::{
 };
 
 #[cfg(unix)]
-use libc::{getppid, kill, SIGTERM};
+use libc::{SIGTERM, getppid, kill};
 
 use crate::{
-    backend::{create_window, Window, WindowEvent},
+    backend::{Window, WindowEvent, create_window},
     error::Error,
     render::{Canvas, Font},
     ui::{
-        widgets::{button::Button, progress_bar::ProgressBar, Widget},
         Colors,
+        widgets::{Widget, button::Button, progress_bar::ProgressBar},
     },
 };
 

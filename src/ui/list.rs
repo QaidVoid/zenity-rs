@@ -1,12 +1,13 @@
 //! List selection dialog implementation.
 
 use crate::{
-    backend::{create_window, MouseButton, Window, WindowEvent},
+    backend::{MouseButton, Window, WindowEvent, create_window},
     error::Error,
-    render::{rgb, Canvas, Font},
+    render::{Canvas, Font, RingBufferCache, rgb},
+    timing,
     ui::{
-        widgets::{button::Button, Widget},
         Colors,
+        widgets::{Widget, button::Button},
     },
 };
 
@@ -372,9 +373,15 @@ impl ListBuilder {
         // Create sub-canvas for the list area to enable clipping
         let mut list_canvas = Canvas::new(list_w, list_h);
 
+        // Create row cache for rendered canvases (visible rows + buffer for smooth scrolling)
+        let cache_buffer = 5usize;
+        let mut row_cache: RingBufferCache<Canvas> =
+            RingBufferCache::new(visible_rows + cache_buffer);
+
         // Draw function with scaled parameters
         let draw = |canvas: &mut Canvas,
                     list_canvas: &mut Canvas,
+                    row_cache: &mut RingBufferCache<Canvas>,
                     colors: &Colors,
                     font: &Font,
                     text: &str,
@@ -417,6 +424,7 @@ impl ListBuilder {
 
             // Draw text prompt
             if !text.is_empty() {
+                let _timer = timing::Timer::new("glyph_raster_list_text");
                 let tc = font.render(text).with_color(colors.text).finish();
                 canvas.draw_canvas(&tc, padding as i32, text_y);
             }
@@ -434,6 +442,7 @@ impl ListBuilder {
 
                 let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
                 for (i, col) in columns.iter().enumerate() {
+                    let _timer = timing::Timer::new("glyph_raster_list_header");
                     let tc = font.render(col).with_color(rgb(140, 140, 140)).finish();
                     list_canvas.draw_canvas(&tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
                     cx += col_widths.get(i).copied().unwrap_or((100.0 * scale) as u32) as i32;
@@ -481,55 +490,74 @@ impl ListBuilder {
                     colors.input_bg
                 };
 
-                list_canvas.fill_rect(1.0, ry as f32, (list_w - 2) as f32, row_height as f32, bg);
+                // Check cache for this row
+                let row_canvas = if let Some(cached) = row_cache.get(&ri) {
+                    cached
+                } else {
+                    // Cache miss - render new row canvas
+                    let mut new_canvas = Canvas::new(list_w - 2, row_height);
 
-                // Checkbox/Radio
-                if mode == ListMode::Checklist || mode == ListMode::Radiolist {
-                    let check_x = (8.0 * scale) as i32 - h_scroll_offset as i32;
-                    let check_y = ry + ((row_height - checkbox_size) / 2) as i32;
-                    let checked = selected.get(ri).copied().unwrap_or(false);
+                    // Fill background
+                    new_canvas.fill(bg);
 
-                    if mode == ListMode::Checklist {
-                        draw_checkbox(
-                            list_canvas,
-                            check_x,
-                            check_y,
-                            checked,
-                            colors,
-                            checkbox_size,
-                            scale,
-                        );
-                    } else {
-                        draw_radio(
-                            list_canvas,
-                            check_x,
-                            check_y,
-                            checked,
-                            colors,
-                            checkbox_size,
-                            scale,
-                        );
-                    }
-                }
+                    // Checkbox/Radio
+                    if mode == ListMode::Checklist || mode == ListMode::Radiolist {
+                        // Subtract 1 to account for row canvas being drawn at x-offset 1
+                        let check_x = (8.0 * scale) as i32 - h_scroll_offset as i32 - 1;
+                        let check_y = ((row_height - checkbox_size) / 2) as i32;
+                        let checked = selected.get(ri).copied().unwrap_or(false);
 
-                // Cell values
-                let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
-                for (ci, cell) in row.iter().enumerate() {
-                    if ci < col_widths.len() {
-                        let text_color = if is_selected {
-                            rgb(255, 255, 255)
+                        if mode == ListMode::Checklist {
+                            draw_checkbox(
+                                &mut new_canvas,
+                                check_x,
+                                check_y,
+                                checked,
+                                colors,
+                                checkbox_size,
+                                scale,
+                            );
                         } else {
-                            colors.text
-                        };
-                        let tc = font.render(cell).with_color(text_color).finish();
-                        list_canvas.draw_canvas(
-                            &tc,
-                            cx + (8.0 * scale) as i32,
-                            ry + (6.0 * scale) as i32,
-                        );
-                        cx += col_widths[ci] as i32;
+                            draw_radio(
+                                &mut new_canvas,
+                                check_x,
+                                check_y,
+                                checked,
+                                colors,
+                                checkbox_size,
+                                scale,
+                            );
+                        }
                     }
-                }
+
+                    // Cell values
+                    // Subtract 1 to account for row canvas being drawn at x-offset 1
+                    let mut cx = checkbox_col as i32 - h_scroll_offset as i32 - 1;
+                    for (ci, cell) in row.iter().enumerate() {
+                        if ci < col_widths.len() {
+                            let text_color = if is_selected {
+                                rgb(255, 255, 255)
+                            } else {
+                                colors.text
+                            };
+                            let _timer = timing::Timer::new("glyph_raster_list_cell");
+                            let tc = font.render(cell).with_color(text_color).finish();
+                            new_canvas.draw_canvas(
+                                &tc,
+                                cx + (8.0 * scale) as i32,
+                                (6.0 * scale) as i32,
+                            );
+                            cx += col_widths[ci] as i32;
+                        }
+                    }
+
+                    // Insert into cache
+                    row_cache.insert(ri, new_canvas);
+                    row_cache.get(&ri).unwrap()
+                };
+
+                // Draw the (cached or newly rendered) row canvas to the list
+                list_canvas.draw_canvas(row_canvas, 1, ry);
             }
 
             // Vertical Scrollbar
@@ -626,6 +654,7 @@ impl ListBuilder {
         draw(
             &mut canvas,
             &mut list_canvas,
+            &mut row_cache,
             colors,
             &font,
             &self.text,
@@ -745,6 +774,9 @@ impl ListBuilder {
                             };
                             h_scroll_offset = ((scroll_ratio * max_scroll as f32) as u32)
                                 .clamp(0, max_scroll_u32);
+                            // Invalidate entire row cache when scrolling horizontally
+                            // because cached canvases have scroll offset baked in
+                            row_cache.invalidate_all();
                             needs_redraw = true;
                         }
                     } else {
@@ -764,14 +796,26 @@ impl ListBuilder {
                         }
 
                         if old_hovered != hovered_row {
+                            // Invalidate only the old and new hovered rows
+                            if let Some(old) = old_hovered {
+                                let _ = row_cache.invalidate(old);
+                            }
+                            if let Some(new) = hovered_row {
+                                let _ = row_cache.invalidate(new);
+                            }
                             needs_redraw = true;
                         }
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, mods) => {
                     if let Some(ri) = hovered_row {
+                        let mut rows_to_invalidate: Vec<usize> = vec![ri];
+
                         match self.mode {
                             ListMode::Single => {
+                                if let Some(old) = single_selected {
+                                    rows_to_invalidate.push(old);
+                                }
                                 single_selected = Some(ri);
                             }
                             ListMode::Multiple => {
@@ -781,6 +825,12 @@ impl ListBuilder {
                                         *sel = !*sel;
                                     }
                                 } else {
+                                    // Invalidate all previously selected rows
+                                    for (i, &s) in selected.iter().enumerate() {
+                                        if s {
+                                            rows_to_invalidate.push(i);
+                                        }
+                                    }
                                     for s in selected.iter_mut() {
                                         *s = false;
                                     }
@@ -795,6 +845,12 @@ impl ListBuilder {
                                 }
                             }
                             ListMode::Radiolist => {
+                                // Invalidate all previously selected rows
+                                for (i, &s) in selected.iter().enumerate() {
+                                    if s {
+                                        rows_to_invalidate.push(i);
+                                    }
+                                }
                                 // Only one can be selected
                                 for s in selected.iter_mut() {
                                     *s = false;
@@ -803,6 +859,11 @@ impl ListBuilder {
                                     *sel = true;
                                 }
                             }
+                        }
+
+                        // Invalidate only affected rows
+                        for row_idx in rows_to_invalidate {
+                            let _ = row_cache.invalidate(row_idx);
                         }
                         needs_redraw = true;
                     }
@@ -905,6 +966,7 @@ impl ListBuilder {
                             crate::backend::ScrollDirection::Up => {
                                 if total_content_width > list_w {
                                     h_scroll_offset = h_scroll_offset.saturating_sub(100);
+                                    row_cache.invalidate_all();
                                     needs_redraw = true;
                                 }
                             }
@@ -912,6 +974,7 @@ impl ListBuilder {
                                 if total_content_width > list_w {
                                     let max_scroll = total_content_width.saturating_sub(list_w);
                                     h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
+                                    row_cache.invalidate_all();
                                     needs_redraw = true;
                                 }
                             }
@@ -936,6 +999,7 @@ impl ListBuilder {
                             crate::backend::ScrollDirection::Left => {
                                 if total_content_width > list_w {
                                     h_scroll_offset = h_scroll_offset.saturating_sub(100);
+                                    row_cache.invalidate_all();
                                     needs_redraw = true;
                                 }
                             }
@@ -943,6 +1007,7 @@ impl ListBuilder {
                                 if total_content_width > list_w {
                                     let max_scroll = total_content_width.saturating_sub(list_w);
                                     h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
+                                    row_cache.invalidate_all();
                                     needs_redraw = true;
                                 }
                             }
@@ -973,28 +1038,38 @@ impl ListBuilder {
                             if self.mode == ListMode::Single {
                                 if let Some(sel) = single_selected {
                                     if sel > 0 {
-                                        single_selected = Some(sel - 1);
-                                        if sel - 1 < scroll_offset {
-                                            scroll_offset = sel - 1;
+                                        let new_sel = sel - 1;
+                                        // Invalidate old and new selection
+                                        let _ = row_cache.invalidate(sel);
+                                        let _ = row_cache.invalidate(new_sel);
+                                        single_selected = Some(new_sel);
+                                        if new_sel < scroll_offset {
+                                            scroll_offset = new_sel;
                                         }
                                         needs_redraw = true;
                                     }
                                 } else if !rows.is_empty() {
                                     single_selected = Some(0);
+                                    let _ = row_cache.invalidate(0);
                                     needs_redraw = true;
                                 }
                             } else if self.mode == ListMode::Multiple {
                                 let last_selected = selected.iter().position(|&s| s);
                                 if let Some(last) = last_selected {
                                     if last > 0 {
-                                        single_selected = Some(last - 1);
-                                        if last - 1 < scroll_offset {
-                                            scroll_offset = last - 1;
+                                        let new_hover = last - 1;
+                                        // Invalidate old and new hover
+                                        let _ = row_cache.invalidate(last);
+                                        let _ = row_cache.invalidate(new_hover);
+                                        single_selected = Some(new_hover);
+                                        if new_hover < scroll_offset {
+                                            scroll_offset = new_hover;
                                         }
                                         needs_redraw = true;
                                     }
                                 } else if !rows.is_empty() {
                                     single_selected = Some(0);
+                                    let _ = row_cache.invalidate(0);
                                     needs_redraw = true;
                                 }
                             }
@@ -1003,28 +1078,38 @@ impl ListBuilder {
                             if self.mode == ListMode::Single {
                                 if let Some(sel) = single_selected {
                                     if sel + 1 < rows.len() {
-                                        single_selected = Some(sel + 1);
-                                        if sel + 1 >= scroll_offset + data_visible {
-                                            scroll_offset = sel + 2 - data_visible;
+                                        let new_sel = sel + 1;
+                                        // Invalidate old and new selection
+                                        let _ = row_cache.invalidate(sel);
+                                        let _ = row_cache.invalidate(new_sel);
+                                        single_selected = Some(new_sel);
+                                        if new_sel >= scroll_offset + data_visible {
+                                            scroll_offset = new_sel + 1 - data_visible;
                                         }
                                         needs_redraw = true;
                                     }
                                 } else if !rows.is_empty() {
                                     single_selected = Some(0);
+                                    let _ = row_cache.invalidate(0);
                                     needs_redraw = true;
                                 }
                             } else if self.mode == ListMode::Multiple {
                                 let last_selected = selected.iter().position(|&s| s);
                                 if let Some(last) = last_selected {
                                     if last + 1 < rows.len() {
-                                        single_selected = Some(last + 1);
-                                        if last + 1 >= scroll_offset + data_visible {
-                                            scroll_offset = last + 2 - data_visible;
+                                        let new_hover = last + 1;
+                                        // Invalidate old and new hover
+                                        let _ = row_cache.invalidate(last);
+                                        let _ = row_cache.invalidate(new_hover);
+                                        single_selected = Some(new_hover);
+                                        if new_hover >= scroll_offset + data_visible {
+                                            scroll_offset = new_hover + 1 - data_visible;
                                         }
                                         needs_redraw = true;
                                     }
                                 } else if !rows.is_empty() {
                                     single_selected = Some(0);
+                                    let _ = row_cache.invalidate(0);
                                     needs_redraw = true;
                                 }
                             }
@@ -1032,6 +1117,7 @@ impl ListBuilder {
                         KEY_LEFT => {
                             if total_content_width > list_w {
                                 h_scroll_offset = h_scroll_offset.saturating_sub(100);
+                                row_cache.invalidate_all();
                                 needs_redraw = true;
                             }
                         }
@@ -1039,6 +1125,7 @@ impl ListBuilder {
                             if total_content_width > list_w {
                                 let max_scroll = total_content_width.saturating_sub(list_w);
                                 h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
+                                row_cache.invalidate_all();
                                 needs_redraw = true;
                             }
                         }
@@ -1047,6 +1134,8 @@ impl ListBuilder {
                                 if let Some(ri) = hovered_row.or(single_selected) {
                                     if let Some(sel) = selected.get_mut(ri) {
                                         *sel = !*sel;
+                                        // Invalidate only the toggled row
+                                        let _ = row_cache.invalidate(ri);
                                         needs_redraw = true;
                                     }
                                 }
@@ -1096,6 +1185,7 @@ impl ListBuilder {
                 draw(
                     &mut canvas,
                     &mut list_canvas,
+                    &mut row_cache,
                     colors,
                     &font,
                     &self.text,

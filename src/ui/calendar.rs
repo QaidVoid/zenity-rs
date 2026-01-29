@@ -1,12 +1,12 @@
 //! Calendar date picker dialog implementation.
 
 use crate::{
-    backend::{create_window, MouseButton, Window, WindowEvent},
+    backend::{MouseButton, Window, WindowEvent, create_window},
     error::Error,
-    render::{rgb, Canvas, Font, Rgba},
+    render::{Canvas, Font, Rgba, rgb},
     ui::{
-        widgets::{button::Button, Widget},
         Colors,
+        widgets::{Widget, button::Button},
     },
 };
 

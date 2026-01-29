@@ -6,8 +6,8 @@ use std::{
 };
 
 use wayland_client::{
-    protocol::{wl_buffer::WlBuffer, wl_shm::WlShm, wl_shm_pool::WlShmPool},
     QueueHandle,
+    protocol::{wl_buffer::WlBuffer, wl_shm::WlShm, wl_shm_pool::WlShmPool},
 };
 
 use super::WaylandState;
