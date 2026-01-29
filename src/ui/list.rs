@@ -360,6 +360,15 @@ impl ListBuilder {
         let mut single_selected: Option<usize> = None;
         let mut h_scroll_mode = false;
 
+        // Track last cursor position for drag scrolling
+        let mut last_cursor_pos: Option<(i32, i32)> = None;
+
+        // Scrollbar thumb dragging state
+        let mut v_thumb_drag = false;
+        let mut h_thumb_drag = false;
+        let mut v_thumb_drag_offset: Option<i32> = None;
+        let mut h_thumb_drag_offset: Option<i32> = None;
+
         // Create sub-canvas for the list area to enable clipping
         let mut list_canvas = Canvas::new(list_w, list_h);
 
@@ -533,8 +542,15 @@ impl ListBuilder {
                         row_height as f32 + 1.0
                     };
                 let sb_y = data_y_local as f32;
-                let thumb_h = (data_visible as f32 / rows.len() as f32 * sb_h).max(20.0 * scale);
-                let thumb_y = scroll_offset as f32 / rows.len() as f32 * sb_h;
+                let thumb_h = (((data_visible as f32 / rows.len() as f32 * sb_h).max(20.0 * scale))
+                    as f32)
+                    .min(sb_h);
+                let max_thumb_y = sb_h - thumb_h;
+                let thumb_y = if rows.len() > data_visible {
+                    scroll_offset as f32 / (rows.len() - data_visible) as f32 * max_thumb_y
+                } else {
+                    0.0
+                };
 
                 list_canvas.fill_rounded_rect(
                     sb_x as f32,
@@ -560,7 +576,9 @@ impl ListBuilder {
                 let sb_y = list_h as i32 - (8.0 * scale) as i32;
                 let sb_w = list_w as f32;
                 let max_scroll = total_content_width.saturating_sub(list_w);
-                let thumb_w = (list_w as f32 / total_content_width as f32 * sb_w).max(20.0 * scale);
+                let thumb_w = ((list_w as f32 / total_content_width as f32 * sb_w)
+                    .max(20.0 * scale))
+                .min(sb_w);
                 let thumb_x = if max_scroll > 0 {
                     h_scroll_offset as f32 / max_scroll as f32 * (sb_w - thumb_w)
                 } else {
@@ -660,23 +678,94 @@ impl ListBuilder {
                     let mx = pos.x as i32;
                     let my = pos.y as i32;
 
-                    let old_hovered = hovered_row;
-                    hovered_row = None;
+                    // Store current cursor position
+                    last_cursor_pos = Some((mx, my));
 
-                    if mx >= list_x
-                        && mx < list_x + list_w as i32
-                        && my >= data_y
-                        && my < list_y + list_h as i32
-                    {
-                        let rel_y = (my - data_y) as usize;
-                        let ri = scroll_offset + rel_y / row_height as usize;
-                        if ri < rows.len() {
-                            hovered_row = Some(ri);
+                    // Handle scrollbar thumb dragging
+                    if v_thumb_drag || h_thumb_drag {
+                        let list_mx = mx - list_x;
+                        let list_my = my - list_y;
+
+                        if v_thumb_drag && rows.len() > data_visible {
+                            let sb_h_f32 = list_h as f32
+                                - if columns.is_empty() {
+                                    0.0
+                                } else {
+                                    row_height as f32 + 1.0
+                                };
+                            let sb_h = sb_h_f32 as i32;
+                            let sb_y = if columns.is_empty() {
+                                0
+                            } else {
+                                (row_height + 1) as i32
+                            };
+                            let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
+                                * sb_h_f32)
+                                .max(20.0 * scale))
+                            .min(sb_h_f32);
+                            let thumb_h = thumb_h_f32 as i32;
+                            let max_thumb_y = sb_h - thumb_h;
+
+                            // Calculate new scroll offset from thumb position
+                            // Use the drag offset to maintain the relative position from where user clicked
+                            let offset = v_thumb_drag_offset.unwrap_or(thumb_h / 2);
+                            // list_my is relative to list canvas, need to adjust for scrollbar position
+                            let thumb_y = (list_my - sb_y - offset).clamp(0, max_thumb_y);
+                            let scroll_ratio = if max_thumb_y > 0 {
+                                thumb_y as f32 / max_thumb_y as f32
+                            } else {
+                                0.0
+                            };
+                            scroll_offset = ((scroll_ratio * (rows.len() - data_visible) as f32)
+                                as usize)
+                                .clamp(0, rows.len().saturating_sub(data_visible));
+                            needs_redraw = true;
                         }
-                    }
 
-                    if old_hovered != hovered_row {
-                        needs_redraw = true;
+                        if h_thumb_drag && total_content_width > list_w {
+                            let sb_w_f32 = list_w as f32;
+                            let sb_w = list_w as i32;
+                            let max_scroll_u32 = total_content_width.saturating_sub(list_w);
+                            let max_scroll = (max_scroll_u32 as i32).max(1);
+                            let thumb_w_f32 = ((list_w as f32 / total_content_width as f32
+                                * sb_w_f32)
+                                .max(20.0 * scale))
+                            .min(sb_w_f32);
+                            let thumb_w = thumb_w_f32 as i32;
+                            let max_thumb_x = sb_w - thumb_w;
+
+                            // Calculate new horizontal scroll offset from thumb position
+                            // Use the drag offset to maintain the relative position from where user clicked
+                            let offset = h_thumb_drag_offset.unwrap_or(thumb_w / 2);
+                            let thumb_x = (list_mx - offset).clamp(0, max_thumb_x);
+                            let scroll_ratio = if max_scroll > 0 {
+                                thumb_x as f32 / max_thumb_x as f32
+                            } else {
+                                0.0
+                            };
+                            h_scroll_offset = ((scroll_ratio * max_scroll as f32) as u32)
+                                .clamp(0, max_scroll_u32);
+                            needs_redraw = true;
+                        }
+                    } else {
+                        let old_hovered = hovered_row;
+                        hovered_row = None;
+
+                        if mx >= list_x
+                            && mx < list_x + list_w as i32
+                            && my >= data_y
+                            && my < list_y + list_h as i32
+                        {
+                            let rel_y = (my - data_y) as usize;
+                            let ri = scroll_offset + rel_y / row_height as usize;
+                            if ri < rows.len() {
+                                hovered_row = Some(ri);
+                            }
+                        }
+
+                        if old_hovered != hovered_row {
+                            needs_redraw = true;
+                        }
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, mods) => {
@@ -717,6 +806,97 @@ impl ListBuilder {
                         }
                         needs_redraw = true;
                     }
+
+                    // Check for scrollbar thumb dragging
+                    if let Some((mx, my)) = last_cursor_pos {
+                        // Check if click is in list area (convert to list canvas coords)
+                        let list_mx = mx - list_x;
+                        let list_my = my - list_y;
+
+                        if list_mx >= 0
+                            && list_mx < list_w as i32
+                            && list_my >= 0
+                            && list_my < list_h as i32
+                        {
+                            // Vertical scrollbar thumb
+                            if rows.len() > data_visible {
+                                let sb_x = list_w as i32 - (8.0 * scale) as i32;
+                                let sb_h_f32 = list_h as f32
+                                    - if columns.is_empty() {
+                                        0.0
+                                    } else {
+                                        row_height as f32 + 1.0
+                                    };
+                                let sb_h = sb_h_f32 as i32;
+                                let sb_y = if columns.is_empty() {
+                                    0
+                                } else {
+                                    (row_height + 1) as i32
+                                };
+                                let thumb_h_f32 = (((data_visible as f32 / rows.len() as f32
+                                    * sb_h_f32)
+                                    .max(20.0 * scale))
+                                .min(sb_h_f32));
+                                let thumb_h = thumb_h_f32 as i32;
+                                let max_thumb_y = (sb_h_f32 - thumb_h_f32) as i32;
+                                let thumb_y = if rows.len() > data_visible {
+                                    (scroll_offset as f32 / (rows.len() - data_visible) as f32
+                                        * max_thumb_y as f32)
+                                        as i32
+                                } else {
+                                    0
+                                };
+
+                                if list_mx >= sb_x
+                                    && list_mx < sb_x + (6.0 * scale) as i32
+                                    && list_my >= sb_y + thumb_y
+                                    && list_my < sb_y + thumb_y + thumb_h
+                                {
+                                    v_thumb_drag = true;
+                                    v_thumb_drag_offset = Some(list_my - (sb_y + thumb_y));
+                                }
+                            }
+
+                            // Horizontal scrollbar thumb
+                            if total_content_width > list_w {
+                                let sb_h = (6.0 * scale) as i32;
+                                let sb_y = list_h as i32 - sb_h;
+                                let sb_w_f32 = list_w as f32;
+                                let sb_w = list_w as i32;
+                                let max_scroll_u32 = total_content_width.saturating_sub(list_w);
+                                let max_scroll = (max_scroll_u32 as i32).max(1);
+                                let thumb_w_f32 = (((list_w as f32 / total_content_width as f32
+                                    * sb_w_f32)
+                                    .max(20.0 * scale))
+                                .min(sb_w_f32));
+                                let thumb_w = thumb_w_f32 as i32;
+                                let max_thumb_x = sb_w - thumb_w;
+                                let thumb_x = if max_scroll > 0 {
+                                    (h_scroll_offset as f32 / max_scroll as f32
+                                        * max_thumb_x as f32)
+                                        as i32
+                                } else {
+                                    0
+                                };
+
+                                if list_my >= sb_y
+                                    && list_my < sb_y + sb_h
+                                    && list_mx >= thumb_x
+                                    && list_mx < thumb_x + thumb_w
+                                {
+                                    h_thumb_drag = true;
+                                    h_thumb_drag_offset = Some(list_mx - thumb_x);
+                                }
+                            }
+                        }
+                    }
+                }
+                WindowEvent::ButtonRelease(_, _) => {
+                    // End scrollbar thumb dragging
+                    v_thumb_drag = false;
+                    h_thumb_drag = false;
+                    v_thumb_drag_offset = None;
+                    h_thumb_drag_offset = None;
                 }
                 WindowEvent::Scroll(direction) => {
                     if h_scroll_mode {

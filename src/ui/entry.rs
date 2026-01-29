@@ -1,12 +1,12 @@
 //! Entry dialog implementation for text input.
 
 use crate::{
-    backend::{CursorShape, Window, WindowEvent, create_window},
+    backend::{create_window, CursorShape, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font},
     ui::{
+        widgets::{button::Button, text_input::TextInput, Widget},
         Colors,
-        widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
 

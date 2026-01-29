@@ -4,9 +4,9 @@ use std::{io::IsTerminal, process::ExitCode};
 
 use lexopt::prelude::*;
 use zenity_rs::{
+    calendar, entry, file_select, forms, list, message, password, progress, scale, text_info,
     ButtonPreset, CalendarResult, EntryResult, FileSelectResult, FormsResult, Icon, ListResult,
-    ProgressResult, ScaleResult, TextInfoResult, calendar, entry, file_select, forms, list,
-    message, password, progress, scale, text_info,
+    ProgressResult, ScaleResult, TextInfoResult,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
