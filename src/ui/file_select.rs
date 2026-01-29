@@ -77,7 +77,6 @@ struct MountPoint {
     device: String,
     mount_point: PathBuf,
     label: Option<String>,
-    fs_type: String,
 }
 
 /// Icon for mount point type
@@ -531,7 +530,7 @@ impl FileSelectBuilder {
                         );
                     }
 
-                    let icon = get_mount_icon(&drive.device, &drive.fs_type);
+                    let icon = get_mount_icon(&drive.device);
                     draw_mount_icon(
                         canvas,
                         sidebar_x + (12.0 * scale) as i32,
@@ -1419,68 +1418,43 @@ fn build_quick_access() -> Vec<QuickAccess> {
 fn get_mounted_drives() -> Vec<MountPoint> {
     let mut drives = Vec::new();
 
-    let system_mounts = [
-        "/proc",
-        "/sys",
-        "/dev",
-        "/run",
-        "/boot",
-        "/efi",
-        "/sys/kernel",
-        "/dev/pts",
-        "/dev/shm",
-        "/dev/mqueue",
-    ];
-
-    let excluded_fs = [
-        "proc",
-        "sysfs",
-        "debugfs",
-        "configfs",
-        "securityfs",
-        "cgroup2",
-        "pstore",
-        "devpts",
-        "mqueue",
-        "binfmt_misc",
-        "tmpfs",
-        "shm",
-        "bpf",
-        "efivarfs",
-        "fusectl",
-        "fuse",
-    ];
-
-    if let Ok(content) = std::fs::read_to_string("/proc/mounts") {
+    // Parse /run/mount/utab for user-mounted drives (much cleaner than /proc/mounts)
+    if let Ok(content) = std::fs::read_to_string("/run/mount/utab") {
         for line in content.lines() {
-            let parts: Vec<&str> = line.split_whitespace().collect();
-            if parts.len() >= 3 {
-                let device = parts[0].to_string();
-                let mount_point = PathBuf::from(parts[1]);
-                let fs_type = parts[2].to_string();
+            let mut device: Option<String> = None;
+            let mut mount_point: Option<PathBuf> = None;
 
-                let is_system = system_mounts
-                    .iter()
-                    .any(|prefix| mount_point.starts_with(prefix));
-
-                let is_excluded_fs = excluded_fs.iter().any(|fs| fs_type == *fs);
-
-                let is_fuse = fs_type == "fuse" || fs_type.starts_with("fuse.");
-
-                let is_root = mount_point.as_os_str() == "/";
-
-                let is_swap = parts.iter().any(|p| p == &"swap");
-
-                if !is_system && !is_excluded_fs && !is_fuse && !is_root && !is_swap {
-                    let label = get_volume_label(&device);
-
-                    drives.push(MountPoint {
-                        device,
-                        mount_point,
-                        label,
-                        fs_type,
-                    });
+            // Parse KEY=VALUE pairs
+            for pair in line.split_whitespace() {
+                let mut kv = pair.split('=');
+                if let Some(key) = kv.next() {
+                    let value = kv.next();
+                    match key {
+                        "SRC" => {
+                            device = value.map(|v| v.to_string());
+                        }
+                        "TARGET" => {
+                            mount_point = value.map(PathBuf::from);
+                        }
+                        _ => {}
+                    }
                 }
+            }
+
+            // We have both source and target, create a mount point entry
+            if let (Some(dev), Some(mp)) = (device, mount_point) {
+                // Skip root filesystem
+                if mp.as_os_str() == "/" {
+                    continue;
+                }
+
+                let label = get_volume_label(&dev);
+
+                drives.push(MountPoint {
+                    device: dev,
+                    mount_point: mp,
+                    label,
+                });
             }
         }
     }
@@ -1505,27 +1479,40 @@ fn get_volume_label(device: &str) -> Option<String> {
     }
 }
 
-fn get_mount_icon(device: &str, fs_type: &str) -> MountIcon {
-    if fs_type == "nfs"
-        || fs_type == "nfs4"
-        || fs_type == "cifs"
-        || fs_type == "smbfs"
-        || fs_type == "fuse.sshfs"
-    {
-        return MountIcon::Network;
+fn get_mount_icon(device: &str) -> MountIcon {
+    // Check for USB by looking for symlink in /dev/disk/by-id/usb-*
+    let is_usb = device
+        .strip_prefix("/dev/")
+        .map(|_dev| {
+            std::fs::read_dir("/dev/disk/by-id")
+                .ok()
+                .map(|entries| {
+                    entries
+                        .filter_map(|e| e.ok())
+                        .filter(|e| e.file_name().to_string_lossy().starts_with("usb-"))
+                        .any(|e| {
+                            e.path()
+                                .canonicalize()
+                                .ok()
+                                .as_ref()
+                                .and_then(|p| p.to_str())
+                                .map(|p| device.contains(p))
+                                .unwrap_or(false)
+                        })
+                })
+                .unwrap_or(false)
+        })
+        .unwrap_or(false);
+
+    if is_usb {
+        return MountIcon::UsbDrive;
     }
 
     if device.starts_with("/dev/sr") || device.starts_with("/dev/scd") {
         return MountIcon::Optical;
     }
 
-    if device.starts_with("/dev/sd") && !device.starts_with("/dev/sda") {
-        return MountIcon::UsbDrive;
-    }
-
-    if (device.starts_with("/dev/nvme") || device.starts_with("/dev/mmc"))
-        && !device.contains("swap")
-    {
+    if device.starts_with("/dev/nvme") || device.starts_with("/dev/mmc") {
         return MountIcon::ExternalHdd;
     }
 
