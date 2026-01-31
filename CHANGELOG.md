@@ -1,4 +1,22 @@
 
+## [0.1.10](https://github.com/QaidVoid/zenity-rs/compare/v0.1.9...v0.1.10) - 2026-01-31
+
+### Added
+
+- Add scrollbar thumb drag to text-info and file-select - ([d2cc021](https://github.com/QaidVoid/zenity-rs/commit/d2cc021ca5e61b04e58a6c004e762b1931aef11d))
+- Add scrollbar thumb dragging - ([61a6895](https://github.com/QaidVoid/zenity-rs/commit/61a6895a3181276ae6489b7ec119119637759fe3))
+- Add stdin support for list dialog - ([84ff3f7](https://github.com/QaidVoid/zenity-rs/commit/84ff3f7d2efad336eacef790c106bf7b9c3b06ad))
+
+### Fixed
+
+- Increase spacing between text and buttons in text-info dialog - ([1a06038](https://github.com/QaidVoid/zenity-rs/commit/1a0603830f9eae211a5397f3c0bdde129fb21a98))
+- Render title on text-info - ([51a6254](https://github.com/QaidVoid/zenity-rs/commit/51a6254fb1e888bb97a9d8b65b56647f57b518c9))
+- Clear scrollbar thumb drag state on rapid release - ([918610a](https://github.com/QaidVoid/zenity-rs/commit/918610a8d1747bce4112ab030f5409ea473ea0b3))
+
+### Other
+
+- Update build command - ([a43d42a](https://github.com/QaidVoid/zenity-rs/commit/a43d42a4b003d8c00287e1abb83ca05f837efb15))
+
 ## [0.1.9](https://github.com/QaidVoid/zenity-rs/compare/v0.1.8...v0.1.9) - 2026-01-29
 
 ### Added
