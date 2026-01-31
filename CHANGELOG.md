@@ -1,4 +1,11 @@
 
+## [0.1.11](https://github.com/QaidVoid/zenity-rs/compare/v0.1.10...v0.1.11) - 2026-01-31
+
+### Added
+
+- Add title rendering and column improvements to list dialog - ([4397975](https://github.com/QaidVoid/zenity-rs/commit/4397975fae449d3bebe1ebcf134b9ce7ced84c4c))
+- Improve scrollbar interaction and prevent click-through - ([c41e62f](https://github.com/QaidVoid/zenity-rs/commit/c41e62f33a6fb5a5db8ea967615fe15f8aef4950))
+
 ## [0.1.10](https://github.com/QaidVoid/zenity-rs/compare/v0.1.9...v0.1.10) - 2026-01-31
 
 ### Added
