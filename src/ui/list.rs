@@ -1085,9 +1085,98 @@ impl ListBuilder {
             }
 
             while let Some(ev) = window.poll_for_event()? {
-                if let WindowEvent::CloseRequested = ev {
-                    return Ok(ListResult::Closed);
+                match &ev {
+                    WindowEvent::CloseRequested => {
+                        return Ok(ListResult::Closed);
+                    }
+                    WindowEvent::CursorEnter(pos) | WindowEvent::CursorMove(pos) => {
+                        last_cursor_pos = Some((pos.x as i32, pos.y as i32));
+                    }
+                    WindowEvent::ButtonPress(button, _modifiers)
+                        if *button == MouseButton::Left =>
+                    {
+                        if let Some((list_mx, list_my)) = last_cursor_pos {
+                            // Check vertical scrollbar thumb
+                            if rows.len() > data_visible {
+                                let sb_x = list_w as i32 - (8.0 * scale) as i32;
+                                let sb_h_f32 = list_h as f32
+                                    - if columns.is_empty() {
+                                        0.0
+                                    } else {
+                                        row_height as f32 + 1.0
+                                    };
+                                let sb_h = sb_h_f32 as i32;
+                                let sb_y = if columns.is_empty() {
+                                    0
+                                } else {
+                                    (row_height + 1) as i32
+                                };
+                                let thumb_h_f32 = (((data_visible as f32 / rows.len() as f32
+                                    * sb_h_f32)
+                                    .max(20.0 * scale))
+                                .min(sb_h_f32));
+                                let thumb_h = thumb_h_f32 as i32;
+                                let max_thumb_y = (sb_h_f32 - thumb_h_f32) as i32;
+                                let thumb_y = if rows.len() > data_visible {
+                                    (scroll_offset as f32 / (rows.len() - data_visible) as f32
+                                        * max_thumb_y as f32)
+                                        as i32
+                                } else {
+                                    0
+                                };
+
+                                if list_mx >= sb_x
+                                    && list_mx < sb_x + (8.0 * scale) as i32
+                                    && list_my >= thumb_y
+                                    && list_my < thumb_y + thumb_h
+                                {
+                                    v_thumb_drag = true;
+                                    v_thumb_drag_offset = Some(list_my - thumb_y);
+                                }
+                            }
+
+                            // Check horizontal scrollbar thumb
+                            if total_content_width > list_w {
+                                let sb_h = (6.0 * scale) as i32;
+                                let sb_y = list_h as i32 - sb_h;
+                                let sb_w_f32 = list_w as f32;
+                                let sb_w = list_w as i32;
+                                let max_scroll_u32 = total_content_width.saturating_sub(list_w);
+                                let max_scroll = (max_scroll_u32 as i32).max(1);
+                                let thumb_w_f32 = (((list_w as f32 / total_content_width as f32
+                                    * sb_w_f32)
+                                    .max(20.0 * scale))
+                                .min(sb_w_f32));
+                                let thumb_w = thumb_w_f32 as i32;
+                                let max_thumb_x = sb_w - thumb_w;
+                                let thumb_x = if max_scroll > 0 {
+                                    (h_scroll_offset as f32 / max_scroll as f32
+                                        * max_thumb_x as f32)
+                                        as i32
+                                } else {
+                                    0
+                                };
+
+                                if list_my >= sb_y
+                                    && list_my < sb_y + sb_h
+                                    && list_mx >= thumb_x
+                                    && list_mx < thumb_x + thumb_w
+                                {
+                                    h_thumb_drag = true;
+                                    h_thumb_drag_offset = Some(list_mx - thumb_x);
+                                }
+                            }
+                        }
+                    }
+                    WindowEvent::ButtonRelease(_, _) => {
+                        v_thumb_drag = false;
+                        h_thumb_drag = false;
+                        v_thumb_drag_offset = None;
+                        h_thumb_drag_offset = None;
+                    }
+                    _ => {}
                 }
+
                 needs_redraw |= ok_button.process_event(&ev);
                 needs_redraw |= cancel_button.process_event(&ev);
             }
