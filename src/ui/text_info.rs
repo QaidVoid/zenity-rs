@@ -241,6 +241,7 @@ impl TextInfoBuilder {
         let mut scroll_offset = 0usize;
         let mut checkbox_checked = false;
         let mut checkbox_hovered = false;
+        let mut scrollbar_hovered = false;
 
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);
@@ -267,7 +268,8 @@ impl TextInfoBuilder {
                     text_area_w: u32,
                     text_area_h: u32,
                     checkbox_y: i32,
-                    scale: f32| {
+                    scale: f32,
+                    scrollbar_hovered: bool| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
             let radius = 8.0 * scale;
@@ -317,7 +319,12 @@ impl TextInfoBuilder {
 
             // Scrollbar
             if wrapped_lines.len() > visible_lines {
-                let sb_x = text_area_x + text_area_w as i32 - (10.0 * scale) as i32;
+                let scrollbar_width = if scrollbar_hovered {
+                    12.0 * scale
+                } else {
+                    8.0 * scale
+                };
+                let sb_x = text_area_x + text_area_w as i32 - scrollbar_width as i32;
                 let sb_y = text_area_y as f32 + 4.0 * scale;
                 let sb_h = text_area_h as f32 - 8.0 * scale;
                 let thumb_h =
@@ -333,7 +340,7 @@ impl TextInfoBuilder {
                 canvas.fill_rounded_rect(
                     sb_x as f32,
                     sb_y,
-                    6.0 * scale,
+                    scrollbar_width - 2.0 * scale,
                     sb_h,
                     3.0 * scale,
                     darken(colors.input_bg, 0.05),
@@ -342,10 +349,14 @@ impl TextInfoBuilder {
                 canvas.fill_rounded_rect(
                     sb_x as f32,
                     sb_y + thumb_y,
-                    6.0 * scale,
+                    scrollbar_width - 2.0 * scale,
                     thumb_h,
                     3.0 * scale,
-                    colors.input_border,
+                    if scrollbar_hovered {
+                        colors.input_border_focused
+                    } else {
+                        colors.input_border
+                    },
                 );
             }
 
@@ -417,6 +428,7 @@ impl TextInfoBuilder {
         let mut thumb_drag = false;
         let mut thumb_drag_offset: Option<i32> = None;
         let mut last_cursor_pos: Option<(i32, i32)> = None;
+        let mut clicking_scrollbar = false;
 
         // Initial draw
         draw(
@@ -441,6 +453,7 @@ impl TextInfoBuilder {
             text_area_h,
             checkbox_y,
             scale,
+            scrollbar_hovered,
         );
         window.set_contents(&canvas)?;
         window.show()?;
@@ -490,37 +503,65 @@ impl TextInfoBuilder {
                                 ((scroll_ratio * max_scroll as f32) as usize).clamp(0, max_scroll);
                             needs_redraw = true;
                         }
-                    } else if has_checkbox {
-                        // Check if hovering checkbox area
-                        let cb_x = padding as i32;
-                        let cb_row_width = checkbox_size as i32 + (8.0 * scale) as i32 + 200; // Approximate label width
-                        let old_hovered = checkbox_hovered;
-                        checkbox_hovered = mx >= cb_x
-                            && mx < cb_x + cb_row_width
-                            && my >= checkbox_y
-                            && my < checkbox_y + checkbox_size as i32;
+                    } else {
+                        // Update scrollbar hover state (always, not just when there's a checkbox)
+                        let scrollbar_width = if scrollbar_hovered {
+                            12.0 * scale
+                        } else {
+                            8.0 * scale
+                        };
+                        let scrollbar_x = text_area_x + text_area_w as i32 - scrollbar_width as i32;
 
-                        if old_hovered != checkbox_hovered {
-                            needs_redraw = true;
+                        scrollbar_hovered = total_lines > visible_lines
+                            && mx >= scrollbar_x
+                            && mx < text_area_x + text_area_w as i32
+                            && my >= text_area_y
+                            && my < text_area_y + text_area_h as i32;
+
+                        if has_checkbox {
+                            // Check if hovering checkbox area (only if not over scrollbar)
+                            let cb_x = padding as i32;
+                            let cb_row_width = checkbox_size as i32 + (8.0 * scale) as i32 + 200; // Approximate label width
+                            let old_hovered = checkbox_hovered;
+                            checkbox_hovered = !scrollbar_hovered
+                                && mx >= cb_x
+                                && mx < cb_x + cb_row_width
+                                && my >= checkbox_y
+                                && my < checkbox_y + checkbox_size as i32;
+
+                            if old_hovered != checkbox_hovered {
+                                needs_redraw = true;
+                            }
                         }
                     }
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
-                    if checkbox_hovered {
-                        checkbox_checked = !checkbox_checked;
-                        needs_redraw = true;
-                    } else if let Some((mx, my)) = last_cursor_pos {
+                    clicking_scrollbar = false;
+
+                    // Check if clicking anywhere in scrollbar area (thumb OR track)
+                    if let Some((mx, my)) = last_cursor_pos {
                         if total_lines > visible_lines {
-                            // Check if clicking on scrollbar thumb
-                            if mx >= text_area_x
+                            let scrollbar_width = if scrollbar_hovered {
+                                12.0 * scale
+                            } else {
+                                8.0 * scale
+                            };
+                            let scrollbar_x =
+                                text_area_x + text_area_w as i32 - scrollbar_width as i32;
+
+                            // Block all clicks in scrollbar area
+                            if mx >= scrollbar_x
                                 && mx < text_area_x + text_area_w as i32
                                 && my >= text_area_y
                                 && my < text_area_y + text_area_h as i32
                             {
+                                clicking_scrollbar = true;
+
+                                // Now check if clicking specifically on the thumb for dragging
                                 let text_area_mx = mx - text_area_x;
                                 let text_area_my = my - text_area_y;
 
-                                let sb_x = text_area_w as i32 - (10.0 * scale) as i32;
+                                let sb_x = text_area_w as i32 - scrollbar_width as i32;
                                 let sb_y_f32 = 4.0 * scale;
                                 let sb_y = sb_y_f32 as i32;
                                 let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
@@ -542,7 +583,7 @@ impl TextInfoBuilder {
                                 };
 
                                 if text_area_mx >= sb_x
-                                    && text_area_mx < sb_x + (6.0 * scale) as i32
+                                    && text_area_mx < sb_x + scrollbar_width as i32
                                     && text_area_my >= sb_y + thumb_y
                                     && text_area_my < sb_y + thumb_y + thumb_h
                                 {
@@ -550,6 +591,14 @@ impl TextInfoBuilder {
                                     thumb_drag_offset = Some(text_area_my - (sb_y + thumb_y));
                                 }
                             }
+                        }
+                    }
+
+                    // Only process checkbox click if not clicking on scrollbar
+                    if !clicking_scrollbar {
+                        if checkbox_hovered {
+                            checkbox_checked = !checkbox_checked;
+                            needs_redraw = true;
                         }
                     }
                 }
@@ -733,6 +782,7 @@ impl TextInfoBuilder {
                     text_area_h,
                     checkbox_y,
                     scale,
+                    scrollbar_hovered,
                 );
                 window.set_contents(&canvas)?;
             }

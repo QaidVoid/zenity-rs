@@ -368,6 +368,9 @@ impl ListBuilder {
         let mut h_thumb_drag = false;
         let mut v_thumb_drag_offset: Option<i32> = None;
         let mut h_thumb_drag_offset: Option<i32> = None;
+        let mut clicking_scrollbar = false;
+        let mut v_scrollbar_hovered = false;
+        let mut h_scrollbar_hovered = false;
 
         // Create sub-canvas for the list area to enable clipping
         let mut list_canvas = Canvas::new(list_w, list_h);
@@ -401,7 +404,9 @@ impl ListBuilder {
                     list_h: u32,
                     visible_rows: usize,
                     text_y: i32,
-                    scale: f32| {
+                    scale: f32,
+                    v_scrollbar_hovered: bool,
+                    h_scrollbar_hovered: bool| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
             let radius = 8.0 * scale;
@@ -552,10 +557,16 @@ impl ListBuilder {
                     0.0
                 };
 
+                let v_scrollbar_width = if v_scrollbar_hovered {
+                    12.0 * scale
+                } else {
+                    8.0 * scale
+                };
+
                 list_canvas.fill_rounded_rect(
                     sb_x as f32,
                     sb_y,
-                    6.0 * scale,
+                    v_scrollbar_width - 2.0 * scale,
                     sb_h,
                     3.0 * scale,
                     darken(colors.input_bg, 0.05),
@@ -563,17 +574,26 @@ impl ListBuilder {
                 list_canvas.fill_rounded_rect(
                     sb_x as f32,
                     sb_y + thumb_y,
-                    6.0 * scale,
+                    v_scrollbar_width - 2.0 * scale,
                     thumb_h,
                     3.0 * scale,
-                    colors.input_border,
+                    if v_scrollbar_hovered {
+                        colors.input_border_focused
+                    } else {
+                        colors.input_border
+                    },
                 );
             }
 
             // Horizontal Scrollbar
             if total_content_width > list_w {
+                let h_scrollbar_width = if h_scrollbar_hovered {
+                    12.0 * scale
+                } else {
+                    8.0 * scale
+                };
                 let sb_x = 0.0;
-                let sb_y = list_h as i32 - (8.0 * scale) as i32;
+                let sb_y = list_h as i32 - h_scrollbar_width as i32;
                 let sb_w = list_w as f32;
                 let max_scroll = total_content_width.saturating_sub(list_w);
                 let thumb_w = ((list_w as f32 / total_content_width as f32 * sb_w)
@@ -589,7 +609,7 @@ impl ListBuilder {
                     sb_x,
                     sb_y as f32,
                     sb_w,
-                    6.0 * scale,
+                    h_scrollbar_width - 2.0 * scale,
                     3.0 * scale,
                     darken(colors.input_bg, 0.05),
                 );
@@ -597,9 +617,13 @@ impl ListBuilder {
                     sb_x + thumb_x,
                     sb_y as f32,
                     thumb_w,
-                    6.0 * scale,
+                    h_scrollbar_width - 2.0 * scale,
                     3.0 * scale,
-                    colors.input_border,
+                    if h_scrollbar_hovered {
+                        colors.input_border_focused
+                    } else {
+                        colors.input_border
+                    },
                 );
             }
 
@@ -652,6 +676,8 @@ impl ListBuilder {
             visible_rows,
             text_y,
             scale,
+            v_scrollbar_hovered,
+            h_scrollbar_hovered,
         );
         window.set_contents(&canvas)?;
         window.show()?;
@@ -751,8 +777,43 @@ impl ListBuilder {
                         let old_hovered = hovered_row;
                         hovered_row = None;
 
-                        if mx >= list_x
+                        // Update scrollbar hover states
+                        let v_scrollbar_width = if v_scrollbar_hovered {
+                            12.0 * scale
+                        } else {
+                            8.0 * scale
+                        };
+                        let v_scrollbar_x = list_w as i32 - v_scrollbar_width as i32;
+                        let h_scrollbar_width = if h_scrollbar_hovered {
+                            12.0 * scale
+                        } else {
+                            8.0 * scale
+                        };
+
+                        v_scrollbar_hovered = rows.len() > data_visible
+                            && mx >= list_x + v_scrollbar_x
                             && mx < list_x + list_w as i32
+                            && my >= list_y
+                            && my < list_y + list_h as i32;
+
+                        h_scrollbar_hovered = total_content_width > list_w
+                            && mx >= list_x
+                            && mx < list_x + list_w as i32
+                            && my >= list_y + list_h as i32 - h_scrollbar_width as i32
+                            && my < list_y + list_h as i32;
+
+                        // Check row hover (only if not over scrollbar)
+                        let effective_v_scrollbar_width =
+                            if v_scrollbar_hovered && rows.len() > data_visible {
+                                12.0 * scale
+                            } else if rows.len() > data_visible {
+                                8.0 * scale
+                            } else {
+                                0.0
+                            };
+
+                        if mx >= list_x
+                            && mx < list_x + list_w as i32 - effective_v_scrollbar_width as i32
                             && my >= data_y
                             && my < list_y + list_h as i32
                         {
@@ -769,45 +830,9 @@ impl ListBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, mods) => {
-                    if let Some(ri) = hovered_row {
-                        match self.mode {
-                            ListMode::Single => {
-                                single_selected = Some(ri);
-                            }
-                            ListMode::Multiple => {
-                                // Only toggle selection if Ctrl is held, otherwise select only this item
-                                if mods.contains(crate::backend::Modifiers::CTRL) {
-                                    if let Some(sel) = selected.get_mut(ri) {
-                                        *sel = !*sel;
-                                    }
-                                } else {
-                                    for s in selected.iter_mut() {
-                                        *s = false;
-                                    }
-                                    if let Some(sel) = selected.get_mut(ri) {
-                                        *sel = true;
-                                    }
-                                }
-                            }
-                            ListMode::Checklist => {
-                                if let Some(sel) = selected.get_mut(ri) {
-                                    *sel = !*sel;
-                                }
-                            }
-                            ListMode::Radiolist => {
-                                // Only one can be selected
-                                for s in selected.iter_mut() {
-                                    *s = false;
-                                }
-                                if let Some(sel) = selected.get_mut(ri) {
-                                    *sel = true;
-                                }
-                            }
-                        }
-                        needs_redraw = true;
-                    }
+                    clicking_scrollbar = false;
 
-                    // Check for scrollbar thumb dragging
+                    // Check if clicking anywhere in scrollbar area (thumb OR track)
                     if let Some((mx, my)) = last_cursor_pos {
                         // Check if click is in list area (convert to list canvas coords)
                         let list_mx = mx - list_x;
@@ -818,76 +843,135 @@ impl ListBuilder {
                             && list_my >= 0
                             && list_my < list_h as i32
                         {
-                            // Vertical scrollbar thumb
+                            // Vertical scrollbar area
                             if rows.len() > data_visible {
-                                let sb_x = list_w as i32 - (8.0 * scale) as i32;
-                                let sb_h_f32 = list_h as f32
-                                    - if columns.is_empty() {
-                                        0.0
+                                let v_scrollbar_width = if v_scrollbar_hovered {
+                                    12.0 * scale
+                                } else {
+                                    8.0 * scale
+                                };
+                                let sb_x = list_w as i32 - v_scrollbar_width as i32;
+
+                                // Block all clicks in vertical scrollbar area
+                                if list_mx >= sb_x {
+                                    clicking_scrollbar = true;
+
+                                    let sb_h_f32 = list_h as f32
+                                        - if columns.is_empty() {
+                                            0.0
+                                        } else {
+                                            row_height as f32 + 1.0
+                                        };
+                                    let sb_h = sb_h_f32 as i32;
+                                    let sb_y = if columns.is_empty() {
+                                        0
                                     } else {
-                                        row_height as f32 + 1.0
+                                        (row_height + 1) as i32
                                     };
-                                let sb_h = sb_h_f32 as i32;
-                                let sb_y = if columns.is_empty() {
-                                    0
-                                } else {
-                                    (row_height + 1) as i32
-                                };
-                                let thumb_h_f32 = (((data_visible as f32 / rows.len() as f32
-                                    * sb_h_f32)
-                                    .max(20.0 * scale))
-                                .min(sb_h_f32));
-                                let thumb_h = thumb_h_f32 as i32;
-                                let max_thumb_y = (sb_h_f32 - thumb_h_f32) as i32;
-                                let thumb_y = if rows.len() > data_visible {
-                                    (scroll_offset as f32 / (rows.len() - data_visible) as f32
-                                        * max_thumb_y as f32)
-                                        as i32
-                                } else {
-                                    0
-                                };
+                                    let thumb_h_f32 = (((data_visible as f32 / rows.len() as f32
+                                        * sb_h_f32)
+                                        .max(20.0 * scale))
+                                    .min(sb_h_f32));
+                                    let thumb_h = thumb_h_f32 as i32;
+                                    let max_thumb_y = (sb_h_f32 - thumb_h_f32) as i32;
+                                    let thumb_y = if rows.len() > data_visible {
+                                        (scroll_offset as f32 / (rows.len() - data_visible) as f32
+                                            * max_thumb_y as f32)
+                                            as i32
+                                    } else {
+                                        0
+                                    };
 
-                                if list_mx >= sb_x
-                                    && list_mx < sb_x + (6.0 * scale) as i32
-                                    && list_my >= sb_y + thumb_y
-                                    && list_my < sb_y + thumb_y + thumb_h
-                                {
-                                    v_thumb_drag = true;
-                                    v_thumb_drag_offset = Some(list_my - (sb_y + thumb_y));
+                                    // Check if clicking specifically on the thumb for dragging
+                                    if list_my >= sb_y + thumb_y
+                                        && list_my < sb_y + thumb_y + thumb_h
+                                    {
+                                        v_thumb_drag = true;
+                                        v_thumb_drag_offset = Some(list_my - (sb_y + thumb_y));
+                                    }
                                 }
                             }
 
-                            // Horizontal scrollbar thumb
+                            // Horizontal scrollbar area
                             if total_content_width > list_w {
-                                let sb_h = (6.0 * scale) as i32;
-                                let sb_y = list_h as i32 - sb_h;
-                                let sb_w_f32 = list_w as f32;
-                                let sb_w = list_w as i32;
-                                let max_scroll_u32 = total_content_width.saturating_sub(list_w);
-                                let max_scroll = (max_scroll_u32 as i32).max(1);
-                                let thumb_w_f32 = (((list_w as f32 / total_content_width as f32
-                                    * sb_w_f32)
-                                    .max(20.0 * scale))
-                                .min(sb_w_f32));
-                                let thumb_w = thumb_w_f32 as i32;
-                                let max_thumb_x = sb_w - thumb_w;
-                                let thumb_x = if max_scroll > 0 {
-                                    (h_scroll_offset as f32 / max_scroll as f32
-                                        * max_thumb_x as f32)
-                                        as i32
+                                let h_scrollbar_width = if h_scrollbar_hovered {
+                                    12.0 * scale
                                 } else {
-                                    0
+                                    8.0 * scale
                                 };
+                                let sb_h = h_scrollbar_width as i32;
+                                let sb_y = list_h as i32 - sb_h;
 
-                                if list_my >= sb_y
-                                    && list_my < sb_y + sb_h
-                                    && list_mx >= thumb_x
-                                    && list_mx < thumb_x + thumb_w
-                                {
-                                    h_thumb_drag = true;
-                                    h_thumb_drag_offset = Some(list_mx - thumb_x);
+                                // Block all clicks in horizontal scrollbar area
+                                if list_my >= sb_y {
+                                    clicking_scrollbar = true;
+
+                                    let sb_w_f32 = list_w as f32;
+                                    let sb_w = list_w as i32;
+                                    let max_scroll_u32 = total_content_width.saturating_sub(list_w);
+                                    let max_scroll = (max_scroll_u32 as i32).max(1);
+                                    let thumb_w_f32 =
+                                        (((list_w as f32 / total_content_width as f32 * sb_w_f32)
+                                            .max(20.0 * scale))
+                                        .min(sb_w_f32));
+                                    let thumb_w = thumb_w_f32 as i32;
+                                    let max_thumb_x = sb_w - thumb_w;
+                                    let thumb_x = if max_scroll > 0 {
+                                        (h_scroll_offset as f32 / max_scroll as f32
+                                            * max_thumb_x as f32)
+                                            as i32
+                                    } else {
+                                        0
+                                    };
+
+                                    // Check if clicking specifically on the thumb for dragging
+                                    if list_mx >= thumb_x && list_mx < thumb_x + thumb_w {
+                                        h_thumb_drag = true;
+                                        h_thumb_drag_offset = Some(list_mx - thumb_x);
+                                    }
                                 }
                             }
+                        }
+                    }
+
+                    // Only process row selection if not clicking on scrollbar
+                    if !clicking_scrollbar {
+                        if let Some(ri) = hovered_row {
+                            match self.mode {
+                                ListMode::Single => {
+                                    single_selected = Some(ri);
+                                }
+                                ListMode::Multiple => {
+                                    // Only toggle selection if Ctrl is held, otherwise select only this item
+                                    if mods.contains(crate::backend::Modifiers::CTRL) {
+                                        if let Some(sel) = selected.get_mut(ri) {
+                                            *sel = !*sel;
+                                        }
+                                    } else {
+                                        for s in selected.iter_mut() {
+                                            *s = false;
+                                        }
+                                        if let Some(sel) = selected.get_mut(ri) {
+                                            *sel = true;
+                                        }
+                                    }
+                                }
+                                ListMode::Checklist => {
+                                    if let Some(sel) = selected.get_mut(ri) {
+                                        *sel = !*sel;
+                                    }
+                                }
+                                ListMode::Radiolist => {
+                                    // Only one can be selected
+                                    for s in selected.iter_mut() {
+                                        *s = false;
+                                    }
+                                    if let Some(sel) = selected.get_mut(ri) {
+                                        *sel = true;
+                                    }
+                                }
+                            }
+                            needs_redraw = true;
                         }
                     }
                 }
@@ -1211,6 +1295,8 @@ impl ListBuilder {
                     visible_rows,
                     text_y,
                     scale,
+                    v_scrollbar_hovered,
+                    h_scrollbar_hovered,
                 );
                 window.set_contents(&canvas)?;
             }

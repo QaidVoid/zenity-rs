@@ -259,6 +259,8 @@ impl FileSelectBuilder {
         // Scrollbar thumb dragging state
         let mut thumb_drag = false;
         let mut thumb_drag_offset: Option<i32> = None;
+        let mut clicking_scrollbar = false;
+        let mut scrollbar_hovered = false;
 
         // Load initial directory
         load_directory(&current_dir, &mut all_entries, self.directory, show_hidden);
@@ -331,7 +333,8 @@ impl FileSelectBuilder {
                     history_index: usize,
                     mounted_drives: &[MountPoint],
                     hovered_drive: Option<usize>,
-                    scale: f32| {
+                    scale: f32,
+                    scrollbar_hovered: bool| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
             let radius = 8.0 * scale;
@@ -731,7 +734,12 @@ impl FileSelectBuilder {
 
             // Scrollbar
             if filtered_entries.len() > visible_items {
-                let scrollbar_x = main_x + main_w as i32 - (8.0 * scale) as i32;
+                let scrollbar_width = if scrollbar_hovered {
+                    12.0 * scale
+                } else {
+                    8.0 * scale
+                };
+                let scrollbar_x = main_x + main_w as i32 - scrollbar_width as i32;
                 let scrollbar_h = list_h as f32;
                 let thumb_h = (visible_items as f32 / filtered_entries.len() as f32 * scrollbar_h)
                     .max(20.0 * scale);
@@ -741,7 +749,7 @@ impl FileSelectBuilder {
                 canvas.fill_rounded_rect(
                     scrollbar_x as f32,
                     list_y as f32,
-                    6.0 * scale,
+                    scrollbar_width - 2.0 * scale,
                     scrollbar_h,
                     3.0 * scale,
                     darken(colors.input_bg, 0.05),
@@ -750,10 +758,14 @@ impl FileSelectBuilder {
                 canvas.fill_rounded_rect(
                     scrollbar_x as f32,
                     list_y as f32 + thumb_y,
-                    6.0 * scale,
+                    scrollbar_width - 2.0 * scale,
                     thumb_h,
                     3.0 * scale,
-                    colors.input_border,
+                    if scrollbar_hovered {
+                        colors.input_border_focused
+                    } else {
+                        colors.input_border
+                    },
                 );
             }
 
@@ -800,6 +812,7 @@ impl FileSelectBuilder {
             &mounted_drives,
             hovered_drive,
             scale,
+            scrollbar_hovered,
         );
         window.set_contents(&canvas)?;
         window.show()?;
@@ -898,9 +911,23 @@ impl FileSelectBuilder {
                             }
                         }
 
-                        // Check file list hover
-                        if mouse_x >= main_x
+                        // Check file list hover (only if not over scrollbar)
+                        let scrollbar_width = if scrollbar_hovered {
+                            12.0 * scale
+                        } else {
+                            8.0 * scale
+                        };
+                        let scrollbar_x = main_x + main_w as i32 - scrollbar_width as i32;
+
+                        // Update scrollbar hover state
+                        scrollbar_hovered = mouse_x >= scrollbar_x
                             && mouse_x < main_x + main_w as i32
+                            && mouse_y >= list_y
+                            && mouse_y < list_y + list_h as i32
+                            && !filtered_entries.is_empty();
+
+                        if mouse_x >= main_x
+                            && mouse_x < scrollbar_x
                             && mouse_y >= list_y
                             && mouse_y < list_y + list_h as i32
                         {
@@ -920,17 +947,27 @@ impl FileSelectBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
-                    // Check for scrollbar thumb click
-                    if !filtered_entries.is_empty() {
-                        let scrollbar_x = main_x + main_w as i32 - (8.0 * scale) as i32;
-                        let scrollbar_y = list_y;
-                        let scrollbar_h = list_h as i32;
+                    clicking_scrollbar = false;
 
-                        if mouse_x >= main_x
+                    // Check if clicking anywhere in scrollbar area (thumb OR track)
+                    if !filtered_entries.is_empty() {
+                        let scrollbar_width = if scrollbar_hovered {
+                            12.0 * scale
+                        } else {
+                            8.0 * scale
+                        };
+                        let scrollbar_x = main_x + main_w as i32 - scrollbar_width as i32;
+
+                        // Block all clicks in scrollbar area
+                        if mouse_x >= scrollbar_x
                             && mouse_x < main_x + main_w as i32
                             && mouse_y >= list_y
                             && mouse_y < list_y + list_h as i32
                         {
+                            clicking_scrollbar = true;
+
+                            // Now check if clicking specifically on the thumb for dragging
+                            let scrollbar_y = list_y;
                             let visible_items = (list_h / item_height) as usize;
                             let total_items = filtered_entries.len();
 
@@ -953,7 +990,7 @@ impl FileSelectBuilder {
 
                                 let rel_y = mouse_y - scrollbar_y;
                                 if mouse_x >= scrollbar_x
-                                    && mouse_x < scrollbar_x + (6.0 * scale) as i32
+                                    && mouse_x < scrollbar_x + scrollbar_width as i32
                                     && rel_y >= scrollbar_y as i32 + thumb_y
                                     && rel_y < scrollbar_y as i32 + thumb_y + thumb_h
                                 {
@@ -1080,88 +1117,90 @@ impl FileSelectBuilder {
                     }
 
                     // Quick access click
-                    if let Some(idx) = hovered_quick_access {
-                        let qa = &quick_access[idx];
-                        navigate_to_directory(
-                            qa.path.clone(),
-                            &mut current_dir,
-                            &mut history,
-                            &mut history_index,
-                            &mut all_entries,
-                            self.directory,
-                            show_hidden,
-                            &search_text,
-                            &mut filtered_entries,
-                            &mut selected_indices,
-                            &mut scroll_offset,
-                            &self.filters,
-                        );
-                        needs_redraw = true;
-                    }
+                    if !clicking_scrollbar {
+                        if let Some(idx) = hovered_quick_access {
+                            let qa = &quick_access[idx];
+                            navigate_to_directory(
+                                qa.path.clone(),
+                                &mut current_dir,
+                                &mut history,
+                                &mut history_index,
+                                &mut all_entries,
+                                self.directory,
+                                show_hidden,
+                                &search_text,
+                                &mut filtered_entries,
+                                &mut selected_indices,
+                                &mut scroll_offset,
+                                &self.filters,
+                            );
+                            needs_redraw = true;
+                        }
 
-                    // Drive click
-                    if let Some(idx) = hovered_drive {
-                        let drive = &mounted_drives[idx];
-                        navigate_to_directory(
-                            drive.mount_point.clone(),
-                            &mut current_dir,
-                            &mut history,
-                            &mut history_index,
-                            &mut all_entries,
-                            self.directory,
-                            show_hidden,
-                            &search_text,
-                            &mut filtered_entries,
-                            &mut selected_indices,
-                            &mut scroll_offset,
-                            &self.filters,
-                        );
-                        needs_redraw = true;
-                    }
+                        // Drive click
+                        if let Some(idx) = hovered_drive {
+                            let drive = &mounted_drives[idx];
+                            navigate_to_directory(
+                                drive.mount_point.clone(),
+                                &mut current_dir,
+                                &mut history,
+                                &mut history_index,
+                                &mut all_entries,
+                                self.directory,
+                                show_hidden,
+                                &search_text,
+                                &mut filtered_entries,
+                                &mut selected_indices,
+                                &mut scroll_offset,
+                                &self.filters,
+                            );
+                            needs_redraw = true;
+                        }
 
-                    // File list click
-                    if let Some(ei) = hovered_entry {
-                        if self.multiple {
-                            // Toggle selection in multiple mode
-                            if selected_indices.contains(&ei) {
-                                selected_indices.remove(&ei);
-                            } else {
-                                selected_indices.insert(ei);
-                            }
-                        } else {
-                            // Single click - activate if already selected (double click behavior)
-                            if selected_indices.contains(&ei) {
-                                let entry = &all_entries[ei];
-                                if entry.is_dir {
-                                    navigate_to(
-                                        entry.path.clone(),
-                                        &mut current_dir,
-                                        &mut history,
-                                        &mut history_index,
-                                    );
-                                    load_directory(
-                                        &current_dir,
-                                        &mut all_entries,
-                                        self.directory,
-                                        show_hidden,
-                                    );
-                                    update_filtered(
-                                        &all_entries,
-                                        &search_text,
-                                        &mut filtered_entries,
-                                        &self.filters,
-                                    );
-                                    selected_indices.clear();
-                                    scroll_offset = 0;
-                                } else if !self.directory {
-                                    return Ok(FileSelectResult::Selected(entry.path.clone()));
+                        // File list click
+                        if let Some(ei) = hovered_entry {
+                            if self.multiple {
+                                // Toggle selection in multiple mode
+                                if selected_indices.contains(&ei) {
+                                    selected_indices.remove(&ei);
+                                } else {
+                                    selected_indices.insert(ei);
                                 }
                             } else {
-                                selected_indices.clear();
-                                selected_indices.insert(ei);
+                                // Single click - activate if already selected (double click behavior)
+                                if selected_indices.contains(&ei) {
+                                    let entry = &all_entries[ei];
+                                    if entry.is_dir {
+                                        navigate_to(
+                                            entry.path.clone(),
+                                            &mut current_dir,
+                                            &mut history,
+                                            &mut history_index,
+                                        );
+                                        load_directory(
+                                            &current_dir,
+                                            &mut all_entries,
+                                            self.directory,
+                                            show_hidden,
+                                        );
+                                        update_filtered(
+                                            &all_entries,
+                                            &search_text,
+                                            &mut filtered_entries,
+                                            &self.filters,
+                                        );
+                                        selected_indices.clear();
+                                        scroll_offset = 0;
+                                    } else if !self.directory {
+                                        return Ok(FileSelectResult::Selected(entry.path.clone()));
+                                    }
+                                } else {
+                                    selected_indices.clear();
+                                    selected_indices.insert(ei);
+                                }
                             }
+                            needs_redraw = true;
                         }
-                        needs_redraw = true;
                     }
 
                     // Search input focus
@@ -1486,6 +1525,7 @@ impl FileSelectBuilder {
                     &mounted_drives,
                     hovered_drive,
                     scale,
+                    scrollbar_hovered,
                 );
                 window.set_contents(&canvas)?;
             }
