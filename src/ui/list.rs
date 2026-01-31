@@ -174,16 +174,23 @@ impl ListBuilder {
         };
 
         // Columns - skip first column header for checklist/radiolist
-        let all_columns: Vec<&str> = match self.mode {
+        // (first column is the checkbox, but we keep it for display)
+        let (checkbox_column_header, all_columns): (Option<String>, Vec<&str>) = match self.mode {
             ListMode::Checklist | ListMode::Radiolist => {
-                if !self.columns.is_empty() {
+                let checkbox_header = if !self.columns.is_empty() {
+                    Some(self.columns[0].clone())
+                } else {
+                    None
+                };
+                let data_columns = if !self.columns.is_empty() {
                     self.columns[1..].iter().map(|s| s.as_str()).collect()
                 } else {
                     vec![]
-                }
+                };
+                (checkbox_header, data_columns)
             }
             ListMode::Single | ListMode::Multiple => {
-                self.columns.iter().map(|s| s.as_str()).collect()
+                (None, self.columns.iter().map(|s| s.as_str()).collect())
             }
         };
 
@@ -225,6 +232,9 @@ impl ListBuilder {
         let num_cols = columns.len().max(1);
         let num_rows = rows.len();
 
+        // Column gap for separation (in logical units at scale 1.0)
+        let logical_column_gap = 16u32;
+
         // First pass: calculate LOGICAL dimensions using scale 1.0
         let temp_font = Font::load(1.0);
 
@@ -244,14 +254,16 @@ impl ListBuilder {
         }
         drop(temp_font);
 
-        // Calculate logical total width
+        // Calculate logical total width (including gaps between columns)
         let logical_checkbox_col = if self.mode != ListMode::Single {
             BASE_CHECKBOX_SIZE + 16
         } else {
             0
         };
-        let logical_content_width: u32 =
-            logical_col_widths.iter().sum::<u32>() + logical_checkbox_col;
+        let num_gaps = if num_cols > 0 { num_cols - 1 } else { 0 };
+        let logical_content_width: u32 = logical_col_widths.iter().sum::<u32>()
+            + logical_checkbox_col
+            + (num_gaps as u32 * logical_column_gap);
         let calc_width =
             (logical_content_width + BASE_PADDING * 2).clamp(BASE_MIN_WIDTH, BASE_MAX_WIDTH);
 
@@ -326,7 +338,27 @@ impl ListBuilder {
         };
         let list_height = (logical_list_height as f32 * scale) as u32;
 
-        let total_content_width = checkbox_col + col_widths.iter().sum::<u32>();
+        // Calculate total content width including column gaps
+        let column_gap = (16.0 * scale) as u32;
+        let num_gaps = if col_widths.len() > 0 {
+            col_widths.len() - 1
+        } else {
+            0
+        };
+        // Add extra gap after checkbox column for checklist/radiolist modes
+        let checkbox_gap = if self.mode == ListMode::Checklist || self.mode == ListMode::Radiolist {
+            if !col_widths.is_empty() {
+                column_gap
+            } else {
+                0
+            }
+        } else {
+            0
+        };
+        let total_content_width = checkbox_col
+            + checkbox_gap
+            + col_widths.iter().sum::<u32>()
+            + (num_gaps as u32 * column_gap);
 
         // Create buttons at physical scale
         let mut ok_button = Button::new("OK", &font, scale);
@@ -339,8 +371,15 @@ impl ListBuilder {
             y += text_height as i32 + (8.0 * scale) as i32;
         }
 
+        // Add title height if present
+        let title_height = if self.title.is_empty() {
+            0
+        } else {
+            (24.0 * scale + 8.0 * scale) as u32
+        };
+
         let list_x = padding as i32;
-        let list_y = y;
+        let list_y = y + title_height as i32;
         let list_w = physical_width - padding * 2;
         let list_h = list_height;
         let visible_rows = (list_h / row_height) as usize;
@@ -380,7 +419,9 @@ impl ListBuilder {
                     list_canvas: &mut Canvas,
                     colors: &Colors,
                     font: &Font,
+                    title: &str,
                     text: &str,
+                    checkbox_column_header: &Option<String>,
                     columns: &[&str],
                     rows: &[Vec<String>],
                     col_widths: &[u32],
@@ -420,6 +461,17 @@ impl ListBuilder {
                 radius,
             );
 
+            // Draw title if present
+            if !title.is_empty() {
+                // Render title with larger font (1.5x normal size)
+                let title_font_size = 18.0 * 1.5 * scale;
+                let title_font = Font::load_with_size(title_font_size);
+                let title_rendered = title_font.render(title).with_color(colors.text).finish();
+                let title_x = (width as i32 - title_rendered.width() as i32) / 2;
+                let title_y = padding as i32;
+                canvas.draw_canvas(&title_rendered, title_x, title_y);
+            }
+
             // Draw text prompt
             if !text.is_empty() {
                 let tc = font.render(text).with_color(colors.text).finish();
@@ -433,15 +485,34 @@ impl ListBuilder {
 
             // Draw header if columns exist
             let mut data_y_local = 0i32;
-            if !columns.is_empty() {
+            if !columns.is_empty() || checkbox_column_header.is_some() {
                 let header_bg = darken(colors.input_bg, 0.05);
                 list_canvas.fill_rect(0.0, 0.0, list_w as f32, row_height as f32, header_bg);
 
-                let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
+                let mut cx = -(h_scroll_offset as i32);
+
+                // Draw checkbox column header if present
+                if let Some(header) = checkbox_column_header {
+                    let tc = font.render(header).with_color(rgb(140, 140, 140)).finish();
+                    list_canvas.draw_canvas(&tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
+                    cx = checkbox_col as i32 - h_scroll_offset as i32;
+                } else {
+                    cx = checkbox_col as i32 - h_scroll_offset as i32;
+                }
+
+                let column_gap = (16.0 * scale) as i32;
+                // Add gap after checkbox column if there are data columns
+                if !columns.is_empty() && checkbox_column_header.is_some() {
+                    cx += column_gap;
+                }
                 for (i, col) in columns.iter().enumerate() {
                     let tc = font.render(col).with_color(rgb(140, 140, 140)).finish();
                     list_canvas.draw_canvas(&tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
                     cx += col_widths.get(i).copied().unwrap_or((100.0 * scale) as u32) as i32;
+                    // Add gap between columns
+                    if i < columns.len() - 1 {
+                        cx += column_gap;
+                    }
                 }
 
                 // Separator
@@ -519,6 +590,14 @@ impl ListBuilder {
 
                 // Cell values
                 let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
+                let column_gap = (16.0 * scale) as i32;
+                // Add gap after checkbox column if there are data columns
+                if !row.is_empty()
+                    && self.mode != ListMode::Single
+                    && self.mode != ListMode::Multiple
+                {
+                    cx += column_gap;
+                }
                 for (ci, cell) in row.iter().enumerate() {
                     if ci < col_widths.len() {
                         let text_color = if is_selected {
@@ -533,6 +612,10 @@ impl ListBuilder {
                             ry + (6.0 * scale) as i32,
                         );
                         cx += col_widths[ci] as i32;
+                        // Add gap between columns
+                        if ci < row.len() - 1 {
+                            cx += column_gap;
+                        }
                     }
                 }
             }
@@ -652,7 +735,9 @@ impl ListBuilder {
             &mut list_canvas,
             colors,
             &font,
+            &self.title,
             &self.text,
+            &checkbox_column_header,
             &columns,
             &display_rows,
             &col_widths,
@@ -1271,7 +1356,9 @@ impl ListBuilder {
                     &mut list_canvas,
                     colors,
                     &font,
+                    &self.title,
                     &self.text,
+                    &checkbox_column_header,
                     &columns,
                     &display_rows,
                     &col_widths,
