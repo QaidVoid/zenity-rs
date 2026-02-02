@@ -268,6 +268,7 @@ impl ListBuilder {
             (logical_content_width + BASE_PADDING * 2).clamp(BASE_MIN_WIDTH, BASE_MAX_WIDTH);
 
         // Calculate logical height
+        let logical_title_height = if self.title.is_empty() { 0 } else { 32 };
         let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
         let logical_header_height = if columns.is_empty() {
             0
@@ -277,6 +278,7 @@ impl ListBuilder {
         let logical_list_height =
             (num_rows as u32 * BASE_ROW_HEIGHT).clamp(BASE_ROW_HEIGHT * 3, BASE_MAX_HEIGHT - 100);
         let calc_height = (BASE_PADDING * 2
+            + logical_title_height
             + logical_text_height
             + logical_header_height
             + logical_list_height
@@ -366,20 +368,31 @@ impl ListBuilder {
 
         // Layout in physical coordinates
         let mut y = padding as i32;
-        let text_y = y;
-        if !self.text.is_empty() {
-            y += text_height as i32 + (8.0 * scale) as i32;
-        }
 
-        // Add title height if present
+        // Calculate title height first
         let title_height = if self.title.is_empty() {
             0
         } else {
             (24.0 * scale + 8.0 * scale) as u32
         };
 
+        // Position text below title (if both present)
+        let text_y = if self.text.is_empty() {
+            y
+        } else {
+            y + title_height as i32
+        };
+
+        // Update y position after both title and text
+        if !self.title.is_empty() {
+            y += title_height as i32;
+        }
+        if !self.text.is_empty() {
+            y += text_height as i32 + (8.0 * scale) as i32;
+        }
+
         let list_x = padding as i32;
-        let list_y = y + title_height as i32;
+        let list_y = y;
         let list_w = physical_width - padding * 2;
         let list_h = list_height;
         let visible_rows = (list_h / row_height) as usize;
