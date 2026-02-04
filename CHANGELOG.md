@@ -1,4 +1,16 @@
 
+## [0.2.0](https://github.com/QaidVoid/zenity-rs/compare/v0.1.12...v0.2.0) - 2026-02-04
+
+### Added
+
+- Add --confirm-overwrite flag for compatibility - ([8b9d2a3](https://github.com/QaidVoid/zenity-rs/commit/8b9d2a3cf6714f55550ad3b69fcf64a962e3c5b2))
+- Improve button layout and reduce default dialog size - ([24ba3ea](https://github.com/QaidVoid/zenity-rs/commit/24ba3ea4fdeba653a223701a3fe5a4839a7a895d))
+- Add support for --switch, --extra-button, --icon - ([583fd72](https://github.com/QaidVoid/zenity-rs/commit/583fd72fb2ae99cf4505901de74d73520092373f))
+
+### Other
+
+- Improve help text alignment - ([a446a13](https://github.com/QaidVoid/zenity-rs/commit/a446a13369ec0c8b236d170714148ca6af65bcb0))
+
 ## [0.1.12](https://github.com/QaidVoid/zenity-rs/compare/v0.1.11...v0.1.12) - 2026-02-04
 
 ### Fixed
