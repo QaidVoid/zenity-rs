@@ -107,32 +107,52 @@ pub fn detect_theme() -> &'static Colors {
 }
 
 /// Icon types for message dialogs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Icon {
     Info,
     Warning,
     Error,
     Question,
+    Custom(String),
+}
+
+impl Icon {
+    /// Map zenity icon names to Icon variants
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "dialog-information" | "info" => Some(Icon::Info),
+            "dialog-warning" | "warning" => Some(Icon::Warning),
+            "dialog-error" | "error" => Some(Icon::Error),
+            "dialog-question" | "question" => Some(Icon::Question),
+            other => Some(Icon::Custom(other.to_string())),
+        }
+    }
 }
 
 /// Button presets for message dialogs.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ButtonPreset {
     Ok,
     OkCancel,
     YesNo,
     YesNoCancel,
     Close,
+    Empty,
+    Custom(Vec<String>),
 }
 
 impl ButtonPreset {
-    pub fn labels(self) -> &'static [&'static str] {
+    pub fn labels(&self) -> Vec<String> {
         match self {
-            ButtonPreset::Ok => &["OK"],
-            ButtonPreset::OkCancel => &["OK", "Cancel"],
-            ButtonPreset::YesNo => &["Yes", "No"],
-            ButtonPreset::YesNoCancel => &["Yes", "No", "Cancel"],
-            ButtonPreset::Close => &["Close"],
+            ButtonPreset::Ok => vec!["OK".to_string()],
+            ButtonPreset::OkCancel => vec!["OK".to_string(), "Cancel".to_string()],
+            ButtonPreset::YesNo => vec!["Yes".to_string(), "No".to_string()],
+            ButtonPreset::YesNoCancel => {
+                vec!["Yes".to_string(), "No".to_string(), "Cancel".to_string()]
+            }
+            ButtonPreset::Close => vec!["Close".to_string()],
+            ButtonPreset::Empty => vec![],
+            ButtonPreset::Custom(labels) => labels.clone(),
         }
     }
 }

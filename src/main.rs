@@ -11,6 +11,106 @@ use zenity_rs::{
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+fn handle_message_result(
+    result: zenity_rs::DialogResult,
+    extra_buttons: &[String],
+    default_cancel_index: Option<usize>,
+) -> i32 {
+    match result {
+        zenity_rs::DialogResult::Button(idx) => {
+            if idx < extra_buttons.len() {
+                // Extra button clicked - print the label and return exit code 1
+                println!("{}", extra_buttons[idx]);
+                1
+            } else if let Some(cancel_idx) = default_cancel_index {
+                if idx == cancel_idx {
+                    // Default cancel button (or No button) clicked
+                    1
+                } else {
+                    // Default OK (or Yes) button clicked
+                    0
+                }
+            } else {
+                // No cancel button, so first button is OK
+                if idx == 0 { 0 } else { 1 }
+            }
+        }
+        zenity_rs::DialogResult::Closed => 255,
+        zenity_rs::DialogResult::Timeout => 5,
+    }
+}
+
+fn get_icon(icon_name: &Option<String>, default: Icon) -> Icon {
+    match icon_name {
+        None => default,
+        Some(name) => Icon::from_name(name).unwrap_or(default),
+    }
+}
+
+fn get_button_preset(
+    ok_label: &str,
+    cancel_label: &str,
+    _extra_buttons: &[String],
+    switch_mode: bool,
+    default: ButtonPreset,
+) -> ButtonPreset {
+    if switch_mode {
+        return ButtonPreset::Empty;
+    }
+    if !ok_label.is_empty() || !cancel_label.is_empty() {
+        let mut labels = Vec::new();
+        if !ok_label.is_empty() {
+            labels.push(ok_label.to_string());
+        }
+        if !cancel_label.is_empty() {
+            labels.push(cancel_label.to_string());
+        }
+        if !labels.is_empty() {
+            return ButtonPreset::Custom(labels);
+        }
+    }
+    default
+}
+
+fn apply_message_options(
+    builder: zenity_rs::MessageBuilder,
+    timeout: Option<u32>,
+    width: Option<u32>,
+    height: Option<u32>,
+    no_wrap: bool,
+    no_markup: bool,
+    ellipsize: bool,
+    switch_mode: bool,
+    _extra_buttons: &[String],
+) -> zenity_rs::MessageBuilder {
+    let mut builder = builder;
+    if let Some(t) = timeout {
+        builder = builder.timeout(t);
+    }
+    if let Some(w) = width {
+        builder = builder.width(w);
+    }
+    if let Some(h) = height {
+        builder = builder.height(h);
+    }
+    if no_wrap {
+        builder = builder.no_wrap(true);
+    }
+    if no_markup {
+        builder = builder.no_markup(true);
+    }
+    if ellipsize {
+        builder = builder.ellipsize(true);
+    }
+    if switch_mode {
+        builder = builder.switch(true);
+    }
+    for btn in _extra_buttons {
+        builder = builder.extra_button(btn);
+    }
+    builder
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => ExitCode::from(code as u8),
@@ -77,6 +177,15 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut form_entries: Vec<String> = Vec::new();
     let mut form_passwords: Vec<String> = Vec::new();
 
+    // Message dialog options
+    let mut icon_name: Option<String> = None;
+    let mut no_markup = false;
+    let mut ellipsize = false;
+    let mut switch_mode = false;
+    let mut extra_buttons: Vec<String> = Vec::new();
+    let mut ok_label = String::new();
+    let mut cancel_label = String::new();
+
     // Dialog type
     let mut dialog_type: Option<DialogType> = None;
 
@@ -120,6 +229,13 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("width") => width = Some(parser.value()?.string()?.parse()?),
             Long("height") => height = Some(parser.value()?.string()?.parse()?),
             Long("no-wrap") => no_wrap = true,
+            Long("no-markup") => no_markup = true,
+            Long("ellipsize") => ellipsize = true,
+            Long("icon-name") | Long("icon") => icon_name = Some(parser.value()?.string()?),
+            Long("switch") => switch_mode = true,
+            Long("extra-button") => extra_buttons.push(parser.value()?.string()?),
+            Long("ok-label") => ok_label = parser.value()?.string()?,
+            Long("cancel-label") => cancel_label = parser.value()?.string()?,
             Long("separator") => separator = parser.value()?.string()?,
 
             // Progress options
@@ -214,92 +330,116 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // Build and show the dialog
     match dialog_type {
         DialogType::Info => {
-            let mut builder = message()
+            let builder = message()
                 .title(if title.is_empty() {
                     "Information"
                 } else {
                     &title
                 })
                 .text(&text)
-                .icon(Icon::Info)
-                .buttons(ButtonPreset::Ok);
-            if let Some(t) = timeout {
-                builder = builder.timeout(t);
-            }
-            if let Some(w) = width {
-                builder = builder.width(w);
-            }
-            if let Some(h) = height {
-                builder = builder.height(h);
-            }
-            if no_wrap {
-                builder = builder.no_wrap(true);
-            }
+                .icon(get_icon(&icon_name, Icon::Info))
+                .buttons(get_button_preset(
+                    &ok_label,
+                    &cancel_label,
+                    &extra_buttons,
+                    switch_mode,
+                    ButtonPreset::Ok,
+                ));
+            let builder = apply_message_options(
+                builder,
+                timeout,
+                width,
+                height,
+                no_wrap,
+                no_markup,
+                ellipsize,
+                switch_mode,
+                &extra_buttons,
+            );
             let result = builder.show()?;
-            Ok(result.exit_code())
+            Ok(handle_message_result(result, &extra_buttons, None))
         }
         DialogType::Warning => {
-            let mut builder = message()
+            let builder = message()
                 .title(if title.is_empty() { "Warning" } else { &title })
                 .text(&text)
-                .icon(Icon::Warning)
-                .buttons(ButtonPreset::Ok);
-            if let Some(t) = timeout {
-                builder = builder.timeout(t);
-            }
-            if let Some(w) = width {
-                builder = builder.width(w);
-            }
-            if let Some(h) = height {
-                builder = builder.height(h);
-            }
-            if no_wrap {
-                builder = builder.no_wrap(true);
-            }
+                .icon(get_icon(&icon_name, Icon::Warning))
+                .buttons(get_button_preset(
+                    &ok_label,
+                    &cancel_label,
+                    &extra_buttons,
+                    switch_mode,
+                    ButtonPreset::Ok,
+                ));
+            let builder = apply_message_options(
+                builder,
+                timeout,
+                width,
+                height,
+                no_wrap,
+                no_markup,
+                ellipsize,
+                switch_mode,
+                &extra_buttons,
+            );
             let result = builder.show()?;
-            Ok(result.exit_code())
+            Ok(handle_message_result(result, &extra_buttons, None))
         }
         DialogType::Error => {
-            let mut builder = message()
+            let builder = message()
                 .title(if title.is_empty() { "Error" } else { &title })
                 .text(&text)
-                .icon(Icon::Error)
-                .buttons(ButtonPreset::Ok);
-            if let Some(t) = timeout {
-                builder = builder.timeout(t);
-            }
-            if let Some(w) = width {
-                builder = builder.width(w);
-            }
-            if let Some(h) = height {
-                builder = builder.height(h);
-            }
-            if no_wrap {
-                builder = builder.no_wrap(true);
-            }
+                .icon(get_icon(&icon_name, Icon::Error))
+                .buttons(get_button_preset(
+                    &ok_label,
+                    &cancel_label,
+                    &extra_buttons,
+                    switch_mode,
+                    ButtonPreset::Ok,
+                ));
+            let builder = apply_message_options(
+                builder,
+                timeout,
+                width,
+                height,
+                no_wrap,
+                no_markup,
+                ellipsize,
+                switch_mode,
+                &extra_buttons,
+            );
             let result = builder.show()?;
-            Ok(result.exit_code())
+            Ok(handle_message_result(result, &extra_buttons, None))
         }
         DialogType::Question => {
-            let mut builder = message()
+            let builder = message()
                 .title(if title.is_empty() { "Question" } else { &title })
                 .text(&text)
-                .icon(Icon::Question)
-                .buttons(ButtonPreset::YesNo);
-            if let Some(t) = timeout {
-                builder = builder.timeout(t);
-            }
-            if let Some(w) = width {
-                builder = builder.width(w);
-            }
-            if let Some(h) = height {
-                builder = builder.height(h);
-            }
-            if no_wrap {
-                builder = builder.no_wrap(true);
-            }
+                .icon(get_icon(&icon_name, Icon::Question))
+                .buttons(get_button_preset(
+                    &ok_label,
+                    &cancel_label,
+                    &extra_buttons,
+                    switch_mode,
+                    ButtonPreset::YesNo,
+                ));
+            let builder = apply_message_options(
+                builder,
+                timeout,
+                width,
+                height,
+                no_wrap,
+                no_markup,
+                ellipsize,
+                switch_mode,
+                &extra_buttons,
+            );
             let result = builder.show()?;
-            Ok(result.exit_code())
+            Ok(handle_message_result(
+                result,
+                &extra_buttons,
+                Some(1 + extra_buttons.len()),
+            ))
         }
         DialogType::Entry => {
             let mut builder = entry()
@@ -660,24 +800,36 @@ fn print_help() {
 USAGE:
     zenity-rs --<dialog-type> [OPTIONS] [VALUES...]
 
- COMMON OPTIONS:
+  COMMON OPTIONS:
     --title=TEXT        Set the dialog title
     --text=TEXT         Set the dialog text/prompt
     --width=N           Set the dialog width (minimum when --no-wrap is used)
     --height=N          Set the dialog height
     --no-wrap          Do not wrap text (width becomes minimum, content can expand)
+    --icon=ICON        Set the icon name (e.g., dialog-information, dialog-warning)
+    --ok-label=TEXT    Set the label of the OK button
+    --cancel-label=TEXT Set the label of the Cancel button
+    --extra-button=TEXT Add an extra button (outputs label text, exit code 1+)
+    --switch           Suppress OK/Cancel buttons, only show extra buttons
+    --no-markup        Do not enable pango markup (for compatibility)
+    --ellipsize        Enable ellipsizing in dialog text (for compatibility)
     -h, --help          Print this help message
     --version           Print version information
 
- DIALOG TYPES AND OPTIONS:
+  DIALOG TYPES AND OPTIONS:
 
-  Message Dialogs:
+   Message Dialogs:
     --info              Display an information dialog
     --warning           Display a warning dialog
     --error             Display an error dialog
     --question          Display a question dialog (Yes/No)
       --timeout=N       Auto-close after N seconds (exit code 5)
       --no-wrap        Do not wrap text (width becomes minimum, content can expand)
+      --icon=ICON      Set the icon name (also accepts --icon-name for compatibility)
+      --switch         Only show extra buttons (suppress OK/Cancel)
+      --extra-button=TEXT Add extra buttons
+      --no-markup      Do not enable pango markup (for compatibility)
+      --ellipsize      Enable ellipsizing in dialog text (for compatibility)
 
   --entry               Display a text entry dialog
     --entry-text=TEXT Set default text

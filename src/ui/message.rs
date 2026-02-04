@@ -28,6 +28,10 @@ pub struct MessageBuilder {
     width: Option<u32>,
     height: Option<u32>,
     no_wrap: bool,
+    no_markup: bool,
+    ellipsize: bool,
+    switch: bool,
+    extra_buttons: Vec<String>,
     colors: Option<&'static Colors>,
 }
 
@@ -42,6 +46,10 @@ impl MessageBuilder {
             width: None,
             height: None,
             no_wrap: false,
+            no_markup: false,
+            ellipsize: false,
+            switch: false,
+            extra_buttons: Vec::new(),
             colors: None,
         }
     }
@@ -92,12 +100,40 @@ impl MessageBuilder {
         self
     }
 
+    pub fn no_markup(mut self, no_markup: bool) -> Self {
+        self.no_markup = no_markup;
+        self
+    }
+
+    pub fn ellipsize(mut self, ellipsize: bool) -> Self {
+        self.ellipsize = ellipsize;
+        self
+    }
+
+    pub fn switch(mut self, switch: bool) -> Self {
+        self.switch = switch;
+        self
+    }
+
+    pub fn extra_button(mut self, label: &str) -> Self {
+        self.extra_buttons.push(label.to_string());
+        self
+    }
+
     pub fn show(self) -> Result<DialogResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // First pass: calculate LOGICAL dimensions using a temporary font at scale 1.0
         let temp_font = Font::load(1.0);
-        let labels = self.buttons.labels();
+        let mut labels = self.buttons.labels();
+
+        // Apply --switch mode: if switch is true, use only extra buttons
+        if self.switch {
+            labels = self.extra_buttons.clone();
+        } else {
+            // Append extra buttons to preset buttons
+            labels.extend(self.extra_buttons.clone());
+        }
 
         // Calculate logical button widths
         let temp_buttons: Vec<Button> = labels
@@ -194,13 +230,16 @@ impl MessageBuilder {
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);
 
+        // Clone icon for multiple uses
+        let icon = self.icon.clone();
+
         // Initial draw
         draw_dialog(
             &mut canvas,
             colors,
             &font,
             &self.text,
-            self.icon,
+            icon.clone(),
             &buttons,
             text_canvas.height(),
             max_text_width,
@@ -247,7 +286,7 @@ impl MessageBuilder {
                         colors,
                         &font,
                         &self.text,
-                        self.icon,
+                        icon.clone(),
                         &buttons,
                         text_canvas.height(),
                         max_text_width,
@@ -311,7 +350,7 @@ impl MessageBuilder {
                     colors,
                     &font,
                     &self.text,
-                    self.icon,
+                    icon.clone(),
                     &buttons,
                     text_canvas.height(),
                     max_text_width,
@@ -390,10 +429,11 @@ fn draw_icon(canvas: &mut Canvas, x: i32, y: i32, icon: Icon, scale: f32) {
     let inset = 4.0 * scale;
 
     let (color, shape) = match icon {
-        Icon::Info => (rgb(66, 133, 244), IconShape::Circle), // Blue
-        Icon::Warning => (rgb(251, 188, 4), IconShape::Triangle), // Yellow
-        Icon::Error => (rgb(234, 67, 53), IconShape::Circle), // Red
-        Icon::Question => (rgb(52, 168, 83), IconShape::Circle), // Green
+        Icon::Info => (rgb(66, 133, 244), IconShape::Circle),
+        Icon::Warning => (rgb(251, 188, 4), IconShape::Triangle),
+        Icon::Error => (rgb(234, 67, 53), IconShape::Circle),
+        Icon::Question => (rgb(52, 168, 83), IconShape::Circle),
+        Icon::Custom(_) => (rgb(100, 100, 100), IconShape::Circle),
     };
 
     let cx = x as f32 + icon_size as f32 / 2.0;
@@ -453,6 +493,7 @@ fn draw_icon(canvas: &mut Canvas, x: i32, y: i32, icon: Icon, scale: f32) {
         Icon::Warning => "!",
         Icon::Error => "X",
         Icon::Question => "?",
+        Icon::Custom(_) => "i",
     };
 
     let font = Font::load(scale);
