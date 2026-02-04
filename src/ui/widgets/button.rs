@@ -55,6 +55,11 @@ impl Button {
         clicked
     }
 
+    /// Set the button width.
+    pub fn set_width(&mut self, width: u32) {
+        self.width = width;
+    }
+
     /// Draws the button to a canvas.
     pub fn draw_to(&self, canvas: &mut Canvas, colors: &Colors, font: &Font) {
         // Determine button color based on state

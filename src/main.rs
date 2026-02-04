@@ -19,8 +19,10 @@ fn handle_message_result(
     match result {
         zenity_rs::DialogResult::Button(idx) => {
             if idx < extra_buttons.len() {
-                // Extra button clicked - print the label and return exit code 1
-                println!("{}", extra_buttons[idx]);
+                // Extra button clicked - labels are reversed in positioning
+                // so we need to reverse the index to get the correct label
+                let reversed_idx = extra_buttons.len() - 1 - idx;
+                println!("{}", extra_buttons[reversed_idx]);
                 1
             } else if let Some(cancel_idx) = default_cancel_index {
                 if idx == cancel_idx {

@@ -15,8 +15,8 @@ use crate::{
 const BASE_ICON_SIZE: u32 = 48;
 const BASE_PADDING: u32 = 20;
 const BASE_BUTTON_SPACING: u32 = 10;
-const BASE_MIN_WIDTH: u32 = 300;
-const BASE_MAX_TEXT_WIDTH: f32 = 350.0;
+const BASE_MIN_WIDTH: u32 = 150;
+const BASE_MAX_TEXT_WIDTH: f32 = 150.0;
 
 /// Message dialog builder.
 pub struct MessageBuilder {
@@ -135,13 +135,30 @@ impl MessageBuilder {
             labels.extend(self.extra_buttons.clone());
         }
 
-        // Calculate logical button widths
+        // Reverse labels so that when we position them right-to-left,
+        // the last buttons (standard Yes/No) appear on the right
+        labels.reverse();
+
+        // Calculate logical button widths and determine layout
         let temp_buttons: Vec<Button> = labels
             .iter()
             .map(|l| Button::new(l, &temp_font, 1.0))
             .collect();
-        let logical_buttons_width: u32 = temp_buttons.iter().map(|b| b.width()).sum::<u32>()
+
+        // Calculate total width if all buttons are in one row
+        let total_buttons_width: u32 = temp_buttons.iter().map(|b| b.width()).sum::<u32>()
             + (temp_buttons.len().saturating_sub(1) as u32 * BASE_BUTTON_SPACING);
+
+        // Determine button layout: vertical if they don't fit, horizontal if they do
+        let available_width = BASE_MAX_TEXT_WIDTH as u32 + BASE_PADDING * 2;
+        let use_vertical_layout = total_buttons_width > available_width || temp_buttons.len() > 3;
+
+        let logical_buttons_width = if use_vertical_layout {
+            // For vertical layout, width is just the widest button
+            temp_buttons.iter().map(|b| b.width()).max().unwrap_or(0)
+        } else {
+            total_buttons_width
+        };
 
         let logical_icon_width = if self.icon.is_some() {
             BASE_ICON_SIZE + BASE_PADDING
@@ -175,7 +192,13 @@ impl MessageBuilder {
         let logical_inner_width = logical_content_width.max(logical_buttons_width);
         let calc_width = (logical_inner_width + BASE_PADDING * 2).max(BASE_MIN_WIDTH);
         let logical_text_height = temp_text.height().max(BASE_ICON_SIZE);
-        let calc_height = BASE_PADDING * 3 + logical_text_height + 32;
+        let button_area_height = if use_vertical_layout {
+            temp_buttons.len() as u32 * 32
+                + (temp_buttons.len().saturating_sub(1) as u32 * BASE_BUTTON_SPACING)
+        } else {
+            32
+        };
+        let calc_height = BASE_PADDING * 3 + logical_text_height + button_area_height;
 
         let logical_width = calc_width as u16;
         let logical_height = self.height.unwrap_or(calc_height) as u16;
@@ -216,15 +239,40 @@ impl MessageBuilder {
                 .finish()
         };
 
-        // Position buttons (right-aligned) in physical coordinates
-        let mut button_x = physical_width as i32 - padding as i32;
-        for button in buttons.iter_mut().rev() {
-            button_x -= button.width() as i32;
-            button.set_position(
-                button_x,
-                physical_height as i32 - padding as i32 - button_height as i32,
-            );
-            button_x -= button_spacing as i32;
+        // Position buttons
+        let mut button_positions = Vec::with_capacity(buttons.len());
+
+        if use_vertical_layout {
+            // Vertical layout: stack buttons vertically, full width
+            for idx in 0..buttons.len() {
+                let button_y = physical_height as i32
+                    - padding as i32
+                    - button_height as i32
+                    - (idx as i32 * (button_height as i32 + button_spacing as i32));
+
+                // Full width with padding on sides
+                let button_x = padding as i32;
+                let button_width = physical_width as i32 - 2 * padding as i32;
+
+                // Update button width and position
+                buttons[idx].set_width(button_width as u32);
+                button_positions.push((button_x, button_y));
+            }
+        } else {
+            // Horizontal layout: right-aligned in a single row
+            let mut button_x = physical_width as i32 - padding as i32;
+            for button in buttons.iter().rev() {
+                button_x -= button.width() as i32;
+                let button_y = physical_height as i32 - padding as i32 - button_height as i32;
+                button_positions.push((button_x, button_y));
+                button_x -= button_spacing as i32;
+            }
+            // Reverse positions since we iterated in reverse
+            button_positions.reverse();
+        }
+
+        for (idx, button) in buttons.iter_mut().enumerate() {
+            button.set_position(button_positions[idx].0, button_positions[idx].1);
         }
 
         // Create canvas at PHYSICAL dimensions
