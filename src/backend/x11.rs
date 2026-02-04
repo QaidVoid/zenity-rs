@@ -417,6 +417,9 @@ fn convert_to_kbvm_mods(state: KeyButMask) -> kbvm::ModifierMask {
     if state.contains(KeyButMask::MOD4) {
         mods = mods | kbvm::ModifierMask::MOD4;
     }
+    if state.contains(KeyButMask::LOCK) {
+        mods = mods | kbvm::ModifierMask::LOCK;
+    }
     mods
 }
 
