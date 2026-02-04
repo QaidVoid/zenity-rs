@@ -806,87 +806,87 @@ USAGE:
     zenity-rs --<dialog-type> [OPTIONS] [VALUES...]
 
   COMMON OPTIONS:
-    --title=TEXT        Set the dialog title
-    --text=TEXT         Set the dialog text/prompt
-    --width=N           Set the dialog width (minimum when --no-wrap is used)
-    --height=N          Set the dialog height
-    --no-wrap          Do not wrap text (width becomes minimum, content can expand)
-    --icon=ICON        Set the icon name (e.g., dialog-information, dialog-warning)
-    --ok-label=TEXT    Set the label of the OK button
-    --cancel-label=TEXT Set the label of the Cancel button
-    --extra-button=TEXT Add an extra button (outputs label text, exit code 1+)
-    --switch           Suppress OK/Cancel buttons, only show extra buttons
-    --no-markup        Do not enable pango markup (for compatibility)
-    --ellipsize        Enable ellipsizing in dialog text (for compatibility)
-    -h, --help          Print this help message
-    --version           Print version information
+    --title=TEXT          Set the dialog title
+    --text=TEXT           Set the dialog text/prompt
+    --width=N             Set the dialog width (minimum when --no-wrap is used)
+    --height=N            Set the dialog height
+    --no-wrap             Do not wrap text (width becomes minimum, content can expand)
+    --icon=ICON           Set the icon name (e.g., dialog-information, dialog-warning)
+    --ok-label=TEXT       Set the label of the OK button
+    --cancel-label=TEXT   Set the label of the Cancel button
+    --extra-button=TEXT   Add an extra button (outputs label text, exit code 1+)
+    --switch              Suppress OK/Cancel buttons, only show extra buttons
+    --no-markup           Do not enable pango markup (for compatibility)
+    --ellipsize           Enable ellipsizing in dialog text (for compatibility)
+    -h, --help            Print this help message
+    --version             Print version information
 
   DIALOG TYPES AND OPTIONS:
 
-   Message Dialogs:
-    --info              Display an information dialog
-    --warning           Display a warning dialog
-    --error             Display an error dialog
-    --question          Display a question dialog (Yes/No)
-      --timeout=N       Auto-close after N seconds (exit code 5)
-      --no-wrap        Do not wrap text (width becomes minimum, content can expand)
-      --icon=ICON      Set the icon name (also accepts --icon-name for compatibility)
-      --switch         Only show extra buttons (suppress OK/Cancel)
+  Message Dialogs:
+    --info                Display an information dialog
+    --warning             Display a warning dialog
+    --error               Display an error dialog
+    --question            Display a question dialog (Yes/No)
+      --timeout=N         Auto-close after N seconds (exit code 5)
+      --no-wrap           Do not wrap text (width becomes minimum, content can expand)
+      --icon=ICON         Set the icon name (also accepts --icon-name for compatibility)
+      --switch            Only show extra buttons (suppress OK/Cancel)
       --extra-button=TEXT Add extra buttons
-      --no-markup      Do not enable pango markup (for compatibility)
-      --ellipsize      Enable ellipsizing in dialog text (for compatibility)
+      --no-markup         Do not enable pango markup (for compatibility)
+      --ellipsize         Enable ellipsizing in dialog text (for compatibility)
 
-  --entry               Display a text entry dialog
-    --entry-text=TEXT Set default text
-    --hide-text       Hide entered text (password mode)
+  --entry                 Display a text entry dialog
+    --entry-text=TEXT     Set default text
+    --hide-text           Hide entered text (password mode)
 
-  --password            Display a password entry dialog (same as --entry --hide-text)
+  --password              Display a password entry dialog (same as --entry --hide-text)
 
-  --progress            Display a progress dialog (reads percentage from stdin)
-    --percentage=N    Initial progress percentage (0-100)
-    --pulsate         Enable pulsating/indeterminate mode
-    --auto-close      Close dialog when progress reaches 100%
-    --auto-kill       Kill parent process if Cancel button is pressed
-    --no-cancel       Hide Cancel button
-    --time-remaining  Show estimated time remaining
+  --progress              Display a progress dialog (reads percentage from stdin)
+    --percentage=N        Initial progress percentage (0-100)
+    --pulsate             Enable pulsating/indeterminate mode
+    --auto-close          Close dialog when progress reaches 100%
+    --auto-kill           Kill parent process if Cancel button is pressed
+    --no-cancel           Hide Cancel button
+    --time-remaining      Show estimated time remaining
 
-   --file-selection      Display a file selection dialog
-     --directory       Select directories only
-     --save            Save mode (allows entering new filename)
-     --multiple        Allow multiple file selection
-     --separator=TEXT  Output separator for multiple files (default: space)
-     --filename=TEXT   Default filename/path
-     --file-filter=SPEC Add file filter (e.g., "*.rs" or "Video | *.mkv *.mp4")
-     --confirm-overwrite  Deprecated, accepted for compatibility
+  --file-selection      Display a file selection dialog
+    --directory       Select directories only
+    --save            Save mode (allows entering new filename)
+    --multiple        Allow multiple file selection
+    --separator=TEXT  Output separator for multiple files (default: space)
+    --filename=TEXT   Default filename/path
+    --file-filter=SPEC Add file filter (e.g., "*.rs" or "Video | *.mkv *.mp4")
+    --confirm-overwrite Deprecated, accepted for compatibility
 
-   --list                Display a list selection dialog
-     --column=TEXT     Add a column header (can be repeated)
-     --checklist       Enable multi-select with checkboxes
-     --radiolist       Enable single-select with radio buttons
-     --multiple        Enable multi-select without checkboxes
-     --hide-column=N   Hide column N (1-based, can be repeated)
-     [VALUES...]       Row values (number must match column count)
+  --list                Display a list selection dialog
+    --column=TEXT     Add a column header (can be repeated)
+    --checklist       Enable multi-select with checkboxes
+    --radiolist       Enable single-select with radio buttons
+    --multiple        Enable multi-select without checkboxes
+    --hide-column=N   Hide column N (1-based, can be repeated)
+    [VALUES...]       Row values (number must match column count)
 
-  --calendar            Display a calendar date picker
-    --year=N          Initial year
-    --month=N         Initial month (1-12)
-    --day=N           Initial day (1-31)
+  --calendar              Display a calendar date picker
+    --year=N              Initial year
+    --month=N             Initial month (1-12)
+    --day=N               Initial day (1-31)
 
-  --text-info           Display scrollable text from file or stdin
-    --filename=TEXT   Read text from file (otherwise reads stdin)
-    --checkbox=TEXT   Add checkbox with label (for agreements)
+  --text-info             Display scrollable text from file or stdin
+    --filename=TEXT       Read text from file (otherwise reads stdin)
+    --checkbox=TEXT       Add checkbox with label (for agreements)
 
-  --scale               Display a slider to select a numeric value
-    --value=N         Initial value (default: 0)
-    --min-value=N     Minimum value (default: 0)
-    --max-value=N     Maximum value (default: 100)
-    --step=N          Step increment (default: 1)
-    --hide-value      Hide the numeric value display
+  --scale                 Display a slider to select a numeric value
+    --value=N             Initial value (default: 0)
+    --min-value=N         Minimum value (default: 0)
+    --max-value=N         Maximum value (default: 100)
+    --step=N              Step increment (default: 1)
+    --hide-value          Hide the numeric value display
 
-  --forms               Display a form with multiple input fields
-    --add-entry=LABEL Add a text entry field (can be repeated)
-    --add-password=LABEL Add a password field (can be repeated)
-    --separator=CHAR  Output separator (default: |)
+  --forms                 Display a form with multiple input fields
+    --add-entry=LABEL     Add a text entry field (can be repeated)
+    --add-password=LABEL  Add a password field (can be repeated)
+    --separator=CHAR      Output separator (default: |)
 
  EXAMPLES:
     zenity-rs --info --text="Operation completed"
