@@ -1,4 +1,16 @@
 
+## [0.1.12](https://github.com/QaidVoid/zenity-rs/compare/v0.1.11...v0.1.12) - 2026-02-04
+
+### Fixed
+
+- Caps lock not working in x11 ([#23](https://github.com/QaidVoid/zenity-rs/pull/23)) - ([730a3ba](https://github.com/QaidVoid/zenity-rs/commit/730a3ba9c79493282200f27ea21bcffa92ccb1f9))
+- Position text below title - ([4fdcb9a](https://github.com/QaidVoid/zenity-rs/commit/4fdcb9a4b15bacea3fcceabadacf35821f84bfa1))
+
+### Other
+
+- Update dependencies - ([96f96d3](https://github.com/QaidVoid/zenity-rs/commit/96f96d37bae0ec85f59fa89ec0152d633c768ded))
+- Fix clippy issues - ([a227e2f](https://github.com/QaidVoid/zenity-rs/commit/a227e2fa3b33eb24d2a979a773343f920439ec30))
+
 ## [0.1.11](https://github.com/QaidVoid/zenity-rs/compare/v0.1.10...v0.1.11) - 2026-01-31
 
 ### Added
