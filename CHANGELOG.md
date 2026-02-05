@@ -1,4 +1,10 @@
 
+## [0.2.1](https://github.com/QaidVoid/zenity-rs/compare/v0.2.0...v0.2.1) - 2026-02-05
+
+### Other
+
+- Print version without prefix - ([641c394](https://github.com/QaidVoid/zenity-rs/commit/641c394246cc5fc0078a35872d6fc6ade3d97387))
+
 ## [0.2.0](https://github.com/QaidVoid/zenity-rs/compare/v0.1.12...v0.2.0) - 2026-02-04
 
 ### Added
