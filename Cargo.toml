@@ -25,7 +25,7 @@ wayland = ["dep:wayland-client", "dep:wayland-protocols", "dep:wayland-cursor", 
 
 [dependencies]
 # Rendering
-tiny-skia = "0.12"
+tiny-skia = { version = "0.12", features = ["png-format"] }
 ab_glyph = { version = "0.2", features = ["libm"] }
 
 # CLI
