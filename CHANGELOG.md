@@ -1,4 +1,18 @@
 
+## [0.2.2](https://github.com/QaidVoid/zenity-rs/compare/v0.2.1...v0.2.2) - 2026-02-20
+
+### Added
+
+- Implement client-side key repeat for Wayland backend - ([1d80a69](https://github.com/QaidVoid/zenity-rs/commit/1d80a698b19548844aea27d789b3fc67247db61d))
+- Add tab-completion with popup for file selection inputs - ([eacc6d4](https://github.com/QaidVoid/zenity-rs/commit/eacc6d435915dd3f4eb42ae7beda2e370f91ef0c))
+- Add filename entry input to file selection save mode - ([fde4549](https://github.com/QaidVoid/zenity-rs/commit/fde4549a0d21e5d02f5d477afbf8e9d3e3ef5316))
+- Support FONTCONFIG_FILE and FONTCONFIG_PATH env vars - ([e3669ae](https://github.com/QaidVoid/zenity-rs/commit/e3669ae8a1941346d8b93fd1003591116720d1f3))
+- Implement system font discovery and color emoji support - ([1a399ef](https://github.com/QaidVoid/zenity-rs/commit/1a399ef9c0e31e748f99a16312dbcbc4f91d7c08))
+
+### Fixed
+
+- Account for trailing spaces in text rendering width - ([01da9dd](https://github.com/QaidVoid/zenity-rs/commit/01da9dd576498ffe601ab3898d40a8ebd51082ca))
+
 ## [0.2.1](https://github.com/QaidVoid/zenity-rs/compare/v0.2.0...v0.2.1) - 2026-02-05
 
 ### Other
