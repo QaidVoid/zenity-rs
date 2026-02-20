@@ -447,11 +447,14 @@ impl<'a> TextRenderer<'a> {
 
     /// Renders the text and returns a Canvas containing it.
     pub fn finish(self) -> Canvas {
-        let placed = self.layout();
+        let (placed, trailing_space) = self.layout();
         let glyphs = self.resolve_glyphs(placed);
 
         if glyphs.is_empty() {
-            return Canvas::new(1, 1);
+            // Text is only whitespace - size canvas from trailing space advance
+            let w = (trailing_space.ceil() as u32 + 2).max(1);
+            let h = (self.font.primary.height().ceil() as u32 + 2).max(1);
+            return Canvas::new(w, h);
         }
 
         let bounds = glyphs
@@ -466,8 +469,8 @@ impl<'a> TextRenderer<'a> {
             })
             .unwrap_or_default();
 
-        // Add padding to avoid clipping
-        let width = (bounds.width().ceil() as u32 + 2).max(1);
+        // Add trailing space width for whitespace after the last visible glyph
+        let width = (bounds.width().ceil() as u32 + trailing_space.ceil() as u32 + 2).max(1);
         let height = (bounds.height().ceil() as u32 + 2).max(1);
 
         let mut pixmap = Pixmap::new(width, height).unwrap();
@@ -551,7 +554,7 @@ impl<'a> TextRenderer<'a> {
 
     /// Computes the size of the rendered text without actually rendering it.
     pub fn measure(&self) -> (f32, f32) {
-        let placed = self.layout();
+        let (placed, trailing_space) = self.layout();
         let glyphs = self.resolve_glyphs(placed);
 
         let bounds = glyphs
@@ -566,7 +569,7 @@ impl<'a> TextRenderer<'a> {
             })
             .unwrap_or_default();
 
-        (bounds.width(), bounds.height())
+        (bounds.width() + trailing_space, bounds.height())
     }
 
     /// Converts placed glyphs into rendered form (outlined vectors or raster bitmaps).
@@ -617,8 +620,11 @@ impl<'a> TextRenderer<'a> {
     }
 
     /// Performs text layout with soft wrapping and per-glyph font fallback.
-    fn layout(&self) -> Vec<PlacedGlyph> {
+    /// Returns (glyphs, trailing_space_width) where trailing_space_width is the
+    /// advance width of any trailing whitespace not represented by glyphs.
+    fn layout(&self) -> (Vec<PlacedGlyph>, f32) {
         let mut glyphs: Vec<PlacedGlyph> = Vec::new();
+        let mut trailing_space: f32 = 0.0;
 
         let mut y: f32 = 0.0;
         for line in self.text.lines() {
@@ -687,7 +693,9 @@ impl<'a> TextRenderer<'a> {
 
                 if c == ' ' || c == ZWSP {
                     last_softbreak = Some(glyphs.len());
+                    trailing_space += advance;
                 } else {
+                    trailing_space = 0.0;
                     glyphs.push(PlacedGlyph {
                         glyph,
                         fallback,
@@ -710,7 +718,7 @@ impl<'a> TextRenderer<'a> {
             y += self.font.primary.height() + self.font.primary.line_gap();
         }
 
-        glyphs
+        (glyphs, trailing_space)
     }
 }
 
