@@ -83,11 +83,25 @@ fn discover_system_fonts() -> Vec<SystemFontEntry> {
 }
 
 /// Parse `<dir>` entries from fontconfig's fonts.conf.
+///
+/// Respects `FONTCONFIG_PATH` (overrides config directory, default `/etc/fonts`)
+/// and `FONTCONFIG_FILE` (overrides config file, resolved relative to config dir
+/// if not absolute).
 fn fontconfig_dirs() -> Vec<PathBuf> {
-    let conf_paths = [
-        PathBuf::from("/etc/fonts/fonts.conf"),
-        PathBuf::from("/etc/fonts/conf.d"),
-    ];
+    let config_dir = std::env::var("FONTCONFIG_PATH")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/etc/fonts"));
+
+    let conf_paths: Vec<PathBuf> = if let Ok(file) = std::env::var("FONTCONFIG_FILE") {
+        let file_path = PathBuf::from(&file);
+        if file_path.is_absolute() {
+            vec![file_path]
+        } else {
+            vec![config_dir.join(file_path)]
+        }
+    } else {
+        vec![config_dir.join("fonts.conf"), config_dir.join("conf.d")]
+    };
 
     let mut dirs = Vec::new();
     for conf in &conf_paths {
