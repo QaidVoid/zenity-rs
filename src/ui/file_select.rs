@@ -235,6 +235,9 @@ impl FileSelectBuilder {
         // Search input
         let mut search_input = TextInput::new(search_width).with_placeholder("Search...");
 
+        // Save mode flag
+        let save_mode = self.save && !self.directory;
+
         // Navigation history
         let mut history: Vec<PathBuf> = Vec::new();
         let mut history_index: usize = 0;
@@ -270,13 +273,15 @@ impl FileSelectBuilder {
         );
 
         // Calculate layout in physical coordinates
+        let filename_row_height = if save_mode { (58.0 * scale) as u32 } else { 0 };
         let sidebar_x = padding as i32;
         let sidebar_y = (padding + toolbar_height + (8.0 * scale) as u32) as i32;
         let sidebar_h = window_height
             - padding * 2
             - toolbar_height
             - (8.0 * scale) as u32
-            - (44.0 * scale) as u32;
+            - (44.0 * scale) as u32
+            - filename_row_height;
 
         let main_x = (padding + sidebar_width + (12.0 * scale) as u32) as i32;
         let main_y = sidebar_y;
@@ -300,6 +305,21 @@ impl FileSelectBuilder {
         cancel_button.set_position(bx, button_y);
         bx -= (10.0 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(bx, button_y);
+
+        // Position filename area (label above, full-width input below, save mode only)
+        let filename_y = button_y - filename_row_height as i32;
+        let filename_label_h = (20.0 * scale) as i32;
+        let mut filename_input = if save_mode {
+            let mut input = TextInput::new(main_w).with_placeholder("Enter filename...");
+            if !self.filename.is_empty() {
+                input = input.with_default_text(&self.filename);
+            }
+            input.set_focus(true);
+            input.set_position(main_x, filename_y + filename_label_h);
+            Some(input)
+        } else {
+            None
+        };
 
         // Position search input
         let search_x = window_width as i32 - padding as i32 - search_width as i32;
@@ -332,7 +352,8 @@ impl FileSelectBuilder {
                     mounted_drives: &[MountPoint],
                     hovered_drive: Option<usize>,
                     scale: f32,
-                    scrollbar_hovered: bool| {
+                    scrollbar_hovered: bool,
+                    filename_input: Option<&TextInput>| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
             let radius = 8.0 * scale;
@@ -778,6 +799,14 @@ impl FileSelectBuilder {
                 1.0,
             );
 
+            // Filename input (save mode): label above, input below
+            if let Some(fi) = filename_input {
+                let label = title;
+                let label_canvas = font.render(label).with_color(colors.text).finish();
+                canvas.draw_canvas(&label_canvas, main_x, filename_y + (2.0 * scale) as i32);
+                fi.draw_to(canvas, colors, font);
+            }
+
             // Buttons
             ok_button.draw_to(canvas, colors, font);
             cancel_button.draw_to(canvas, colors, font);
@@ -811,6 +840,7 @@ impl FileSelectBuilder {
             hovered_drive,
             scale,
             scrollbar_hovered,
+            filename_input.as_ref(),
         );
         window.set_contents(&canvas)?;
         window.show()?;
@@ -1183,24 +1213,54 @@ impl FileSelectBuilder {
                                         );
                                         selected_indices.clear();
                                         scroll_offset = 0;
+                                    } else if save_mode {
+                                        // In save mode, double-click on file populates filename
+                                        if let Some(ref mut fi) = filename_input {
+                                            fi.set_text(&entry.name);
+                                        }
                                     } else if !self.directory {
                                         return Ok(FileSelectResult::Selected(entry.path.clone()));
                                     }
                                 } else {
                                     selected_indices.clear();
                                     selected_indices.insert(ei);
+                                    // In save mode, single click on file populates filename input
+                                    if save_mode {
+                                        let entry = &all_entries[ei];
+                                        if !entry.is_dir {
+                                            if let Some(ref mut fi) = filename_input {
+                                                fi.set_text(&entry.name);
+                                            }
+                                        }
+                                    }
                                 }
                             }
                             needs_redraw = true;
                         }
                     }
 
-                    // Search input focus
+                    // Input focus management
                     let in_search = mouse_x >= search_x
                         && mouse_x < search_x + search_width as i32
                         && mouse_y >= search_y
                         && mouse_y < search_y + (32.0 * scale) as i32;
-                    search_input.set_focus(in_search);
+
+                    if save_mode {
+                        // In save mode, filename input keeps focus unless search is clicked
+                        if in_search {
+                            search_input.set_focus(true);
+                            if let Some(ref mut fi) = filename_input {
+                                fi.set_focus(false);
+                            }
+                        } else {
+                            search_input.set_focus(false);
+                            if let Some(ref mut fi) = filename_input {
+                                fi.set_focus(true);
+                            }
+                        }
+                    } else {
+                        search_input.set_focus(in_search);
+                    }
                 }
                 WindowEvent::ButtonRelease(_, _) => {
                     thumb_drag = false;
@@ -1231,7 +1291,27 @@ impl FileSelectBuilder {
                     const KEY_ESCAPE: u32 = 0xff1b;
                     const KEY_BACKSPACE: u32 = 0xff08;
 
-                    if !search_input.has_focus() {
+                    let filename_has_focus =
+                        filename_input.as_ref().map_or(false, |fi| fi.has_focus());
+
+                    if key_event.keysym == KEY_ESCAPE {
+                        if search_input.has_focus() {
+                            search_input.set_focus(false);
+                            // In save mode, return focus to filename input
+                            if let Some(ref mut fi) = filename_input {
+                                fi.set_focus(true);
+                            }
+                            needs_redraw = true;
+                        } else if filename_has_focus {
+                            if let Some(ref mut fi) = filename_input {
+                                fi.set_focus(false);
+                            }
+                            needs_redraw = true;
+                        } else {
+                            return Ok(FileSelectResult::Cancelled);
+                        }
+                    }
+                    if !search_input.has_focus() && !filename_has_focus {
                         match key_event.keysym {
                             KEY_UP => {
                                 if !filtered_entries.is_empty() {
@@ -1371,9 +1451,6 @@ impl FileSelectBuilder {
                                     needs_redraw = true;
                                 }
                             }
-                            KEY_ESCAPE => {
-                                return Ok(FileSelectResult::Cancelled);
-                            }
                             _ => {}
                         }
                     }
@@ -1398,12 +1475,33 @@ impl FileSelectBuilder {
                 needs_redraw = true;
             }
 
+            // Process filename input (save mode)
+            if let Some(ref mut fi) = filename_input {
+                if fi.process_event(&event) {
+                    needs_redraw = true;
+                }
+                if fi.was_submitted() {
+                    let name = fi.text().trim().to_string();
+                    if !name.is_empty() {
+                        return Ok(FileSelectResult::Selected(current_dir.join(&name)));
+                    }
+                }
+            }
+
             // Process buttons
             needs_redraw |= ok_button.process_event(&event);
             needs_redraw |= cancel_button.process_event(&event);
 
             if ok_button.was_clicked() {
-                if self.multiple && !selected_indices.is_empty() {
+                // In save mode, use filename input text
+                if save_mode {
+                    if let Some(ref fi) = filename_input {
+                        let name = fi.text().trim().to_string();
+                        if !name.is_empty() {
+                            return Ok(FileSelectResult::Selected(current_dir.join(&name)));
+                        }
+                    }
+                } else if self.multiple && !selected_indices.is_empty() {
                     let selected_files: Vec<PathBuf> = selected_indices
                         .iter()
                         .filter(|&ei| !all_entries[*ei].is_dir)
@@ -1513,6 +1611,7 @@ impl FileSelectBuilder {
                     hovered_drive,
                     scale,
                     scrollbar_hovered,
+                    filename_input.as_ref(),
                 );
                 window.set_contents(&canvas)?;
             }

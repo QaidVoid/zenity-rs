@@ -72,6 +72,12 @@ impl TextInput {
         &self.text
     }
 
+    /// Sets the text content and moves cursor to end.
+    pub fn set_text(&mut self, text: &str) {
+        self.text = text.to_string();
+        self.cursor_pos = self.char_count();
+    }
+
     /// Returns true if Enter was pressed.
     pub fn was_submitted(&mut self) -> bool {
         let submitted = self.submitted;
