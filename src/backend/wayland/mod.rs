@@ -4,7 +4,8 @@ mod shm;
 
 use std::{
     collections::VecDeque,
-    os::fd::{FromRawFd, IntoRawFd},
+    os::fd::{AsFd, AsRawFd, FromRawFd, IntoRawFd},
+    time::{Duration, Instant},
 };
 
 use kbvm::lookup::LookupTable;
@@ -95,8 +96,21 @@ pub(super) struct WaylandState {
     // Keyboard handling
     lookup_table: Option<LookupTable>,
 
+    // Key repeat state
+    repeat_rate: u32,  // characters per second (0 = disabled)
+    repeat_delay: u32, // ms before repeat starts
+    repeat_key: Option<RepeatKey>,
+
     // Events
     pending_events: VecDeque<WindowEvent>,
+}
+
+/// Tracks a held key for client-side repeat.
+struct RepeatKey {
+    key: u32, // evdev keycode
+    event: WindowEvent,
+    next_at: Instant,
+    in_delay: bool, // still in initial delay phase
 }
 
 impl WaylandState {
@@ -120,6 +134,9 @@ impl WaylandState {
             modifier_mask: kbvm::ModifierMask::NONE,
             keyboard_group: 0,
             lookup_table: None,
+            repeat_rate: 25,
+            repeat_delay: 600,
+            repeat_key: None,
             pending_events: VecDeque::new(),
         }
     }
@@ -324,12 +341,51 @@ impl Window for WaylandWindow {
                 return Ok(event);
             }
 
+            // Check if a key repeat is due
+            if let Some(ref repeat) = self.state.repeat_key {
+                let now = Instant::now();
+                if now >= repeat.next_at {
+                    let event = repeat.event.clone();
+                    let rate = self.state.repeat_rate;
+                    let rk = self.state.repeat_key.as_mut().unwrap();
+                    rk.next_at = now + Duration::from_millis(1000 / rate.max(1) as u64);
+                    rk.in_delay = false;
+                    return Ok(event);
+                }
+            }
+
             if self.state.closed {
                 return Ok(WindowEvent::CloseRequested);
             }
 
             self.conn.flush()?;
-            self.event_queue.blocking_dispatch(&mut self.state)?;
+
+            // Use poll with timeout so key repeat can fire
+            let timeout_ms = if let Some(ref repeat) = self.state.repeat_key {
+                let remaining = repeat.next_at.saturating_duration_since(Instant::now());
+                remaining.as_millis() as i32
+            } else {
+                -1 // block indefinitely
+            };
+
+            let fd = self.conn.as_fd().as_raw_fd();
+            let mut pollfd = libc::pollfd {
+                fd,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+
+            let ret = unsafe { libc::poll(&mut pollfd, 1, timeout_ms) };
+
+            if ret > 0 {
+                // Data available — read and dispatch
+                if let Some(guard) = self.event_queue.prepare_read() {
+                    let _ = guard.read();
+                }
+                self.event_queue.dispatch_pending(&mut self.state)?;
+            }
+            // ret == 0: timeout — loop will check repeat_key
+            // ret < 0: interrupted — loop again
         }
     }
 
@@ -741,21 +797,41 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
                             // Emit TextInput for printable characters on key press
                             let ch: Option<char> = lookup.into_iter().flat_map(|p| p.char()).next();
 
-                            if let Some(c) = ch {
+                            let event = if let Some(c) = ch {
                                 if !c.is_control() && !modifiers.contains(Modifiers::CTRL) {
-                                    state.pending_events.push_back(WindowEvent::TextInput(c));
-                                    return;
+                                    WindowEvent::TextInput(c)
+                                } else {
+                                    WindowEvent::KeyPress(KeyEvent {
+                                        keysym,
+                                        modifiers,
+                                    })
                                 }
-                            }
-
-                            state
-                                .pending_events
-                                .push_back(WindowEvent::KeyPress(KeyEvent {
+                            } else {
+                                WindowEvent::KeyPress(KeyEvent {
                                     keysym,
                                     modifiers,
-                                }));
+                                })
+                            };
+
+                            state.pending_events.push_back(event.clone());
+
+                            // Start key repeat if enabled
+                            if state.repeat_rate > 0 {
+                                state.repeat_key = Some(RepeatKey {
+                                    key,
+                                    event,
+                                    next_at: Instant::now()
+                                        + Duration::from_millis(state.repeat_delay as u64),
+                                    in_delay: true,
+                                });
+                            }
                         }
                         WEnum::Value(wl_keyboard::KeyState::Released) => {
+                            // Cancel repeat for this key
+                            if state.repeat_key.as_ref().is_some_and(|rk| rk.key == key) {
+                                state.repeat_key = None;
+                            }
+
                             state
                                 .pending_events
                                 .push_back(WindowEvent::KeyRelease(KeyEvent {
@@ -787,6 +863,14 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
                 serial, ..
             } => {
                 state.last_serial = serial;
+                state.repeat_key = None;
+            }
+            wl_keyboard::Event::RepeatInfo {
+                rate,
+                delay,
+            } => {
+                state.repeat_rate = rate as u32;
+                state.repeat_delay = delay as u32;
             }
             _ => {}
         }
