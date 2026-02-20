@@ -20,6 +20,7 @@ const KEY_HOME: u32 = 0xff50;
 const KEY_END: u32 = 0xff57;
 const KEY_RETURN: u32 = 0xff0d;
 const KEY_KP_ENTER: u32 = 0xff8d;
+const KEY_TAB: u32 = 0xff09;
 
 /// A single-line text input widget.
 pub struct TextInput {
@@ -33,6 +34,8 @@ pub struct TextInput {
     password: bool,
     placeholder: String,
     submitted: bool,
+    completion: Option<String>,
+    tab_pressed: bool,
 }
 
 impl TextInput {
@@ -48,6 +51,8 @@ impl TextInput {
             password: false,
             placeholder: String::new(),
             submitted: false,
+            completion: None,
+            tab_pressed: false,
         }
     }
 
@@ -76,6 +81,7 @@ impl TextInput {
     pub fn set_text(&mut self, text: &str) {
         self.text = text.to_string();
         self.cursor_pos = self.char_count();
+        self.completion = None;
     }
 
     /// Returns true if Enter was pressed.
@@ -83,6 +89,18 @@ impl TextInput {
         let submitted = self.submitted;
         self.submitted = false;
         submitted
+    }
+
+    /// Sets the current completion suggestion (the suffix after the user's text).
+    pub fn set_completion(&mut self, completion: Option<String>) {
+        self.completion = completion;
+    }
+
+    /// Returns true if Tab was pressed (consumed once per check).
+    pub fn was_tab_pressed(&mut self) -> bool {
+        let pressed = self.tab_pressed;
+        self.tab_pressed = false;
+        pressed
     }
 
     /// Returns the display text (masked if password mode).
@@ -113,6 +131,7 @@ impl TextInput {
         let byte_pos = self.byte_position(self.cursor_pos);
         self.text.insert(byte_pos, c);
         self.cursor_pos += 1;
+        self.completion = None;
     }
 
     /// Deletes the character before the cursor (backspace).
@@ -122,6 +141,7 @@ impl TextInput {
             let end_pos = self.byte_position(self.cursor_pos);
             self.text.drain(byte_pos..end_pos);
             self.cursor_pos -= 1;
+            self.completion = None;
         }
     }
 
@@ -131,6 +151,7 @@ impl TextInput {
             let byte_pos = self.byte_position(self.cursor_pos);
             let end_pos = self.byte_position(self.cursor_pos + 1);
             self.text.drain(byte_pos..end_pos);
+            self.completion = None;
         }
     }
 
@@ -190,6 +211,14 @@ impl TextInput {
             }
             KEY_RETURN | KEY_KP_ENTER => {
                 self.submitted = true;
+                true
+            }
+            KEY_TAB => {
+                if let Some(suffix) = self.completion.take() {
+                    self.text.push_str(&suffix);
+                    self.cursor_pos = self.char_count();
+                }
+                self.tab_pressed = true;
                 true
             }
             _ => false,
@@ -288,6 +317,36 @@ impl TextInput {
                 cursor_height as f32,
                 colors.text,
             );
+
+            // Draw ghost completion text after cursor
+            if let Some(ref suffix) = self.completion {
+                if !suffix.is_empty() {
+                    let ghost_canvas = font
+                        .render(suffix)
+                        .with_color(colors.input_placeholder)
+                        .finish();
+                    let ghost_y = self.y + (self.height as i32 - ghost_canvas.height() as i32) / 2;
+                    let ghost_x = cursor_x + 1;
+                    let available = (self.x + self.width as i32 - INPUT_PADDING - ghost_x) as u32;
+                    if available > 0 {
+                        if ghost_canvas.width() > available {
+                            let mut clipped =
+                                crate::render::Canvas::new(available, ghost_canvas.height());
+                            clipped.pixmap.draw_pixmap(
+                                0,
+                                0,
+                                ghost_canvas.pixmap.as_ref(),
+                                &tiny_skia::PixmapPaint::default(),
+                                tiny_skia::Transform::identity(),
+                                None,
+                            );
+                            canvas.draw_canvas(&clipped, ghost_x, ghost_y);
+                        } else {
+                            canvas.draw_canvas(&ghost_canvas, ghost_x, ghost_y);
+                        }
+                    }
+                }
+            }
         }
     }
 

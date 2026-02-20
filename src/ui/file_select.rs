@@ -258,6 +258,14 @@ impl FileSelectBuilder {
         let mut hovered_entry: Option<usize> = None;
         let mut hovered_drive: Option<usize> = None;
 
+        // Tab-completion state for filename input (save mode)
+        let mut completion_matches: Vec<String> = Vec::new();
+        let mut completion_popup_index: usize = 0;
+
+        // Tab-completion state for search input
+        let mut search_matches: Vec<String> = Vec::new();
+        let mut search_popup_index: usize = 0;
+
         // Scrollbar thumb dragging state
         let mut thumb_drag = false;
         let mut thumb_drag_offset: Option<i32> = None;
@@ -842,6 +850,32 @@ impl FileSelectBuilder {
             scrollbar_hovered,
             filename_input.as_ref(),
         );
+        if save_mode && !completion_matches.is_empty() {
+            let visible = completion_matches.len().min(MAX_POPUP_ITEMS);
+            let popup_h = (visible as i32) * POPUP_ITEM_HEIGHT + 2;
+            draw_completion_popup(
+                &mut canvas,
+                &font,
+                colors,
+                &completion_matches,
+                completion_popup_index,
+                main_x,
+                filename_y + filename_label_h - popup_h,
+                main_w,
+            );
+        }
+        if !search_matches.is_empty() && search_input.has_focus() {
+            draw_completion_popup(
+                &mut canvas,
+                &font,
+                colors,
+                &search_matches,
+                search_popup_index,
+                search_x,
+                search_y + 32,
+                search_width,
+            );
+        }
         window.set_contents(&canvas)?;
         window.show()?;
 
@@ -1217,6 +1251,8 @@ impl FileSelectBuilder {
                                         // In save mode, double-click on file populates filename
                                         if let Some(ref mut fi) = filename_input {
                                             fi.set_text(&entry.name);
+                                            completion_matches.clear();
+                                            completion_popup_index = 0;
                                         }
                                     } else if !self.directory {
                                         return Ok(FileSelectResult::Selected(entry.path.clone()));
@@ -1230,6 +1266,8 @@ impl FileSelectBuilder {
                                         if !entry.is_dir {
                                             if let Some(ref mut fi) = filename_input {
                                                 fi.set_text(&entry.name);
+                                                completion_matches.clear();
+                                                completion_popup_index = 0;
                                             }
                                         }
                                     }
@@ -1252,13 +1290,25 @@ impl FileSelectBuilder {
                             if let Some(ref mut fi) = filename_input {
                                 fi.set_focus(false);
                             }
+                            // Clear filename popup when switching to search
+                            completion_matches.clear();
+                            completion_popup_index = 0;
                         } else {
                             search_input.set_focus(false);
                             if let Some(ref mut fi) = filename_input {
                                 fi.set_focus(true);
                             }
+                            // Clear search popup when switching to filename
+                            search_matches.clear();
+                            search_popup_index = 0;
+                            search_input.set_completion(None);
                         }
                     } else {
+                        if !in_search && !search_matches.is_empty() {
+                            search_matches.clear();
+                            search_popup_index = 0;
+                            search_input.set_completion(None);
+                        }
                         search_input.set_focus(in_search);
                     }
                 }
@@ -1296,15 +1346,31 @@ impl FileSelectBuilder {
 
                     if key_event.keysym == KEY_ESCAPE {
                         if search_input.has_focus() {
-                            search_input.set_focus(false);
-                            // In save mode, return focus to filename input
-                            if let Some(ref mut fi) = filename_input {
-                                fi.set_focus(true);
+                            if !search_matches.is_empty() {
+                                // Close search popup first
+                                search_matches.clear();
+                                search_popup_index = 0;
+                                search_input.set_completion(None);
+                            } else {
+                                search_input.set_focus(false);
+                                // In save mode, return focus to filename input
+                                if let Some(ref mut fi) = filename_input {
+                                    fi.set_focus(true);
+                                }
                             }
                             needs_redraw = true;
                         } else if filename_has_focus {
-                            if let Some(ref mut fi) = filename_input {
-                                fi.set_focus(false);
+                            if !completion_matches.is_empty() {
+                                // Close popup first
+                                completion_matches.clear();
+                                completion_popup_index = 0;
+                                if let Some(ref mut fi) = filename_input {
+                                    fi.set_completion(None);
+                                }
+                            } else {
+                                if let Some(ref mut fi) = filename_input {
+                                    fi.set_focus(false);
+                                }
                             }
                             needs_redraw = true;
                         } else {
@@ -1458,32 +1524,268 @@ impl FileSelectBuilder {
                 _ => {}
             }
 
-            // Process search input
-            if search_input.process_event(&event) {
-                let new_search = search_input.text().to_lowercase();
-                if new_search != search_text {
-                    search_text = new_search;
-                    update_filtered(
-                        &all_entries,
-                        &search_text,
-                        &mut filtered_entries,
-                        &self.filters,
-                    );
-                    selected_indices.clear();
-                    scroll_offset = 0;
+            // Process search input (with completion popup)
+            {
+                let mut search_popup_handled = false;
+
+                // Handle search popup keyboard navigation
+                if !search_matches.is_empty() && search_input.has_focus() {
+                    if let WindowEvent::KeyPress(key_event) = &event {
+                        const POPUP_KEY_UP: u32 = 0xff52;
+                        const POPUP_KEY_DOWN: u32 = 0xff54;
+                        match key_event.keysym {
+                            POPUP_KEY_UP => {
+                                if search_popup_index > 0 {
+                                    search_popup_index -= 1;
+                                } else {
+                                    search_popup_index = search_matches.len() - 1;
+                                }
+                                let prefix = search_input.text().to_string();
+                                let name = &search_matches[search_popup_index];
+                                let pc = prefix.chars().count();
+                                search_input.set_completion(Some(name.chars().skip(pc).collect()));
+                                needs_redraw = true;
+                                search_popup_handled = true;
+                            }
+                            POPUP_KEY_DOWN => {
+                                search_popup_index =
+                                    (search_popup_index + 1) % search_matches.len();
+                                let prefix = search_input.text().to_string();
+                                let name = &search_matches[search_popup_index];
+                                let pc = prefix.chars().count();
+                                search_input.set_completion(Some(name.chars().skip(pc).collect()));
+                                needs_redraw = true;
+                                search_popup_handled = true;
+                            }
+                            _ => {}
+                        }
+                    }
                 }
-                needs_redraw = true;
+
+                // Handle click on search popup item
+                if !search_matches.is_empty() && search_input.has_focus() {
+                    if let WindowEvent::ButtonPress(MouseButton::Left, _) = &event {
+                        let popup_x = search_x;
+                        let popup_y = search_y + 32;
+                        let popup_w = search_width as i32;
+                        let visible = search_matches.len().min(MAX_POPUP_ITEMS) as i32;
+                        let popup_h = visible * POPUP_ITEM_HEIGHT + 2;
+                        if mouse_x >= popup_x
+                            && mouse_x < popup_x + popup_w
+                            && mouse_y >= popup_y
+                            && mouse_y < popup_y + popup_h
+                        {
+                            let idx = ((mouse_y - popup_y - 1) / POPUP_ITEM_HEIGHT) as usize;
+                            if idx < search_matches.len().min(MAX_POPUP_ITEMS) {
+                                search_input.set_text(&search_matches[idx]);
+                                search_matches.clear();
+                                search_popup_index = 0;
+                                needs_redraw = true;
+                                search_popup_handled = true;
+                            }
+                        }
+                    }
+                }
+
+                if !search_popup_handled {
+                    let search_text_before = search_input.text().to_string();
+                    if search_input.process_event(&event) {
+                        needs_redraw = true;
+                    }
+                    let new_search = search_input.text().to_lowercase();
+                    if new_search != search_text {
+                        search_text = new_search;
+                        update_filtered(
+                            &all_entries,
+                            &search_text,
+                            &mut filtered_entries,
+                            &self.filters,
+                        );
+                        selected_indices.clear();
+                        scroll_offset = 0;
+                    }
+                    // Detect text change → recompute search completions
+                    if search_input.text() != search_text_before {
+                        search_popup_index = 0;
+                        let prefix = search_input.text().to_string();
+                        search_matches =
+                            find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, false);
+                        if !search_matches.is_empty() {
+                            let pc = prefix.chars().count();
+                            search_input
+                                .set_completion(Some(search_matches[0].chars().skip(pc).collect()));
+                        } else {
+                            search_input.set_completion(None);
+                        }
+                    }
+                    // Tab pressed → accept highlighted completion
+                    if search_input.was_tab_pressed() {
+                        let prefix = search_input.text().to_string();
+                        if !prefix.is_empty() {
+                            search_matches =
+                                find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, false);
+                            search_popup_index = 0;
+                            if !search_matches.is_empty() {
+                                let pc = prefix.chars().count();
+                                search_input.set_completion(Some(
+                                    search_matches[0].chars().skip(pc).collect(),
+                                ));
+                            } else {
+                                search_input.set_completion(None);
+                            }
+                        }
+                        // Re-filter after tab acceptance changed the text
+                        let new_search = search_input.text().to_lowercase();
+                        if new_search != search_text {
+                            search_text = new_search;
+                            update_filtered(
+                                &all_entries,
+                                &search_text,
+                                &mut filtered_entries,
+                                &self.filters,
+                            );
+                            selected_indices.clear();
+                            scroll_offset = 0;
+                        }
+                        needs_redraw = true;
+                    }
+                    // Enter with popup open → accept highlighted item
+                    if search_input.was_submitted() && !search_matches.is_empty() {
+                        search_input.set_text(&search_matches[search_popup_index]);
+                        search_matches.clear();
+                        search_popup_index = 0;
+                        let new_search = search_input.text().to_lowercase();
+                        if new_search != search_text {
+                            search_text = new_search;
+                            update_filtered(
+                                &all_entries,
+                                &search_text,
+                                &mut filtered_entries,
+                                &self.filters,
+                            );
+                            selected_indices.clear();
+                            scroll_offset = 0;
+                        }
+                        needs_redraw = true;
+                    }
+                }
             }
 
             // Process filename input (save mode)
             if let Some(ref mut fi) = filename_input {
-                if fi.process_event(&event) {
-                    needs_redraw = true;
+                let mut popup_handled = false;
+
+                // Handle popup keyboard navigation before passing event to input
+                if !completion_matches.is_empty() {
+                    if let WindowEvent::KeyPress(key_event) = &event {
+                        const POPUP_KEY_UP: u32 = 0xff52;
+                        const POPUP_KEY_DOWN: u32 = 0xff54;
+                        match key_event.keysym {
+                            POPUP_KEY_UP => {
+                                if completion_popup_index > 0 {
+                                    completion_popup_index -= 1;
+                                } else {
+                                    completion_popup_index = completion_matches.len() - 1;
+                                }
+                                let prefix = fi.text().to_string();
+                                let name = &completion_matches[completion_popup_index];
+                                let pc = prefix.chars().count();
+                                fi.set_completion(Some(name.chars().skip(pc).collect()));
+                                needs_redraw = true;
+                                popup_handled = true;
+                            }
+                            POPUP_KEY_DOWN => {
+                                completion_popup_index =
+                                    (completion_popup_index + 1) % completion_matches.len();
+                                let prefix = fi.text().to_string();
+                                let name = &completion_matches[completion_popup_index];
+                                let pc = prefix.chars().count();
+                                fi.set_completion(Some(name.chars().skip(pc).collect()));
+                                needs_redraw = true;
+                                popup_handled = true;
+                            }
+                            _ => {}
+                        }
+                    }
                 }
-                if fi.was_submitted() {
-                    let name = fi.text().trim().to_string();
-                    if !name.is_empty() {
-                        return Ok(FileSelectResult::Selected(current_dir.join(&name)));
+
+                // Handle click on popup item
+                if !completion_matches.is_empty() {
+                    if let WindowEvent::ButtonPress(MouseButton::Left, _) = &event {
+                        let popup_x = main_x;
+                        let popup_w = main_w as i32;
+                        let visible = completion_matches.len().min(MAX_POPUP_ITEMS) as i32;
+                        let popup_h = visible * POPUP_ITEM_HEIGHT + 2;
+                        let popup_y = filename_y + filename_label_h - popup_h;
+                        if mouse_x >= popup_x
+                            && mouse_x < popup_x + popup_w
+                            && mouse_y >= popup_y
+                            && mouse_y < popup_y + popup_h
+                        {
+                            let idx = ((mouse_y - popup_y - 1) / POPUP_ITEM_HEIGHT) as usize;
+                            if idx < completion_matches.len().min(MAX_POPUP_ITEMS) {
+                                fi.set_text(&completion_matches[idx]);
+                                completion_matches.clear();
+                                completion_popup_index = 0;
+                                needs_redraw = true;
+                                popup_handled = true;
+                            }
+                        }
+                    }
+                }
+
+                if !popup_handled {
+                    let text_before = fi.text().to_string();
+                    if fi.process_event(&event) {
+                        needs_redraw = true;
+                    }
+                    // Detect text change → recompute completions
+                    if fi.text() != text_before {
+                        completion_popup_index = 0;
+                        let prefix = fi.text().to_string();
+                        completion_matches =
+                            find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, true);
+                        if !completion_matches.is_empty() {
+                            let pc = prefix.chars().count();
+                            fi.set_completion(Some(
+                                completion_matches[0].chars().skip(pc).collect(),
+                            ));
+                        } else {
+                            fi.set_completion(None);
+                        }
+                    }
+                    // Tab pressed → accept highlighted completion
+                    if fi.was_tab_pressed() {
+                        let prefix = fi.text().to_string();
+                        if !prefix.is_empty() {
+                            // Recompute matches from new text (Tab may have accepted a suffix)
+                            completion_matches =
+                                find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, true);
+                            completion_popup_index = 0;
+                            if !completion_matches.is_empty() {
+                                let pc = prefix.chars().count();
+                                fi.set_completion(Some(
+                                    completion_matches[0].chars().skip(pc).collect(),
+                                ));
+                            } else {
+                                fi.set_completion(None);
+                            }
+                        }
+                        needs_redraw = true;
+                    }
+                    if fi.was_submitted() {
+                        // If popup is open, accept the highlighted item instead of submitting
+                        if !completion_matches.is_empty() {
+                            fi.set_text(&completion_matches[completion_popup_index]);
+                            completion_matches.clear();
+                            completion_popup_index = 0;
+                            needs_redraw = true;
+                        } else {
+                            let name = fi.text().trim().to_string();
+                            if !name.is_empty() {
+                                return Ok(FileSelectResult::Selected(current_dir.join(&name)));
+                            }
+                        }
                     }
                 }
             }
@@ -1613,6 +1915,32 @@ impl FileSelectBuilder {
                     scrollbar_hovered,
                     filename_input.as_ref(),
                 );
+                if save_mode && !completion_matches.is_empty() {
+                    let visible = completion_matches.len().min(MAX_POPUP_ITEMS);
+                    let popup_h = (visible as i32) * POPUP_ITEM_HEIGHT + 2;
+                    draw_completion_popup(
+                        &mut canvas,
+                        &font,
+                        colors,
+                        &completion_matches,
+                        completion_popup_index,
+                        main_x,
+                        filename_y + filename_label_h - popup_h,
+                        main_w,
+                    );
+                }
+                if !search_matches.is_empty() && search_input.has_focus() {
+                    draw_completion_popup(
+                        &mut canvas,
+                        &font,
+                        colors,
+                        &search_matches,
+                        search_popup_index,
+                        search_x,
+                        search_y + 32,
+                        search_width,
+                    );
+                }
                 window.set_contents(&canvas)?;
             }
         }
@@ -1856,11 +2184,13 @@ fn update_filtered(
 ) {
     filtered.clear();
     for (i, entry) in all.iter().enumerate() {
+        let matches_search = search.is_empty() || entry.name.to_lowercase().contains(search);
         if entry.is_dir {
-            filtered.push(i);
+            if matches_search {
+                filtered.push(i);
+            }
         } else {
             let matches_filter = filters.is_empty() || matches_any_filter(&entry.name, filters);
-            let matches_search = search.is_empty() || entry.name.to_lowercase().contains(search);
             if matches_filter && matches_search {
                 filtered.push(i);
             }
@@ -1933,6 +2263,89 @@ fn navigate_to_directory(
         update_filtered(all_entries, search_text, filtered_entries, filters);
         selected_indices.clear();
         *scroll_offset = 0;
+    }
+}
+
+/// Returns all file entry names matching `prefix` (case-insensitive), up to `max` items.
+fn find_all_completions(
+    entries: &[DirEntry],
+    prefix: &str,
+    max: usize,
+    files_only: bool,
+) -> Vec<String> {
+    if prefix.is_empty() {
+        return Vec::new();
+    }
+    let prefix_lower = prefix.to_lowercase();
+    entries
+        .iter()
+        .filter(|e| (!files_only || !e.is_dir) && e.name.to_lowercase().starts_with(&prefix_lower))
+        .take(max)
+        .map(|e| e.name.clone())
+        .collect()
+}
+
+const POPUP_ITEM_HEIGHT: i32 = 26;
+const MAX_POPUP_ITEMS: usize = 8;
+
+fn draw_completion_popup(
+    canvas: &mut Canvas,
+    font: &Font,
+    colors: &Colors,
+    matches: &[String],
+    selected: usize,
+    x: i32,
+    y: i32,
+    width: u32,
+) {
+    if matches.is_empty() {
+        return;
+    }
+    let visible = matches.len().min(MAX_POPUP_ITEMS);
+    let popup_h = (visible as i32) * POPUP_ITEM_HEIGHT + 2; // 1px border top+bottom
+
+    // Background
+    canvas.fill_rounded_rect(
+        x as f32,
+        y as f32,
+        width as f32,
+        popup_h as f32,
+        4.0,
+        colors.input_bg,
+    );
+    // Border
+    canvas.stroke_rounded_rect(
+        x as f32,
+        y as f32,
+        width as f32,
+        popup_h as f32,
+        4.0,
+        colors.input_border_focused,
+        1.0,
+    );
+
+    for (i, name) in matches.iter().take(visible).enumerate() {
+        let item_y = y + 1 + (i as i32) * POPUP_ITEM_HEIGHT;
+
+        // Highlight selected item
+        if i == selected {
+            canvas.fill_rect(
+                (x + 1) as f32,
+                item_y as f32,
+                (width - 2) as f32,
+                POPUP_ITEM_HEIGHT as f32,
+                colors.input_border_focused,
+            );
+        }
+
+        let text_color = if i == selected {
+            colors.input_bg
+        } else {
+            colors.text
+        };
+        let label = font.render(name).with_color(text_color).finish();
+        let text_y = item_y + (POPUP_ITEM_HEIGHT - label.height() as i32) / 2;
+        canvas.draw_canvas(&label, x + 6, text_y);
     }
 }
 
