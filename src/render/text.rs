@@ -20,7 +20,7 @@ pub struct Font {
     px_scale: ab_glyph::PxScale,
 }
 
-const BASE_FONT_SIZE: f32 = 18.0;
+const BASE_FONT_SIZE: f32 = 15.0;
 
 struct SystemFontEntry {
     path: PathBuf,
