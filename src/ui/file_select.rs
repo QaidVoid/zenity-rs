@@ -1540,20 +1540,30 @@ impl FileSelectBuilder {
                                 } else {
                                     search_popup_index = search_matches.len() - 1;
                                 }
-                                let prefix = search_input.text().to_string();
+                                let text = search_input.text().to_string();
                                 let name = &search_matches[search_popup_index];
-                                let pc = prefix.chars().count();
-                                search_input.set_completion(Some(name.chars().skip(pc).collect()));
+                                if name.to_lowercase().starts_with(&text.to_lowercase()) {
+                                    let pc = text.chars().count();
+                                    search_input
+                                        .set_completion(Some(name.chars().skip(pc).collect()));
+                                } else {
+                                    search_input.set_completion(None);
+                                }
                                 needs_redraw = true;
                                 search_popup_handled = true;
                             }
                             POPUP_KEY_DOWN => {
                                 search_popup_index =
                                     (search_popup_index + 1) % search_matches.len();
-                                let prefix = search_input.text().to_string();
+                                let text = search_input.text().to_string();
                                 let name = &search_matches[search_popup_index];
-                                let pc = prefix.chars().count();
-                                search_input.set_completion(Some(name.chars().skip(pc).collect()));
+                                if name.to_lowercase().starts_with(&text.to_lowercase()) {
+                                    let pc = text.chars().count();
+                                    search_input
+                                        .set_completion(Some(name.chars().skip(pc).collect()));
+                                } else {
+                                    search_input.set_completion(None);
+                                }
                                 needs_redraw = true;
                                 search_popup_handled = true;
                             }
@@ -1580,6 +1590,18 @@ impl FileSelectBuilder {
                                 search_input.set_text(&search_matches[idx]);
                                 search_matches.clear();
                                 search_popup_index = 0;
+                                let new_search = search_input.text().to_lowercase();
+                                if new_search != search_text {
+                                    search_text = new_search;
+                                    update_filtered(
+                                        &all_entries,
+                                        &search_text,
+                                        &mut filtered_entries,
+                                        &self.filters,
+                                    );
+                                    selected_indices.clear();
+                                    scroll_offset = 0;
+                                }
                                 needs_redraw = true;
                                 search_popup_handled = true;
                             }
@@ -1607,11 +1629,21 @@ impl FileSelectBuilder {
                     // Detect text change → recompute search completions
                     if search_input.text() != search_text_before {
                         search_popup_index = 0;
-                        let prefix = search_input.text().to_string();
-                        search_matches =
-                            find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, false);
-                        if !search_matches.is_empty() {
-                            let pc = prefix.chars().count();
+                        let text = search_input.text().to_string();
+                        search_matches = find_all_completions(
+                            &all_entries,
+                            &text,
+                            MAX_POPUP_ITEMS,
+                            false,
+                            false,
+                        );
+                        // Only show ghost text if the first match is a prefix match
+                        if !search_matches.is_empty()
+                            && search_matches[0]
+                                .to_lowercase()
+                                .starts_with(&text.to_lowercase())
+                        {
+                            let pc = text.chars().count();
                             search_input
                                 .set_completion(Some(search_matches[0].chars().skip(pc).collect()));
                         } else {
@@ -1620,13 +1652,22 @@ impl FileSelectBuilder {
                     }
                     // Tab pressed → accept highlighted completion
                     if search_input.was_tab_pressed() {
-                        let prefix = search_input.text().to_string();
-                        if !prefix.is_empty() {
-                            search_matches =
-                                find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, false);
+                        let text = search_input.text().to_string();
+                        if !text.is_empty() {
+                            search_matches = find_all_completions(
+                                &all_entries,
+                                &text,
+                                MAX_POPUP_ITEMS,
+                                false,
+                                false,
+                            );
                             search_popup_index = 0;
-                            if !search_matches.is_empty() {
-                                let pc = prefix.chars().count();
+                            if !search_matches.is_empty()
+                                && search_matches[0]
+                                    .to_lowercase()
+                                    .starts_with(&text.to_lowercase())
+                            {
+                                let pc = text.chars().count();
                                 search_input.set_completion(Some(
                                     search_matches[0].chars().skip(pc).collect(),
                                 ));
@@ -1649,7 +1690,7 @@ impl FileSelectBuilder {
                         }
                         needs_redraw = true;
                     }
-                    // Enter with popup open → accept highlighted item
+                    // Enter with popup open -> accept highlighted item
                     if search_input.was_submitted() && !search_matches.is_empty() {
                         search_input.set_text(&search_matches[search_popup_index]);
                         search_matches.clear();
@@ -1739,12 +1780,17 @@ impl FileSelectBuilder {
                     if fi.process_event(&event) {
                         needs_redraw = true;
                     }
-                    // Detect text change → recompute completions
+                    // Detect text change -> recompute completions
                     if fi.text() != text_before {
                         completion_popup_index = 0;
                         let prefix = fi.text().to_string();
-                        completion_matches =
-                            find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, true);
+                        completion_matches = find_all_completions(
+                            &all_entries,
+                            &prefix,
+                            MAX_POPUP_ITEMS,
+                            true,
+                            true,
+                        );
                         if !completion_matches.is_empty() {
                             let pc = prefix.chars().count();
                             fi.set_completion(Some(
@@ -1754,13 +1800,18 @@ impl FileSelectBuilder {
                             fi.set_completion(None);
                         }
                     }
-                    // Tab pressed → accept highlighted completion
+                    // Tab pressed -> accept highlighted completion
                     if fi.was_tab_pressed() {
                         let prefix = fi.text().to_string();
                         if !prefix.is_empty() {
                             // Recompute matches from new text (Tab may have accepted a suffix)
-                            completion_matches =
-                                find_all_completions(&all_entries, &prefix, MAX_POPUP_ITEMS, true);
+                            completion_matches = find_all_completions(
+                                &all_entries,
+                                &prefix,
+                                MAX_POPUP_ITEMS,
+                                true,
+                                true,
+                            );
                             completion_popup_index = 0;
                             if !completion_matches.is_empty() {
                                 let pc = prefix.chars().count();
@@ -2269,17 +2320,27 @@ fn navigate_to_directory(
 /// Returns all file entry names matching `prefix` (case-insensitive), up to `max` items.
 fn find_all_completions(
     entries: &[DirEntry],
-    prefix: &str,
+    text: &str,
     max: usize,
     files_only: bool,
+    prefix_only: bool,
 ) -> Vec<String> {
-    if prefix.is_empty() {
+    if text.is_empty() {
         return Vec::new();
     }
-    let prefix_lower = prefix.to_lowercase();
+    let text_lower = text.to_lowercase();
     entries
         .iter()
-        .filter(|e| (!files_only || !e.is_dir) && e.name.to_lowercase().starts_with(&prefix_lower))
+        .filter(|e| {
+            (!files_only || !e.is_dir) && {
+                let name_lower = e.name.to_lowercase();
+                if prefix_only {
+                    name_lower.starts_with(&text_lower)
+                } else {
+                    name_lower.contains(&text_lower)
+                }
+            }
+        })
         .take(max)
         .map(|e| e.name.clone())
         .collect()
