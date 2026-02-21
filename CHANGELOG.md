@@ -1,4 +1,10 @@
 
+## [0.2.3](https://github.com/QaidVoid/zenity-rs/compare/v0.2.2...v0.2.3) - 2026-02-21
+
+### Fixed
+
+- Lower base font size ([#28](https://github.com/QaidVoid/zenity-rs/pull/28)) - ([3ea15bc](https://github.com/QaidVoid/zenity-rs/commit/3ea15bc509753ccd12b389827bb1c2387cf95a87))
+
 ## [0.2.2](https://github.com/QaidVoid/zenity-rs/compare/v0.2.1...v0.2.2) - 2026-02-20
 
 ### Added
