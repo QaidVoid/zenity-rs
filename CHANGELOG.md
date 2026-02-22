@@ -1,4 +1,16 @@
 
+## [0.2.3](https://github.com/QaidVoid/zenity-rs/compare/v0.2.2...v0.2.3) - 2026-02-22
+
+### Added
+
+- Add window drag support to all dialog types - ([1adf70c](https://github.com/QaidVoid/zenity-rs/commit/1adf70c7c9f93439a58c5f14f446164455f53e36))
+
+### Fixed
+
+- Clear hovered_entry on cursor move in file selection - ([1f884ec](https://github.com/QaidVoid/zenity-rs/commit/1f884ece2a087136b124f841a28d71462b588747))
+- Use contains matching for search completion popup - ([3fccb3a](https://github.com/QaidVoid/zenity-rs/commit/3fccb3a2b9821d2f80a6f78176e647bf2bc4db7b))
+- Lower base font size ([#28](https://github.com/QaidVoid/zenity-rs/pull/28)) - ([3ea15bc](https://github.com/QaidVoid/zenity-rs/commit/3ea15bc509753ccd12b389827bb1c2387cf95a87))
+
 ## [0.2.2](https://github.com/QaidVoid/zenity-rs/compare/v0.2.1...v0.2.2) - 2026-02-20
 
 ### Added
