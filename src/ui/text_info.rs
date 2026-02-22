@@ -424,6 +424,8 @@ impl TextInfoBuilder {
             cancel_button.draw_to(canvas, colors, font);
         };
 
+        let mut window_dragging = false;
+
         // Scrollbar thumb dragging state
         let mut thumb_drag = false;
         let mut thumb_drag_offset: Option<i32> = None;
@@ -467,6 +469,11 @@ impl TextInfoBuilder {
                 WindowEvent::CloseRequested => return Ok(TextInfoResult::Closed),
                 WindowEvent::RedrawRequested => needs_redraw = true,
                 WindowEvent::CursorEnter(pos) | WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     let mx = pos.x as i32;
                     let my = pos.y as i32;
 
@@ -534,6 +541,7 @@ impl TextInfoBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
+                    window_dragging = true;
                     clicking_scrollbar = false;
 
                     // Check if clicking anywhere in scrollbar area (thumb OR track)
@@ -599,6 +607,7 @@ impl TextInfoBuilder {
                     }
                 }
                 WindowEvent::ButtonRelease(_, _) => {
+                    window_dragging = false;
                     thumb_drag = false;
                     thumb_drag_offset = None;
                 }

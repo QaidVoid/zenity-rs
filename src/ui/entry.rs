@@ -254,6 +254,7 @@ impl EntryBuilder {
         window.show()?;
 
         // Event loop
+        let mut window_dragging = false;
         loop {
             let event = window.wait_for_event()?;
 
@@ -277,6 +278,11 @@ impl EntryBuilder {
                     window.set_contents(&canvas)?;
                 }
                 WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     let cursor_x = pos.x as i32;
                     let cursor_y = pos.y as i32;
 
@@ -296,6 +302,12 @@ impl EntryBuilder {
                     } else {
                         CursorShape::Default
                     });
+                }
+                WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
+                    window_dragging = true;
+                }
+                WindowEvent::ButtonRelease(crate::backend::MouseButton::Left, _) => {
+                    window_dragging = false;
                 }
                 _ => {}
             }

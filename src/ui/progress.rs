@@ -345,6 +345,7 @@ impl ProgressBuilder {
         let auto_close = self.auto_close;
 
         // Event loop with timeout for animation
+        let mut window_dragging = false;
         loop {
             let mut needs_redraw = false;
 
@@ -428,6 +429,18 @@ impl ProgressBuilder {
                     }
                     WindowEvent::RedrawRequested => {
                         needs_redraw = true;
+                    }
+                    WindowEvent::CursorMove(_) => {
+                        if window_dragging {
+                            let _ = window.start_drag();
+                            window_dragging = false;
+                        }
+                    }
+                    WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
+                        window_dragging = true;
+                    }
+                    WindowEvent::ButtonRelease(crate::backend::MouseButton::Left, _) => {
+                        window_dragging = false;
                     }
                     _ => {}
                 }

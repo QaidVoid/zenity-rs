@@ -266,6 +266,8 @@ impl FileSelectBuilder {
         let mut search_matches: Vec<String> = Vec::new();
         let mut search_popup_index: usize = 0;
 
+        let mut window_dragging = false;
+
         // Scrollbar thumb dragging state
         let mut thumb_drag = false;
         let mut thumb_drag_offset: Option<i32> = None;
@@ -888,6 +890,11 @@ impl FileSelectBuilder {
                 WindowEvent::CloseRequested => return Ok(FileSelectResult::Closed),
                 WindowEvent::RedrawRequested => needs_redraw = true,
                 WindowEvent::CursorEnter(pos) | WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     mouse_x = pos.x as i32;
                     mouse_y = pos.y as i32;
 
@@ -1003,6 +1010,7 @@ impl FileSelectBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
+                    window_dragging = true;
                     let mut clicking_scrollbar = false;
 
                     // Check if clicking anywhere in scrollbar area (thumb OR track)
@@ -1313,6 +1321,7 @@ impl FileSelectBuilder {
                     }
                 }
                 WindowEvent::ButtonRelease(_, _) => {
+                    window_dragging = false;
                     thumb_drag = false;
                     thumb_drag_offset = None;
                 }

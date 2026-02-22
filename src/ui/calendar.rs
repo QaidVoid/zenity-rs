@@ -242,6 +242,7 @@ impl CalendarBuilder {
 
         let grid_y = calendar_y + header_height as i32 + day_header_height as i32;
 
+        let mut window_dragging = false;
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
@@ -250,6 +251,11 @@ impl CalendarBuilder {
                 WindowEvent::CloseRequested => return Ok(CalendarResult::Closed),
                 WindowEvent::RedrawRequested => needs_redraw = true,
                 WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     mouse_x = pos.x as i32;
                     mouse_y = pos.y as i32;
 
@@ -291,6 +297,7 @@ impl CalendarBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
+                    window_dragging = true;
                     let header_y = calendar_y;
 
                     // Handle dropdown selection
@@ -375,6 +382,9 @@ impl CalendarBuilder {
                         selected_day = day;
                         needs_redraw = true;
                     }
+                }
+                WindowEvent::ButtonRelease(MouseButton::Left, _) => {
+                    window_dragging = false;
                 }
                 WindowEvent::Scroll(dir) => {
                     if dropdown == DropdownState::Year {

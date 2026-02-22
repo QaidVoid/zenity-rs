@@ -335,6 +335,7 @@ impl FormsBuilder {
         window.show()?;
 
         // Event loop
+        let mut window_dragging = false;
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
@@ -343,6 +344,11 @@ impl FormsBuilder {
                 WindowEvent::CloseRequested => return Ok(FormsResult::Closed),
                 WindowEvent::RedrawRequested => needs_redraw = true,
                 WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     cursor_x = pos.x as i32;
                     cursor_y = pos.y as i32;
 
@@ -370,6 +376,7 @@ impl FormsBuilder {
                     });
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
+                    window_dragging = true;
                     // Check if clicking on any input field
                     for (i, input) in inputs.iter().enumerate() {
                         let ix = input.x();
@@ -391,6 +398,9 @@ impl FormsBuilder {
                             break;
                         }
                     }
+                }
+                WindowEvent::ButtonRelease(crate::backend::MouseButton::Left, _) => {
+                    window_dragging = false;
                 }
                 WindowEvent::KeyPress(key_event) => {
                     const KEY_TAB: u32 = 0xff09;

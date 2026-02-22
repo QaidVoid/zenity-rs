@@ -415,6 +415,8 @@ impl ListBuilder {
         // Track last cursor position for drag scrolling
         let mut last_cursor_pos: Option<(i32, i32)> = None;
 
+        let mut window_dragging = false;
+
         // Scrollbar thumb dragging state
         let mut v_thumb_drag = false;
         let mut h_thumb_drag = false;
@@ -797,6 +799,11 @@ impl ListBuilder {
                 WindowEvent::CloseRequested => return Ok(ListResult::Closed),
                 WindowEvent::RedrawRequested => needs_redraw = true,
                 WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     let mx = pos.x as i32;
                     let my = pos.y as i32;
 
@@ -926,6 +933,7 @@ impl ListBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, mods) => {
+                    window_dragging = true;
                     let mut clicking_scrollbar = false;
 
                     // Check if clicking anywhere in scrollbar area (thumb OR track)
@@ -1071,6 +1079,7 @@ impl ListBuilder {
                     }
                 }
                 WindowEvent::ButtonRelease(_, _) => {
+                    window_dragging = false;
                     // End scrollbar thumb dragging
                     v_thumb_drag = false;
                     h_thumb_drag = false;

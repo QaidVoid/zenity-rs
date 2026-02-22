@@ -401,6 +401,7 @@ impl ScaleBuilder {
         window.show()?;
 
         // Event loop
+        let mut window_dragging = false;
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
@@ -409,6 +410,11 @@ impl ScaleBuilder {
                 WindowEvent::CloseRequested => return Ok(ScaleResult::Closed),
                 WindowEvent::RedrawRequested => needs_redraw = true,
                 WindowEvent::CursorMove(pos) => {
+                    if window_dragging {
+                        let _ = window.start_drag();
+                        window_dragging = false;
+                    }
+
                     cursor_x = pos.x as i32;
                     cursor_y = pos.y as i32;
 
@@ -434,6 +440,7 @@ impl ScaleBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
+                    window_dragging = true;
                     let mx = cursor_x;
                     let my = cursor_y;
 
@@ -462,6 +469,7 @@ impl ScaleBuilder {
                     }
                 }
                 WindowEvent::ButtonRelease(MouseButton::Left, _) => {
+                    window_dragging = false;
                     if dragging {
                         dragging = false;
                         needs_redraw = true;
