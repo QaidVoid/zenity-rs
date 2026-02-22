@@ -942,6 +942,7 @@ impl FileSelectBuilder {
 
                         // Check places hover
                         hovered_quick_access = None;
+                        hovered_entry = None;
                         hovered_drive = None;
 
                         if mouse_x >= sidebar_x
