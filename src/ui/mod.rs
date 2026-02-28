@@ -173,7 +173,7 @@ impl DialogResult {
             DialogResult::Button(2) => 2,
             DialogResult::Button(_) => 3, // Additional buttons
             DialogResult::Timeout => 5,
-            DialogResult::Closed => 255,
+            DialogResult::Closed => 1,
         }
     }
 }

@@ -346,6 +346,12 @@ impl MessageBuilder {
                     );
                     window.set_contents(&canvas)?;
                 }
+                WindowEvent::KeyPress(key_event) => {
+                    const KEY_ESCAPE: u32 = 0xff1b;
+                    if key_event.keysym == KEY_ESCAPE {
+                        return Ok(DialogResult::Closed);
+                    }
+                }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
                     dragging = true;
                 }

@@ -176,9 +176,8 @@ zenity-rs --forms --add-entry="First" --add-entry="Last" --separator=","
 | Code | Meaning |
 |------|---------|
 | 0 | OK/Yes clicked, or selection made |
-| 1 | Cancel/No clicked |
+| 1 | Cancel/No clicked, or dialog closed (ESC/window close) |
 | 5 | Timeout reached |
-| 255 | Dialog was closed (ESC or window close) |
 | 100 | Error occurred |
 
 ## Building
