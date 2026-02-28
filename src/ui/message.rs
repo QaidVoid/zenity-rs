@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        ButtonPreset, Colors, DialogResult, Icon, KEY_ESCAPE,
+        ButtonPreset, Colors, DialogResult, Icon, KEY_ESCAPE, KEY_RETURN,
         widgets::{Widget, button::Button},
     },
 };
@@ -349,6 +349,9 @@ impl MessageBuilder {
                 WindowEvent::KeyPress(key_event) => {
                     if key_event.keysym == KEY_ESCAPE {
                         return Ok(DialogResult::Closed);
+                    }
+                    if key_event.keysym == KEY_RETURN && !buttons.is_empty() {
+                        return Ok(DialogResult::Button(0));
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
