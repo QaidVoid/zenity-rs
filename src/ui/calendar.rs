@@ -34,7 +34,7 @@ impl CalendarResult {
                 ..
             } => 0,
             CalendarResult::Cancelled => 1,
-            CalendarResult::Closed => 255,
+            CalendarResult::Closed => 1,
         }
     }
 

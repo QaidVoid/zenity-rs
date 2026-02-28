@@ -32,7 +32,7 @@ impl ScaleResult {
         match self {
             ScaleResult::Value(_) => 0,
             ScaleResult::Cancelled => 1,
-            ScaleResult::Closed => 255,
+            ScaleResult::Closed => 1,
         }
     }
 }

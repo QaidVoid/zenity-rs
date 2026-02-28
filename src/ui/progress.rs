@@ -41,7 +41,7 @@ impl ProgressResult {
         match self {
             ProgressResult::Completed => 0,
             ProgressResult::Cancelled => 1,
-            ProgressResult::Closed => 255,
+            ProgressResult::Closed => 1,
         }
     }
 }

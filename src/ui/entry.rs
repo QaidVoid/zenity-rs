@@ -30,7 +30,7 @@ impl EntryResult {
         match self {
             EntryResult::Text(_) => 0,
             EntryResult::Cancelled => 1,
-            EntryResult::Closed => 255,
+            EntryResult::Closed => 1,
         }
     }
 }

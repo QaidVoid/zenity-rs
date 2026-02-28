@@ -37,7 +37,7 @@ fn handle_message_result(
                 if idx == 0 { 0 } else { 1 }
             }
         }
-        zenity_rs::DialogResult::Closed => 255,
+        zenity_rs::DialogResult::Closed => 1,
         zenity_rs::DialogResult::Timeout => 5,
     }
 }
@@ -676,7 +676,7 @@ fn handle_list_result(
             Ok(0)
         }
         ListResult::Cancelled => Ok(1),
-        ListResult::Closed => Ok(255),
+        ListResult::Closed => Ok(1),
     }
 }
 
@@ -691,7 +691,7 @@ fn handle_calendar_result(result: CalendarResult) -> Result<i32, Box<dyn std::er
             Ok(0)
         }
         CalendarResult::Cancelled => Ok(1),
-        CalendarResult::Closed => Ok(255),
+        CalendarResult::Closed => Ok(1),
     }
 }
 
@@ -716,7 +716,7 @@ fn handle_file_select_result(
             Ok(0)
         }
         FileSelectResult::Cancelled => Ok(1),
-        FileSelectResult::Closed => Ok(255),
+        FileSelectResult::Closed => Ok(1),
     }
 }
 
@@ -731,7 +731,7 @@ fn handle_entry_result(result: EntryResult) -> Result<i32, Box<dyn std::error::E
             Ok(0)
         }
         EntryResult::Cancelled => Ok(1),
-        EntryResult::Closed => Ok(255),
+        EntryResult::Closed => Ok(1),
     }
 }
 
@@ -752,7 +752,7 @@ fn handle_text_info_result(
             }
         }
         TextInfoResult::Cancelled => Ok(1),
-        TextInfoResult::Closed => Ok(255),
+        TextInfoResult::Closed => Ok(1),
     }
 }
 
@@ -763,7 +763,7 @@ fn handle_scale_result(result: ScaleResult) -> Result<i32, Box<dyn std::error::E
             Ok(0)
         }
         ScaleResult::Cancelled => Ok(1),
-        ScaleResult::Closed => Ok(255),
+        ScaleResult::Closed => Ok(1),
     }
 }
 
@@ -777,7 +777,7 @@ fn handle_forms_result(
             Ok(0)
         }
         FormsResult::Cancelled => Ok(1),
-        FormsResult::Closed => Ok(255),
+        FormsResult::Closed => Ok(1),
     }
 }
 
@@ -906,9 +906,8 @@ USAGE:
 
 EXIT CODES:
     0   OK/Yes clicked, or value selected
-    1   Cancel/No clicked, or checkbox unchecked
+    1   Cancel/No clicked, dialog closed (ESC or window close), or checkbox unchecked
     5   Timeout reached
-    255 Dialog was closed (ESC or window close)
     100 Error occurred
 "#
     );

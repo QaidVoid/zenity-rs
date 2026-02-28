@@ -44,7 +44,7 @@ impl TextInfoResult {
                 }
             }
             TextInfoResult::Cancelled => 1,
-            TextInfoResult::Closed => 255,
+            TextInfoResult::Closed => 1,
         }
     }
 }

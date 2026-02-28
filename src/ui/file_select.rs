@@ -47,7 +47,7 @@ impl FileSelectResult {
         match self {
             FileSelectResult::Selected(_) | FileSelectResult::SelectedMultiple(_) => 0,
             FileSelectResult::Cancelled => 1,
-            FileSelectResult::Closed => 255,
+            FileSelectResult::Closed => 1,
         }
     }
 }

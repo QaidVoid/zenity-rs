@@ -34,7 +34,7 @@ impl ListResult {
         match self {
             ListResult::Selected(_) => 0,
             ListResult::Cancelled => 1,
-            ListResult::Closed => 255,
+            ListResult::Closed => 1,
         }
     }
 }

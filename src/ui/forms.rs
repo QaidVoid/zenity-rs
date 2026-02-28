@@ -55,7 +55,7 @@ impl FormsResult {
         match self {
             FormsResult::Values(_) => 0,
             FormsResult::Cancelled => 1,
-            FormsResult::Closed => 255,
+            FormsResult::Closed => 1,
         }
     }
 }
