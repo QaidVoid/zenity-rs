@@ -137,7 +137,10 @@ impl MessageBuilder {
 
         // Reverse labels so that when we position them right-to-left,
         // the last buttons (standard Yes/No) appear on the right
+        let num_labels = labels.len();
         labels.reverse();
+        // Map reversed index back to original index for correct exit codes
+        let original_index: Vec<usize> = (0..num_labels).rev().collect();
 
         // Calculate logical button widths and determine layout
         let temp_buttons: Vec<Button> = labels
@@ -361,7 +364,7 @@ impl MessageBuilder {
                     needs_redraw = true;
                 }
                 if button.was_clicked() {
-                    return Ok(DialogResult::Button(i));
+                    return Ok(DialogResult::Button(original_index[i]));
                 }
             }
 
@@ -385,7 +388,7 @@ impl MessageBuilder {
                                 needs_redraw = true;
                             }
                             if button.was_clicked() {
-                                return Ok(DialogResult::Button(i));
+                                return Ok(DialogResult::Button(original_index[i]));
                             }
                         }
                     }
