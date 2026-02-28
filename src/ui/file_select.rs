@@ -12,7 +12,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
-        Colors,
+        Colors, KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -1345,12 +1345,6 @@ impl FileSelectBuilder {
                     }
                 }
                 WindowEvent::KeyPress(key_event) => {
-                    const KEY_UP: u32 = 0xff52;
-                    const KEY_DOWN: u32 = 0xff54;
-                    const KEY_RETURN: u32 = 0xff0d;
-                    const KEY_ESCAPE: u32 = 0xff1b;
-                    const KEY_BACKSPACE: u32 = 0xff08;
-
                     let filename_has_focus =
                         filename_input.as_ref().map_or(false, |fi| fi.has_focus());
 

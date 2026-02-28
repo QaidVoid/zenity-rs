@@ -7,7 +7,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        Colors,
+        Colors, KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN,
+        KEY_UP,
         widgets::{Widget, button::Button},
     },
 };
@@ -637,15 +638,6 @@ impl TextInfoBuilder {
                     }
                 }
                 WindowEvent::KeyPress(key_event) => {
-                    const KEY_UP: u32 = 0xff52;
-                    const KEY_DOWN: u32 = 0xff54;
-                    const KEY_PAGE_UP: u32 = 0xff55;
-                    const KEY_PAGE_DOWN: u32 = 0xff56;
-                    const KEY_HOME: u32 = 0xff50;
-                    const KEY_END: u32 = 0xff57;
-                    const KEY_RETURN: u32 = 0xff0d;
-                    const KEY_ESCAPE: u32 = 0xff1b;
-
                     let max_scroll = total_lines.saturating_sub(visible_lines);
 
                     match key_event.keysym {

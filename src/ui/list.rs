@@ -5,7 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        Colors,
+        Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT,
+        KEY_SPACE, KEY_UP,
         widgets::{Widget, button::Button},
     },
 };
@@ -1138,16 +1139,6 @@ impl ListBuilder {
                     }
                 }
                 WindowEvent::KeyPress(key_event) => {
-                    const KEY_UP: u32 = 0xff52;
-                    const KEY_DOWN: u32 = 0xff54;
-                    const KEY_LEFT: u32 = 0xff51;
-                    const KEY_RIGHT: u32 = 0xff53;
-                    const KEY_LSHIFT: u32 = 0xffe1;
-                    const KEY_RSHIFT: u32 = 0xffe2;
-                    const KEY_SPACE: u32 = 0x20;
-                    const KEY_RETURN: u32 = 0xff0d;
-                    const KEY_ESCAPE: u32 = 0xff1b;
-
                     // Handle shift for scroll mode
                     if key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT {
                         h_scroll_mode = true;
@@ -1251,9 +1242,6 @@ impl ListBuilder {
                     }
                 }
                 WindowEvent::KeyRelease(key_event) => {
-                    const KEY_LSHIFT: u32 = 0xffe1;
-                    const KEY_RSHIFT: u32 = 0xffe2;
-
                     // Handle shift release for scroll mode
                     if key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT {
                         h_scroll_mode = false;

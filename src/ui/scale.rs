@@ -5,7 +5,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors,
+        Colors, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_LEFT, KEY_RETURN, KEY_RIGHT,
         widgets::{Widget, button::Button},
     },
 };
@@ -476,13 +476,6 @@ impl ScaleBuilder {
                     }
                 }
                 WindowEvent::KeyPress(key_event) => {
-                    const KEY_LEFT: u32 = 0xff51;
-                    const KEY_RIGHT: u32 = 0xff53;
-                    const KEY_HOME: u32 = 0xff50;
-                    const KEY_END: u32 = 0xff57;
-                    const KEY_RETURN: u32 = 0xff0d;
-                    const KEY_ESCAPE: u32 = 0xff1b;
-
                     match key_event.keysym {
                         KEY_LEFT => {
                             let new_value = (value - self.step).max(self.min_value);

@@ -13,6 +13,26 @@ pub(crate) mod widgets;
 
 use crate::render::{Rgba, rgb};
 
+// XKB keysym constants shared across dialog implementations
+pub(crate) const KEY_BACKSPACE: u32 = 0xff08;
+pub(crate) const KEY_TAB: u32 = 0xff09;
+pub(crate) const KEY_RETURN: u32 = 0xff0d;
+pub(crate) const KEY_ESCAPE: u32 = 0xff1b;
+pub(crate) const KEY_HOME: u32 = 0xff50;
+pub(crate) const KEY_LEFT: u32 = 0xff51;
+pub(crate) const KEY_UP: u32 = 0xff52;
+pub(crate) const KEY_RIGHT: u32 = 0xff53;
+pub(crate) const KEY_DOWN: u32 = 0xff54;
+pub(crate) const KEY_PAGE_UP: u32 = 0xff55;
+pub(crate) const KEY_PAGE_DOWN: u32 = 0xff56;
+pub(crate) const KEY_END: u32 = 0xff57;
+pub(crate) const KEY_KP_ENTER: u32 = 0xff8d;
+pub(crate) const KEY_DELETE: u32 = 0xffff;
+pub(crate) const KEY_ISO_LEFT_TAB: u32 = 0xfe20;
+pub(crate) const KEY_LSHIFT: u32 = 0xffe1;
+pub(crate) const KEY_RSHIFT: u32 = 0xffe2;
+pub(crate) const KEY_SPACE: u32 = 0x20;
+
 /// Color theme for dialogs.
 #[derive(Debug, Clone, Copy)]
 pub struct Colors {

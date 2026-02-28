@@ -4,23 +4,15 @@ use super::Widget;
 use crate::{
     backend::{Modifiers, WindowEvent},
     render::{Canvas, Font, Rgba},
-    ui::Colors,
+    ui::{
+        Colors, KEY_BACKSPACE, KEY_DELETE, KEY_END, KEY_HOME, KEY_KP_ENTER, KEY_LEFT, KEY_RETURN,
+        KEY_RIGHT, KEY_TAB,
+    },
 };
 
 const INPUT_HEIGHT: u32 = 32;
 const INPUT_RADIUS: f32 = 5.0;
 const INPUT_PADDING: i32 = 8;
-
-// XKB keysym constants
-const KEY_BACKSPACE: u32 = 0xff08;
-const KEY_DELETE: u32 = 0xffff;
-const KEY_LEFT: u32 = 0xff51;
-const KEY_RIGHT: u32 = 0xff53;
-const KEY_HOME: u32 = 0xff50;
-const KEY_END: u32 = 0xff57;
-const KEY_RETURN: u32 = 0xff0d;
-const KEY_KP_ENTER: u32 = 0xff8d;
-const KEY_TAB: u32 = 0xff09;
 
 /// A single-line text input widget.
 pub struct TextInput {

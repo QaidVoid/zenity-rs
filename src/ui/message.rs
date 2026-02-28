@@ -7,7 +7,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        ButtonPreset, Colors, DialogResult, Icon,
+        ButtonPreset, Colors, DialogResult, Icon, KEY_ESCAPE,
         widgets::{Widget, button::Button},
     },
 };
@@ -347,7 +347,6 @@ impl MessageBuilder {
                     window.set_contents(&canvas)?;
                 }
                 WindowEvent::KeyPress(key_event) => {
-                    const KEY_ESCAPE: u32 = 0xff1b;
                     if key_event.keysym == KEY_ESCAPE {
                         return Ok(DialogResult::Closed);
                     }

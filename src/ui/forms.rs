@@ -5,7 +5,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors,
+        Colors, KEY_ESCAPE, KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -403,11 +403,6 @@ impl FormsBuilder {
                     window_dragging = false;
                 }
                 WindowEvent::KeyPress(key_event) => {
-                    const KEY_TAB: u32 = 0xff09;
-                    const KEY_RETURN: u32 = 0xff0d;
-                    const KEY_ESCAPE: u32 = 0xff1b;
-                    const KEY_ISO_LEFT_TAB: u32 = 0xfe20; // Shift+Tab
-
                     match key_event.keysym {
                         KEY_TAB => {
                             // Move to next field
