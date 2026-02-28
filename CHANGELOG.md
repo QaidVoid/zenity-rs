@@ -1,4 +1,25 @@
 
+## [0.2.5](https://github.com/QaidVoid/zenity-rs/compare/v0.2.4...v0.2.5) - 2026-02-28
+
+### Added
+
+- Add Enter key support to message dialog - ([cfbff6b](https://github.com/QaidVoid/zenity-rs/commit/cfbff6b5c3a68e255893ff2944f6305be99a747d))
+
+### Fixed
+
+- Guard against division by zero in point_in_triangle - ([ff0dbe0](https://github.com/QaidVoid/zenity-rs/commit/ff0dbe0bb0f8394aac6a13f2740183ea9b3865bb))
+- Add Escape key handling to entry dialog - ([d7eaca2](https://github.com/QaidVoid/zenity-rs/commit/d7eaca2d675766dde83ddb319346f9d009768658))
+- Change Closed exit code from 255 to 1 across all dialog types - ([1ebf0b7](https://github.com/QaidVoid/zenity-rs/commit/1ebf0b7734bc6d9f5edcb762d64cee467f6f7843))
+
+### Other
+
+- Use shared layout constants in remaining dialog types - ([e9cac03](https://github.com/QaidVoid/zenity-rs/commit/e9cac038691078dd2d55162dc04ed5ae36f9682b))
+- Replace magic numbers with named constants in file select dialog - ([a214e81](https://github.com/QaidVoid/zenity-rs/commit/a214e817168fefbb12611c7e1a592c5d1aa76426))
+- Replace magic numbers with named constants in calendar dialog - ([7496dc3](https://github.com/QaidVoid/zenity-rs/commit/7496dc39e6f17f06954110111dffb37aecc6e45f))
+- Replace magic numbers with named constants in forms dialog - ([180fc97](https://github.com/QaidVoid/zenity-rs/commit/180fc971cdf997eef0cc741c926ccfaccefeb2f9))
+- Add shared layout constants and use them in entry dialog - ([d59c855](https://github.com/QaidVoid/zenity-rs/commit/d59c855586b6fb15a1ba29b602224f6ddf25da16))
+- Consolidate duplicated key constants into ui/mod.rs - ([c745bf7](https://github.com/QaidVoid/zenity-rs/commit/c745bf7ca82c5438defbc9c90155d6a5eb639eca))
+
 ## [0.2.4](https://github.com/QaidVoid/zenity-rs/compare/v0.2.3...v0.2.4) - 2026-02-28
 
 ### Fixed

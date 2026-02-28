@@ -2,7 +2,7 @@ cargo-features = ["panic-immediate-abort"]
 
 [package]
 name = "zenity-rs"
-version = "0.2.4"
+version = "0.2.5"
 edition = "2024"
 rust-version = "1.87"
 license = "MIT"
