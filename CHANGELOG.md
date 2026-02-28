@@ -1,4 +1,15 @@
 
+## [0.2.4](https://github.com/QaidVoid/zenity-rs/compare/v0.2.3...v0.2.4) - 2026-02-28
+
+### Fixed
+
+- Handle Escape key in message dialogs and return exit code 1 for close - ([42d5395](https://github.com/QaidVoid/zenity-rs/commit/42d53956189d84f4125202607cd257cf270597c0))
+- Correct reversed Yes/No exit codes in message dialog - ([0e4b695](https://github.com/QaidVoid/zenity-rs/commit/0e4b69573ff55be810702f8aa7e0c533e25f2344))
+
+### Other
+
+- Bump rust version - ([0709952](https://github.com/QaidVoid/zenity-rs/commit/0709952cfdd9707c282a5758670d850783c25769))
+
 ## [0.2.3](https://github.com/QaidVoid/zenity-rs/compare/v0.2.2...v0.2.3) - 2026-02-22
 
 ### Added
