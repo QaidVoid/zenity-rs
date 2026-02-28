@@ -5,7 +5,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors,
+        Colors, KEY_ESCAPE,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -302,6 +302,11 @@ impl EntryBuilder {
                     } else {
                         CursorShape::Default
                     });
+                }
+                WindowEvent::KeyPress(key_event) => {
+                    if key_event.keysym == KEY_ESCAPE {
+                        return Ok(EntryResult::Closed);
+                    }
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
                     window_dragging = true;
