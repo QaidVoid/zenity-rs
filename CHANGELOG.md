@@ -1,4 +1,10 @@
 
+## [0.2.6](https://github.com/QaidVoid/zenity-rs/compare/v0.2.5...v0.2.6) - 2026-02-28
+
+### Other
+
+- Fix msrv - ([bf117a2](https://github.com/QaidVoid/zenity-rs/commit/bf117a27b9aaeb2aec832a086204b725267075e3))
+
 ## [0.2.5](https://github.com/QaidVoid/zenity-rs/compare/v0.2.4...v0.2.5) - 2026-02-28
 
 ### Added
