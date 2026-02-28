@@ -5,7 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
-        Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
+        KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP,
         widgets::{Widget, button::Button},
     },
 };
@@ -15,6 +16,9 @@ const BASE_CELL_SIZE: u32 = 36;
 const BASE_HEADER_HEIGHT: u32 = 40;
 const BASE_DAY_HEADER_HEIGHT: u32 = 28;
 const BASE_DROPDOWN_ITEM_HEIGHT: u32 = 24;
+const BASE_TEXT_HEIGHT: u32 = 24;
+const BASE_FOOTER_HEIGHT: u32 = 50;
+const BASE_TEXT_GAP: u32 = 8;
 
 /// Calendar dialog result.
 #[derive(Debug, Clone)]
@@ -132,14 +136,18 @@ impl CalendarBuilder {
 
         // Calculate logical dimensions at scale 1.0
         let logical_grid_width = BASE_CELL_SIZE * 7;
-        let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
+        let logical_text_height = if self.text.is_empty() {
+            0
+        } else {
+            BASE_TEXT_HEIGHT
+        };
         let calc_width = logical_grid_width + BASE_PADDING * 2;
         let calc_height = BASE_PADDING * 2
             + logical_text_height
             + BASE_HEADER_HEIGHT
             + BASE_DAY_HEADER_HEIGHT
             + BASE_CELL_SIZE * 6
-            + 50;
+            + BASE_FOOTER_HEIGHT;
 
         // Use custom dimensions if provided, otherwise use calculated defaults
         let logical_width = self.width.unwrap_or(calc_width);
@@ -170,7 +178,7 @@ impl CalendarBuilder {
         let text_height = if self.text.is_empty() {
             0
         } else {
-            (24.0 * scale) as u32
+            (BASE_TEXT_HEIGHT as f32 * scale) as u32
         };
         let width = grid_width + padding * 2;
         let height = padding * 2
@@ -178,7 +186,7 @@ impl CalendarBuilder {
             + header_height
             + day_header_height
             + cell_size * 6
-            + (50.0 * scale) as u32;
+            + (BASE_FOOTER_HEIGHT as f32 * scale) as u32;
 
         // Get current date as default
         let now = current_date();
@@ -194,17 +202,17 @@ impl CalendarBuilder {
         let mut y = padding as i32;
         let text_y = y;
         if !self.text.is_empty() {
-            y += text_height as i32 + (8.0 * scale) as i32;
+            y += text_height as i32 + (BASE_TEXT_GAP as f32 * scale) as i32;
         }
 
         let calendar_x = padding as i32;
         let calendar_y = y;
 
-        let button_y = (height - padding - (32.0 * scale) as u32) as i32;
+        let button_y = (height - padding - (BASE_BUTTON_HEIGHT as f32 * scale) as u32) as i32;
         let mut bx = width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
         cancel_button.set_position(bx, button_y);
-        bx -= (10.0 * scale) as i32 + ok_button.width() as i32;
+        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(bx, button_y);
 
         // Create canvas at PHYSICAL dimensions
@@ -618,7 +626,7 @@ fn draw_calendar(
     let day_header_height = (BASE_DAY_HEADER_HEIGHT as f32 * scale) as u32;
     let width = canvas.width() as f32;
     let height = canvas.height() as f32;
-    let radius = 8.0 * scale;
+    let radius = BASE_CORNER_RADIUS * scale;
 
     canvas.fill_dialog_bg(
         width,
