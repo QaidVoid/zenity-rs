@@ -5,13 +5,12 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors, KEY_ESCAPE,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
 
 const BASE_PADDING: u32 = 20;
-const BASE_BUTTON_SPACING: u32 = 10;
 const BASE_INPUT_WIDTH: u32 = 300;
 
 /// Entry dialog result.
@@ -117,10 +116,14 @@ impl EntryBuilder {
         let calc_width = logical_content_width + BASE_PADDING * 2;
         let calc_height = BASE_PADDING * 3
             + temp_prompt_height
-            + (if temp_prompt_height > 0 { 10 } else { 0 })
+            + (if temp_prompt_height > 0 {
+                BASE_BUTTON_SPACING
+            } else {
+                0
+            })
             + temp_input.height()
-            + 10
-            + 32;
+            + BASE_BUTTON_SPACING
+            + BASE_BUTTON_HEIGHT;
 
         drop(temp_font);
         drop(temp_ok);
@@ -183,12 +186,12 @@ impl EntryBuilder {
         let mut y = padding as i32;
         let prompt_y = y;
         if prompt_height > 0 {
-            y += prompt_height as i32 + (10.0 * scale) as i32;
+            y += prompt_height as i32 + (BASE_BUTTON_SPACING as f32 * scale) as i32;
         }
 
         // Input position
         input.set_position(padding as i32, y);
-        y += input.height() as i32 + (10.0 * scale) as i32;
+        y += input.height() as i32 + (BASE_BUTTON_SPACING as f32 * scale) as i32;
 
         // Button positions (right-aligned)
         let mut button_x = physical_width as i32 - padding as i32;
@@ -213,7 +216,7 @@ impl EntryBuilder {
                     scale: f32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,

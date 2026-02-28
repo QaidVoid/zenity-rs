@@ -33,6 +33,11 @@ pub(crate) const KEY_LSHIFT: u32 = 0xffe1;
 pub(crate) const KEY_RSHIFT: u32 = 0xffe2;
 pub(crate) const KEY_SPACE: u32 = 0x20;
 
+// Shared layout constants (logical, at scale 1.0)
+pub(crate) const BASE_CORNER_RADIUS: f32 = 8.0;
+pub(crate) const BASE_BUTTON_HEIGHT: u32 = 32;
+pub(crate) const BASE_BUTTON_SPACING: u32 = 10;
+
 /// Color theme for dialogs.
 #[derive(Debug, Clone, Copy)]
 pub struct Colors {
