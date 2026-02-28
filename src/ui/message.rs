@@ -7,14 +7,14 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        ButtonPreset, Colors, DialogResult, Icon, KEY_ESCAPE, KEY_RETURN,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, ButtonPreset, Colors,
+        DialogResult, Icon, KEY_ESCAPE, KEY_RETURN,
         widgets::{Widget, button::Button},
     },
 };
 
 const BASE_ICON_SIZE: u32 = 48;
 const BASE_PADDING: u32 = 20;
-const BASE_BUTTON_SPACING: u32 = 10;
 const BASE_MIN_WIDTH: u32 = 150;
 const BASE_MAX_TEXT_WIDTH: f32 = 150.0;
 
@@ -220,7 +220,7 @@ impl MessageBuilder {
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let button_spacing = (BASE_BUTTON_SPACING as f32 * scale) as u32;
         let max_text_width = text_width * scale;
-        let button_height = (32.0 * scale) as u32;
+        let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
 
         // Create buttons at physical scale
         let mut buttons: Vec<Button> = labels
@@ -440,7 +440,7 @@ fn draw_dialog(
     let padding = (BASE_PADDING as f32 * scale) as u32;
     let width = canvas.width() as f32;
     let height = canvas.height() as f32;
-    let radius = 8.0 * scale;
+    let radius = BASE_CORNER_RADIUS * scale;
 
     // Draw dialog background with shadow and border
     canvas.fill_dialog_bg(

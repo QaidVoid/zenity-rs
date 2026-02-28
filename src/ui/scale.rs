@@ -5,7 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_LEFT, KEY_RETURN, KEY_RIGHT,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_END, KEY_ESCAPE,
+        KEY_HOME, KEY_LEFT, KEY_RETURN, KEY_RIGHT,
         widgets::{Widget, button::Button},
     },
 };
@@ -209,11 +210,12 @@ impl ScaleBuilder {
         y += thumb_size as i32 + (16.0 * scale) as i32;
 
         // Button positions (right-aligned)
-        let button_y = physical_height as i32 - padding as i32 - (32.0 * scale) as i32;
+        let button_y =
+            physical_height as i32 - padding as i32 - (BASE_BUTTON_HEIGHT as f32 * scale) as i32;
         let mut button_x = physical_width as i32 - padding as i32;
         button_x -= cancel_button.width() as i32;
         cancel_button.set_position(button_x, button_y);
-        button_x -= (10.0 * scale) as i32 + ok_button.width() as i32;
+        button_x -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(button_x, button_y);
 
         // State
@@ -282,7 +284,7 @@ impl ScaleBuilder {
                     value_to_thumb_x: &dyn Fn(i32) -> i32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,

@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors,
+        BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors,
         widgets::{Widget, button::Button, progress_bar::ProgressBar},
     },
 };
@@ -213,7 +213,8 @@ impl ProgressBuilder {
         let bar_y = text_y + text_height as i32 + 10 + time_remaining_offset;
         progress_bar.set_position(padding as i32, bar_y);
 
-        let button_y = bar_y + progress_bar.height() as i32 + (10.0 * scale) as i32;
+        let button_y =
+            bar_y + progress_bar.height() as i32 + (BASE_BUTTON_SPACING as f32 * scale) as i32;
         if let Some(ref mut cancel_button) = cancel_button {
             let button_x = physical_width as i32 - padding as i32 - cancel_button.width() as i32;
             cancel_button.set_position(button_x, button_y);
@@ -270,7 +271,7 @@ impl ProgressBuilder {
                     scale: f32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,

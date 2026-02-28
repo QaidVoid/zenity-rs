@@ -7,8 +7,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        Colors, KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN,
-        KEY_UP,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_END,
+        KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN, KEY_UP,
         widgets::{Widget, button::Button},
     },
 };
@@ -160,7 +160,7 @@ impl TextInfoBuilder {
         } else {
             line_height + (8.0 * scale) as u32
         };
-        let button_height = (32.0 * scale) as u32;
+        let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
         let checkbox_row_height = if has_checkbox {
             checkbox_size + (8.0 * scale) as u32
         } else {
@@ -235,7 +235,7 @@ impl TextInfoBuilder {
         let mut bx = physical_width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
         cancel_button.set_position(bx, button_y);
-        bx -= (10.0 * scale) as i32 + ok_button.width() as i32;
+        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(bx, button_y);
 
         // State
@@ -273,7 +273,7 @@ impl TextInfoBuilder {
                     scrollbar_hovered: bool| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,

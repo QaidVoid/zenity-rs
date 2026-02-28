@@ -5,8 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT,
-        KEY_SPACE, KEY_UP,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
+        KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT, KEY_SPACE, KEY_UP,
         widgets::{Widget, button::Button},
     },
 };
@@ -398,11 +398,12 @@ impl ListBuilder {
         let list_h = list_height;
         let visible_rows = (list_h / row_height) as usize;
 
-        let button_y = (physical_height - padding - (32.0 * scale) as u32) as i32;
+        let button_y =
+            (physical_height - padding - (BASE_BUTTON_HEIGHT as f32 * scale) as u32) as i32;
         let mut bx = physical_width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
         cancel_button.set_position(bx, button_y);
-        bx -= (10.0 * scale) as i32 + ok_button.width() as i32;
+        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(bx, button_y);
 
         // Create canvas at PHYSICAL dimensions
@@ -465,7 +466,7 @@ impl ListBuilder {
                     h_scrollbar_hovered: bool| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,
