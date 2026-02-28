@@ -4,7 +4,7 @@ cargo-features = ["panic-immediate-abort"]
 name = "zenity-rs"
 version = "0.2.5"
 edition = "2024"
-rust-version = "1.87"
+rust-version = "1.88"
 license = "MIT"
 description = "Display simple GUI dialogs from the command line"
 keywords = ["zenity", "dialog", "gui", "cli"]
@@ -32,7 +32,7 @@ ab_glyph = { version = "0.2", features = ["libm"] }
 lexopt = "0.3"
 
 # Misc
-bitflags = "2.10"
+bitflags = "2.11"
 dirs = "6"
 libc = "0.2"
 
