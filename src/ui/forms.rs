@@ -5,7 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        Colors, KEY_ESCAPE, KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
+        KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -16,6 +17,8 @@ const BASE_FIELD_SPACING: u32 = 12;
 const BASE_LABEL_WIDTH: u32 = 120;
 const BASE_INPUT_WIDTH: u32 = 250;
 const BASE_MIN_WIDTH: u32 = 420;
+const BASE_PROMPT_SPACING: u32 = 16;
+const BASE_LABEL_GAP: u32 = 10;
 
 /// Field type for forms.
 #[derive(Debug, Clone)]
@@ -148,19 +151,23 @@ impl FormsBuilder {
             0
         };
 
-        let logical_buttons_width = temp_ok.width() + temp_cancel.width() + 10;
+        let logical_buttons_width = temp_ok.width() + temp_cancel.width() + BASE_BUTTON_SPACING;
         let logical_content_width =
-            (BASE_LABEL_WIDTH + BASE_INPUT_WIDTH + 10).max(logical_buttons_width);
+            (BASE_LABEL_WIDTH + BASE_INPUT_WIDTH + BASE_LABEL_GAP).max(logical_buttons_width);
         let calc_width = (logical_content_width + BASE_PADDING * 2).max(BASE_MIN_WIDTH);
 
         // Height: padding + text + fields + buttons + padding
         let fields_height = self.fields.len() as u32 * (BASE_FIELD_HEIGHT + BASE_FIELD_SPACING);
         let calc_height = BASE_PADDING * 2
             + temp_prompt_height
-            + (if temp_prompt_height > 0 { 16 } else { 0 })
+            + (if temp_prompt_height > 0 {
+                BASE_PROMPT_SPACING
+            } else {
+                0
+            })
             + fields_height
-            + 16
-            + 32; // Button area
+            + BASE_PROMPT_SPACING
+            + BASE_BUTTON_HEIGHT;
 
         drop(temp_font);
         drop(temp_ok);
@@ -229,12 +236,12 @@ impl FormsBuilder {
         let mut y = padding as i32;
         let prompt_y = y;
         if prompt_height > 0 {
-            y += prompt_height as i32 + (16.0 * scale) as i32;
+            y += prompt_height as i32 + (BASE_PROMPT_SPACING as f32 * scale) as i32;
         }
 
         // Position inputs
         let label_x = padding as i32;
-        let input_x = padding as i32 + label_width as i32 + (10.0 * scale) as i32;
+        let input_x = padding as i32 + label_width as i32 + (BASE_LABEL_GAP as f32 * scale) as i32;
         let mut field_positions: Vec<i32> = Vec::new();
 
         for (i, input) in inputs.iter_mut().enumerate() {
@@ -244,11 +251,12 @@ impl FormsBuilder {
         }
 
         // Button positions (right-aligned)
-        let button_y = physical_height as i32 - padding as i32 - (32.0 * scale) as i32;
+        let button_y =
+            physical_height as i32 - padding as i32 - (BASE_BUTTON_HEIGHT as f32 * scale) as i32;
         let mut button_x = physical_width as i32 - padding as i32;
         button_x -= cancel_button.width() as i32;
         cancel_button.set_position(button_x, button_y);
-        button_x -= (10.0 * scale) as i32 + ok_button.width() as i32;
+        button_x -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(button_x, button_y);
 
         // Track cursor position
@@ -276,7 +284,7 @@ impl FormsBuilder {
                     scale: f32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,
