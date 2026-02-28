@@ -12,7 +12,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
-        Colors, KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_BACKSPACE,
+        KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -32,6 +33,11 @@ const BASE_SECTION_HEADER_HEIGHT: u32 = 22;
 // Column widths (logical)
 const BASE_NAME_COL_WIDTH: u32 = 280;
 const BASE_SIZE_COL_WIDTH: u32 = 80;
+const BASE_COLUMN_HEADER_HEIGHT: u32 = 28;
+const BASE_FILENAME_ROW_HEIGHT: u32 = 58;
+const BASE_FOOTER_HEIGHT: u32 = 44;
+const BASE_CONTENT_GAP: u32 = 12;
+const BASE_FILENAME_LABEL_HEIGHT: u32 = 20;
 
 /// File selection dialog result.
 #[derive(Debug, Clone)]
@@ -283,22 +289,28 @@ impl FileSelectBuilder {
         );
 
         // Calculate layout in physical coordinates
-        let filename_row_height = if save_mode { (58.0 * scale) as u32 } else { 0 };
+        let filename_row_height = if save_mode {
+            (BASE_FILENAME_ROW_HEIGHT as f32 * scale) as u32
+        } else {
+            0
+        };
+        let content_gap = (BASE_CONTENT_GAP as f32 * scale) as u32;
+        let footer_height = (BASE_FOOTER_HEIGHT as f32 * scale) as u32;
         let sidebar_x = padding as i32;
-        let sidebar_y = (padding + toolbar_height + (8.0 * scale) as u32) as i32;
+        let sidebar_y = (padding + toolbar_height + content_gap) as i32;
         let sidebar_h = window_height
             - padding * 2
             - toolbar_height
-            - (8.0 * scale) as u32
-            - (44.0 * scale) as u32
+            - content_gap
+            - footer_height
             - filename_row_height;
 
-        let main_x = (padding + sidebar_width + (12.0 * scale) as u32) as i32;
+        let main_x = (padding + sidebar_width + content_gap) as i32;
         let main_y = sidebar_y;
-        let main_w = window_width - padding * 2 - sidebar_width - (12.0 * scale) as u32;
+        let main_w = window_width - padding * 2 - sidebar_width - content_gap;
         let main_h = sidebar_h;
 
-        let header_offset = (28.0 * scale) as u32; // Column headers
+        let header_offset = (BASE_COLUMN_HEADER_HEIGHT as f32 * scale) as u32;
         let list_y = main_y + path_bar_height as i32 + header_offset as i32;
         let list_h = main_h - path_bar_height - header_offset;
         let visible_items = (list_h / item_height) as usize;
@@ -306,19 +318,20 @@ impl FileSelectBuilder {
         // Calculate section heights
         let section_header_height = (BASE_SECTION_HEADER_HEIGHT as f32 * scale) as u32;
         let item_height_scaled = item_height;
-        let gap_between_sections = (12.0 * scale) as u32;
+        let gap_between_sections = content_gap;
 
         // Position buttons
-        let button_y = (window_height - padding - (32.0 * scale) as u32) as i32;
+        let button_y =
+            (window_height - padding - (BASE_BUTTON_HEIGHT as f32 * scale) as u32) as i32;
         let mut bx = window_width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
         cancel_button.set_position(bx, button_y);
-        bx -= (10.0 * scale) as i32 + ok_button.width() as i32;
+        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
         ok_button.set_position(bx, button_y);
 
         // Position filename area (label above, full-width input below, save mode only)
         let filename_y = button_y - filename_row_height as i32;
-        let filename_label_h = (20.0 * scale) as i32;
+        let filename_label_h = (BASE_FILENAME_LABEL_HEIGHT as f32 * scale) as i32;
         let mut filename_input = if save_mode {
             let mut input = TextInput::new(main_w).with_placeholder("Enter filename...");
             if !self.filename.is_empty() {
@@ -366,7 +379,7 @@ impl FileSelectBuilder {
                     filename_input: Option<&TextInput>| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
-            let radius = 8.0 * scale;
+            let radius = BASE_CORNER_RADIUS * scale;
 
             canvas.fill_dialog_bg(
                 width,
