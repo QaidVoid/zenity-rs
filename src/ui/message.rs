@@ -587,7 +587,11 @@ fn point_in_triangle(
     let dot11 = v1x * v1x + v1y * v1y;
     let dot12 = v1x * v2x + v1y * v2y;
 
-    let inv_denom = 1.0 / (dot00 * dot11 - dot01 * dot01);
+    let denom = dot00 * dot11 - dot01 * dot01;
+    if denom == 0.0 {
+        return false;
+    }
+    let inv_denom = 1.0 / denom;
     let u = (dot11 * dot02 - dot01 * dot12) * inv_denom;
     let v = (dot00 * dot12 - dot01 * dot02) * inv_denom;
 
