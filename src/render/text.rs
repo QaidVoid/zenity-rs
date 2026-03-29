@@ -631,6 +631,7 @@ impl<'a> TextRenderer<'a> {
             let mut x: f32 = 0.0;
             let mut last_softbreak: Option<usize> = None;
             let mut last_primary_glyph: Option<GlyphId> = None;
+            let mut line_start: usize = glyphs.len();
 
             for c in line.chars() {
                 let primary_glyph_id = self.font.primary.font.glyph_id(c);
@@ -711,6 +712,15 @@ impl<'a> TextRenderer<'a> {
                             }
                             x -= x_diff;
                             last_softbreak = None;
+                            line_start = i;
+                        } else if glyphs.len() > line_start + 1 {
+                            y += self.font.primary.height() + self.font.primary.line_gap();
+                            let last = glyphs.last_mut().unwrap();
+                            last.glyph.position.x = 0.0;
+                            last.glyph.position.y = y;
+                            x = advance;
+                            line_start = glyphs.len() - 1;
+                            last_primary_glyph = None;
                         }
                     }
                 }
