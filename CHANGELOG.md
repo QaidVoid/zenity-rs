@@ -1,4 +1,14 @@
 
+## [0.2.6](https://github.com/QaidVoid/zenity-rs/compare/v0.2.5...v0.2.6) - 2026-03-29
+
+### Fixed
+
+- Add hard wrap for long words in text renderer - ([870fe66](https://github.com/QaidVoid/zenity-rs/commit/870fe66fa7fcab361a0fb4536af67f1fd74ee361))
+
+### Other
+
+- Fix msrv - ([bf117a2](https://github.com/QaidVoid/zenity-rs/commit/bf117a27b9aaeb2aec832a086204b725267075e3))
+
 ## [0.2.5](https://github.com/QaidVoid/zenity-rs/compare/v0.2.4...v0.2.5) - 2026-02-28
 
 ### Added
