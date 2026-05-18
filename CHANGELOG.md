@@ -1,4 +1,10 @@
 
+## [0.2.7](https://github.com/QaidVoid/zenity-rs/compare/v0.2.6...v0.2.7) - 2026-05-18
+
+### Added
+
+- Read dialog text from stdin when --text is omitted ([#36](https://github.com/QaidVoid/zenity-rs/pull/36)) - ([8b22e43](https://github.com/QaidVoid/zenity-rs/commit/8b22e43cf912bf638e378b85da14b942ad344018))
+
 ## [0.2.6](https://github.com/QaidVoid/zenity-rs/compare/v0.2.5...v0.2.6) - 2026-03-29
 
 ### Fixed
