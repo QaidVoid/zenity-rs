@@ -54,6 +54,33 @@ zenity-rs --error --text="Failed to save file"
 zenity-rs --question --text="Do you want to continue?"
 ```
 
+When `--text` is omitted and stdin is piped, the dialog text is read from
+stdin, so you can feed it any command's output:
+
+```bash
+git log --oneline -5 | zenity-rs --info --title="Recent commits"
+```
+
+This also avoids wrapping a heredoc in `--text="$(cat <<EOF ... EOF)"`.
+In a POSIX shell (bash/zsh/sh):
+
+```bash
+zenity-rs --warning <<EOF
+The configuration file could not be found.
+Default settings will be used instead.
+EOF
+```
+
+Nushell has no heredocs; pipe a multi-line string literal instead:
+
+```nushell
+"The configuration file could not be found.
+Default settings will be used instead." | zenity-rs --warning
+```
+
+Dialogs that already consume stdin for their own data (`--progress`,
+`--list`, `--text-info`) are unaffected.
+
 ### Input Dialogs
 
 ```bash

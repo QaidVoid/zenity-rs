@@ -42,6 +42,20 @@ fn handle_message_result(
     }
 }
 
+/// Read the dialog text from stdin, stripping trailing newlines so the result
+/// matches what shell command substitution (`$(cat <<EOF ... EOF)`) would have
+/// produced.
+fn read_stdin_text() -> String {
+    use std::io::Read;
+    let mut buf = String::new();
+    if std::io::stdin().read_to_string(&mut buf).is_ok() {
+        while buf.ends_with('\n') || buf.ends_with('\r') {
+            buf.pop();
+        }
+    }
+    buf
+}
+
 fn get_icon(icon_name: &Option<String>, default: Icon) -> Icon {
     match icon_name {
         None => default,
@@ -129,6 +143,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // Global options
     let mut title = String::new();
     let mut text = String::new();
+    // Whether --text (or a positional text value) was explicitly provided.
+    // When it was not, message-style dialogs fall back to reading stdin.
+    let mut text_explicit = false;
     let mut entry_text = String::new();
     let mut timeout: Option<u32> = None;
     let mut width: Option<u32> = None;
@@ -219,7 +236,10 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
 
             // Common options
             Long("title") => title = parser.value()?.string()?,
-            Long("text") => text = parser.value()?.string()?,
+            Long("text") => {
+                text = parser.value()?.string()?;
+                text_explicit = true;
+            }
             Long("entry-text") => entry_text = parser.value()?.string()?,
             Long("hide-text") => {
                 // If --hide-text is specified with --entry, treat as password mode
@@ -316,6 +336,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                     list_values.push(val.string()?);
                 } else if text.is_empty() {
                     text = val.string()?;
+                    text_explicit = true;
                 }
             }
 
@@ -331,6 +352,23 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             return Ok(0);
         }
     };
+
+    // When --text is not given and stdin is piped (e.g. a heredoc or another
+    // command's output), read the dialog text from stdin. This lets scripts
+    // write `zenity-rs --warning <<EOF ... EOF` instead of
+    // `zenity-rs --warning --text="$(cat <<EOF ... EOF)"`.
+    //
+    // Progress, list, and text-info already consume stdin for their own data,
+    // so they are excluded.
+    if !text_explicit
+        && !matches!(
+            dialog_type,
+            DialogType::Progress | DialogType::List | DialogType::TextInfo
+        )
+        && !std::io::stdin().is_terminal()
+    {
+        text = read_stdin_text();
+    }
 
     // Build and show the dialog
     match dialog_type {
@@ -808,6 +846,7 @@ USAGE:
   COMMON OPTIONS:
     --title=TEXT          Set the dialog title
     --text=TEXT           Set the dialog text/prompt
+                          (if omitted, read from stdin when piped)
     --width=N             Set the dialog width (minimum when --no-wrap is used)
     --height=N            Set the dialog height
     --no-wrap             Do not wrap text (width becomes minimum, content can expand)
@@ -890,6 +929,10 @@ USAGE:
 
  EXAMPLES:
     zenity-rs --info --text="Operation completed"
+    zenity-rs --warning <<EOF
+    Multi-line warning text
+    read straight from stdin
+    EOF
     zenity-rs --question --text="Continue?" --timeout=10
     zenity-rs --entry --text="Enter name:" --entry-text="John"
     zenity-rs --password --text="Enter password:"
