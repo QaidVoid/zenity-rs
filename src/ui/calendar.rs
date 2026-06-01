@@ -1079,41 +1079,18 @@ fn darken(color: Rgba, amount: f32) -> Rgba {
     )
 }
 
-/// Get current date as (year, month, day).
+/// Get current local date as (year, month, day).
 fn current_date() -> (u32, u32, u32) {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_secs();
-
-    // Simple date calculation
-    let days = secs / 86400;
-    let mut year = 1970u32;
-    let mut remaining = days;
-
-    loop {
-        let days_in_year = if is_leap_year(year) { 366 } else { 365 };
-        if remaining < days_in_year {
-            break;
-        }
-        remaining -= days_in_year;
-        year += 1;
+    unsafe {
+        let now = libc::time(std::ptr::null_mut());
+        let mut tm: libc::tm = std::mem::zeroed();
+        libc::localtime_r(&raw const now, &raw mut tm);
+        (
+            (tm.tm_year + 1900) as u32,
+            (tm.tm_mon + 1) as u32,
+            tm.tm_mday as u32,
+        )
     }
-
-    let mut month = 1u32;
-    loop {
-        let days_in = days_in_month(year, month) as u64;
-        if remaining < days_in {
-            break;
-        }
-        remaining -= days_in;
-        month += 1;
-    }
-
-    let day = remaining as u32 + 1;
-    (year, month, day)
 }
 
 fn is_leap_year(year: u32) -> bool {
