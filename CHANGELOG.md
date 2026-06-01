@@ -1,4 +1,10 @@
 
+## [0.2.8](https://github.com/QaidVoid/zenity-rs/compare/v0.2.7...v0.2.8) - 2026-06-01
+
+### Fixed
+
+- Use localtime for current date ([#38](https://github.com/QaidVoid/zenity-rs/pull/38)) - ([cc699bb](https://github.com/QaidVoid/zenity-rs/commit/cc699bbe34f6ef4696ca07d3dee3cf7683ab25b5))
+
 ## [0.2.7](https://github.com/QaidVoid/zenity-rs/compare/v0.2.6...v0.2.7) - 2026-05-18
 
 ### Added
