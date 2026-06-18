@@ -104,26 +104,29 @@ pub(crate) struct X11Window {
 ///
 /// The server reads the shared segment directly instead of the client shipping
 /// pixels over the X11 socket (`PutImage`). This mirrors what the Wayland
-/// backend already does via `wl_shm_pool`. We use the classic SysV
-/// `shmget`/`shmat` + `shm::attach` path (MIT-SHM >= 1.1, available everywhere
-/// locally). The segment is marked `IPC_RMID` immediately, so it is reclaimed
-/// automatically once both we and the server detach - even on a crash.
+/// backend already does via `wl_shm_pool`.
+///
+/// Backing store is an anonymous `memfd_create` file mapped into both processes
+/// via `shm::attach_fd` (MIT-SHM >= 1.2). Unlike the classic SysV `shmget` path,
+/// memfd has no `shmmax` size limit and no global IPC namespace, so allocation
+/// effectively never fails on a local server - there is no `PutImage` fallback
+/// in practice. The memfd is never linked, so it is reclaimed automatically once
+/// both sides close their fds.
 struct X11Shm {
     conn: Connection,
     seg: shm::Seg,
     window: xproto::Window,
     gc: xproto::Gcontext,
     /// Shared pixel buffer (`width * height * 4` bytes), ARGB premultiplied.
-    data: *mut u8,
-    len: usize,
-    shmid: libc::c_int,
+    data: memmap2::MmapMut,
     width: u32,
     height: u32,
 }
 
 impl X11Shm {
     /// Tries to set up a shared memory segment. Returns `None` (so the caller
-    /// falls back to `PutImage`) if MIT-SHM is unavailable or setup fails.
+    /// falls back to `PutImage`) if MIT-SHM is unavailable, too old (< 1.2), or
+    /// setup fails.
     fn try_new(
         conn: Connection,
         window: xproto::Window,
@@ -131,44 +134,43 @@ impl X11Shm {
         width: u32,
         height: u32,
     ) -> Option<Self> {
-        use std::ptr;
+        use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 
-        // Extension-present check. If MIT-SHM isn't compiled into the server,
-        // query_version returns a connection error.
-        let _ = shm::query_version(&conn.inner).ok()?.reply().ok()?;
+        // Extension-present + version check. attach_fd needs MIT-SHM >= 1.2.
+        let v = shm::query_version(&conn.inner).ok()?.reply().ok()?;
+        if !(v.major_version > 1 || (v.major_version == 1 && v.minor_version >= 2)) {
+            return None;
+        }
 
         let len = (width as usize)
             .checked_mul(4)?
             .checked_mul(height as usize)?;
 
-        // Allocate a SysV shared memory segment.
-        let shmid = unsafe { libc::shmget(libc::IPC_PRIVATE, len, libc::IPC_CREAT | 0o600) };
-        if shmid < 0 {
+        // Anonymous, never-linked memory file.
+        let fd = unsafe { libc::memfd_create(c"zenity-rs".as_ptr(), libc::MFD_CLOEXEC) };
+        if fd < 0 {
+            return None;
+        }
+        let fd: OwnedFd = unsafe { OwnedFd::from_raw_fd(fd) };
+
+        if unsafe { libc::ftruncate(fd.as_raw_fd(), len as i64) } < 0 {
             return None;
         }
 
-        // Map it into our address space. shmat returns (void *)-1 on error.
-        let data = unsafe { libc::shmat(shmid, ptr::null(), 0) };
-        if (data as isize) == -1 {
-            unsafe {
-                libc::shmctl(shmid, libc::IPC_RMID, ptr::null_mut());
-            }
-            return None;
-        }
+        let data = match unsafe { memmap2::MmapMut::map_mut(&fd) } {
+            Ok(m) => m,
+            Err(_) => return None,
+        };
 
-        // Register the segment with the server.
+        // Hand a dup'd fd to the server; we keep ours for the mapping.
+        let server_fd = match fd.try_clone() {
+            Ok(f) => f,
+            Err(_) => return None,
+        };
+
         let seg = conn.inner.generate_id().ok()?;
-        if shm::attach(&conn.inner, seg, shmid as u32, false).is_err() {
-            unsafe {
-                libc::shmdt(data);
-                libc::shmctl(shmid, libc::IPC_RMID, ptr::null_mut());
-            }
+        if shm::attach_fd(&conn.inner, seg, server_fd, false).is_err() {
             return None;
-        }
-
-        // Mark for deletion now: the segment survives until both sides detach.
-        unsafe {
-            libc::shmctl(shmid, libc::IPC_RMID, ptr::null_mut());
         }
 
         Some(X11Shm {
@@ -176,9 +178,7 @@ impl X11Shm {
             seg,
             window,
             gc,
-            data: data as *mut u8,
-            len,
-            shmid,
+            data,
             width,
             height,
         })
@@ -187,7 +187,7 @@ impl X11Shm {
     /// Uploads the whole canvas via a single `ShmPutImage`.
     fn put_full(&mut self, canvas: &Canvas) -> Result<(), Error> {
         let stride = self.width * 4;
-        let dst = unsafe { std::slice::from_raw_parts_mut(self.data, self.len) };
+        let dst = &mut self.data[..];
         canvas.blit_argb_rect(0, 0, self.width, self.height, dst, stride);
         shm::put_image(
             &self.conn.inner,
@@ -215,7 +215,7 @@ impl X11Shm {
     /// `damage_buffer` model.
     fn put_rects(&mut self, canvas: &Canvas, rects: &[(u32, u32, u32, u32)]) -> Result<(), Error> {
         let stride = self.width * 4;
-        let dst = unsafe { std::slice::from_raw_parts_mut(self.data, self.len) };
+        let dst = &mut self.data[..];
         let (cw, ch) = (self.width, self.height);
         for &(x, y, w, h) in rects {
             let (x, y) = (x.min(cw), y.min(ch));
@@ -259,12 +259,9 @@ impl X11Shm {
 
 impl Drop for X11Shm {
     fn drop(&mut self) {
+        // Release the server's fd promptly. Our MmapMut and OwnedFd drop on
+        // their own, and the memfd is reclaimed once both fds are closed.
         let _ = shm::detach(&self.conn.inner, self.seg);
-        unsafe {
-            libc::shmdt(self.data as *const libc::c_void);
-            // Already IPC_RMID'd at creation; this is a harmless safety net.
-            libc::shmctl(self.shmid, libc::IPC_RMID, std::ptr::null_mut());
-        }
     }
 }
 
