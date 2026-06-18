@@ -7,7 +7,7 @@ use x11rb::{
     connection::Connection as X11rbConnection,
     properties::WmSizeHints,
     protocol::{
-        Event,
+        Event, shm,
         xproto::{
             self, AtomEnum, ClientMessageEvent, ConfigureWindowAux, ConnectionExt as _,
             CreateWindowAux, EventMask, ImageFormat, KeyButMask, PropMode, StackMode, VisualClass,
@@ -93,8 +93,179 @@ pub(crate) struct X11Window {
     xkb_group: u8,
     cursor_text: xproto::Cursor,
     current_cursor: CursorShape,
-    /// Reusable buffer for ARGB pixel uploads (avoid per-frame allocation).
+    /// Reusable buffer for ARGB pixel uploads via `PutImage` (the non-SHM fallback).
     upload_buf: Vec<u8>,
+    /// Optional MIT-SHM shared memory segment for zero-copy pixel uploads.
+    /// `None` when MIT-SHM is unavailable; we fall back to `PutImage` over the socket.
+    shm: Option<X11Shm>,
+}
+
+/// MIT-SHM shared memory segment for zero-copy pixel uploads to the X server.
+///
+/// The server reads the shared segment directly instead of the client shipping
+/// pixels over the X11 socket (`PutImage`). This mirrors what the Wayland
+/// backend already does via `wl_shm_pool`. We use the classic SysV
+/// `shmget`/`shmat` + `shm::attach` path (MIT-SHM >= 1.1, available everywhere
+/// locally). The segment is marked `IPC_RMID` immediately, so it is reclaimed
+/// automatically once both we and the server detach - even on a crash.
+struct X11Shm {
+    conn: Connection,
+    seg: shm::Seg,
+    window: xproto::Window,
+    gc: xproto::Gcontext,
+    /// Shared pixel buffer (`width * height * 4` bytes), ARGB premultiplied.
+    data: *mut u8,
+    len: usize,
+    shmid: libc::c_int,
+    width: u32,
+    height: u32,
+}
+
+impl X11Shm {
+    /// Tries to set up a shared memory segment. Returns `None` (so the caller
+    /// falls back to `PutImage`) if MIT-SHM is unavailable or setup fails.
+    fn try_new(
+        conn: Connection,
+        window: xproto::Window,
+        gc: xproto::Gcontext,
+        width: u32,
+        height: u32,
+    ) -> Option<Self> {
+        use std::ptr;
+
+        // Extension-present check. If MIT-SHM isn't compiled into the server,
+        // query_version returns a connection error.
+        let _ = shm::query_version(&conn.inner).ok()?.reply().ok()?;
+
+        let len = (width as usize)
+            .checked_mul(4)?
+            .checked_mul(height as usize)?;
+
+        // Allocate a SysV shared memory segment.
+        let shmid = unsafe { libc::shmget(libc::IPC_PRIVATE, len, libc::IPC_CREAT | 0o600) };
+        if shmid < 0 {
+            return None;
+        }
+
+        // Map it into our address space. shmat returns (void *)-1 on error.
+        let data = unsafe { libc::shmat(shmid, ptr::null(), 0) };
+        if (data as isize) == -1 {
+            unsafe {
+                libc::shmctl(shmid, libc::IPC_RMID, ptr::null_mut());
+            }
+            return None;
+        }
+
+        // Register the segment with the server.
+        let seg = conn.inner.generate_id().ok()?;
+        if shm::attach(&conn.inner, seg, shmid as u32, false).is_err() {
+            unsafe {
+                libc::shmdt(data);
+                libc::shmctl(shmid, libc::IPC_RMID, ptr::null_mut());
+            }
+            return None;
+        }
+
+        // Mark for deletion now: the segment survives until both sides detach.
+        unsafe {
+            libc::shmctl(shmid, libc::IPC_RMID, ptr::null_mut());
+        }
+
+        Some(X11Shm {
+            conn,
+            seg,
+            window,
+            gc,
+            data: data as *mut u8,
+            len,
+            shmid,
+            width,
+            height,
+        })
+    }
+
+    /// Uploads the whole canvas via a single `ShmPutImage`.
+    fn put_full(&mut self, canvas: &Canvas) -> Result<(), Error> {
+        let stride = self.width * 4;
+        let dst = unsafe { std::slice::from_raw_parts_mut(self.data, self.len) };
+        canvas.blit_argb_rect(0, 0, self.width, self.height, dst, stride);
+        shm::put_image(
+            &self.conn.inner,
+            self.window,
+            self.gc,
+            self.width as u16,
+            self.height as u16,
+            0,
+            0,
+            self.width as u16,
+            self.height as u16,
+            0,
+            0,
+            24,
+            u8::from(ImageFormat::Z_PIXMAP),
+            false,
+            self.seg,
+            0,
+        )?;
+        Ok(())
+    }
+
+    /// Uploads only the given dirty rectangles. The segment retains previous
+    /// pixels, so unchanged regions stay correct - this matches the Wayland
+    /// `damage_buffer` model.
+    fn put_rects(&mut self, canvas: &Canvas, rects: &[(u32, u32, u32, u32)]) -> Result<(), Error> {
+        let stride = self.width * 4;
+        let dst = unsafe { std::slice::from_raw_parts_mut(self.data, self.len) };
+        let (cw, ch) = (self.width, self.height);
+        for &(x, y, w, h) in rects {
+            let (x, y) = (x.min(cw), y.min(ch));
+            let (w, h) = (w.min(cw.saturating_sub(x)), h.min(ch.saturating_sub(y)));
+            if w == 0 || h == 0 {
+                continue;
+            }
+            canvas.blit_argb_rect(x, y, w, h, dst, stride);
+            shm::put_image(
+                &self.conn.inner,
+                self.window,
+                self.gc,
+                cw as u16,
+                ch as u16,
+                x as u16,
+                y as u16,
+                w as u16,
+                h as u16,
+                x as i16,
+                y as i16,
+                24,
+                u8::from(ImageFormat::Z_PIXMAP),
+                false,
+                self.seg,
+                0,
+            )?;
+        }
+        Ok(())
+    }
+
+    /// Round-trip so the server has processed every queued `ShmPutImage`
+    /// (and finished reading the segment) before we reuse it next frame.
+    /// Without this, back-to-back frames can tear as we overwrite memory the
+    /// server has not yet read. X requests are ordered, so a reply arriving
+    /// guarantees all earlier requests are done.
+    fn sync(&self) -> Result<(), Error> {
+        self.conn.inner.get_input_focus()?.reply()?;
+        Ok(())
+    }
+}
+
+impl Drop for X11Shm {
+    fn drop(&mut self) {
+        let _ = shm::detach(&self.conn.inner, self.seg);
+        unsafe {
+            libc::shmdt(self.data as *const libc::c_void);
+            // Already IPC_RMID'd at creation; this is a harmless safety net.
+            libc::shmctl(self.shmid, libc::IPC_RMID, std::ptr::null_mut());
+        }
+    }
 }
 
 impl X11Window {
@@ -242,6 +413,9 @@ impl X11Window {
 
         conn.close_font(cursor_font)?;
 
+        // Try to set up a MIT-SHM segment for fast uploads; falls back to None.
+        let shm = X11Shm::try_new(conn.clone(), window, gc, width as u32, height as u32);
+
         let win = X11Window {
             atoms,
             conn,
@@ -252,6 +426,7 @@ impl X11Window {
             cursor_text,
             current_cursor: CursorShape::Default,
             upload_buf: Vec::new(),
+            shm,
         };
         win.set_class(WM_CLASS)?;
         win.set_window_type(WindowType::Dialog)?;
@@ -450,6 +625,17 @@ impl Window for X11Window {
     }
 
     fn set_contents(&mut self, canvas: &Canvas) -> Result<(), Error> {
+        // Fast path: shared memory upload (no socket bulk transfer).
+        if let Some(shm) = self.shm.as_mut()
+            && canvas.width() == shm.width
+            && canvas.height() == shm.height
+        {
+            shm.put_full(canvas)?;
+            shm.sync()?;
+            return Ok(());
+        }
+
+        // Fallback: PutImage over the socket.
         canvas.argb_into(&mut self.upload_buf);
         self.conn
             .put_image(
@@ -478,8 +664,7 @@ impl Window for X11Window {
         if rects.is_empty() {
             return Ok(());
         }
-        // If the union of rects covers the whole surface (or a single full rect
-        // is given), a single PutImage is cheaper than many.
+        // A single full-surface rect is just a full upload.
         if rects.len() == 1
             && rects[0].0 == 0
             && rects[0].1 == 0
@@ -488,6 +673,18 @@ impl Window for X11Window {
         {
             return self.set_contents(canvas);
         }
+
+        // Fast path: shared memory partial upload, one ShmPutImage per dirty rect.
+        if let Some(shm) = self.shm.as_mut()
+            && canvas.width() == shm.width
+            && canvas.height() == shm.height
+        {
+            shm.put_rects(canvas, rects)?;
+            shm.sync()?;
+            return Ok(());
+        }
+
+        // Fallback: PutImage over the socket.
         for &(x, y, w, h) in rects {
             // Clamp to canvas bounds defensively.
             let (x, y) = (x.min(cw), y.min(ch));

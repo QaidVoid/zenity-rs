@@ -37,7 +37,7 @@ dirs = "6"
 libc = "0.2"
 
 # X11 backend (optional)
-x11rb = { version = "0.13", default-features = false, features = ["xkb"], optional = true }
+x11rb = { version = "0.13", default-features = false, features = ["xkb", "shm"], optional = true }
 kbvm = { version = "0.1", features = ["x11"], optional = true }
 
 # Wayland backend (optional)
