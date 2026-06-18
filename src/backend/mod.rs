@@ -32,6 +32,15 @@ pub(crate) enum CursorShape {
 pub(crate) trait Window {
     fn set_title(&mut self, title: &str) -> Result<(), Error>;
     fn set_contents(&mut self, canvas: &Canvas) -> Result<(), Error>;
+    /// Uploads only the given sub-rectangles of `canvas` to the window. Each
+    /// rect is `(x, y, w, h)` in canvas (physical) coordinates. An empty slice
+    /// is a no-op. Implementations fall back to a full upload via [`Window::set_contents`]
+    /// when partial upload is unavailable or a rect covers the whole surface.
+    fn set_contents_rects(
+        &mut self,
+        canvas: &Canvas,
+        rects: &[(u32, u32, u32, u32)],
+    ) -> Result<(), Error>;
     fn show(&mut self) -> Result<(), Error>;
     fn wait_for_event(&mut self) -> Result<WindowEvent, Error>;
     fn poll_for_event(&mut self) -> Result<Option<WindowEvent>, Error>;
@@ -119,6 +128,19 @@ impl Window for AnyWindow {
             AnyWindow::X11(w) => w.set_contents(canvas),
             #[cfg(feature = "wayland")]
             AnyWindow::Wayland(w) => w.set_contents(canvas),
+        }
+    }
+
+    fn set_contents_rects(
+        &mut self,
+        canvas: &Canvas,
+        rects: &[(u32, u32, u32, u32)],
+    ) -> Result<(), Error> {
+        match self {
+            #[cfg(feature = "x11")]
+            AnyWindow::X11(w) => w.set_contents_rects(canvas, rects),
+            #[cfg(feature = "wayland")]
+            AnyWindow::Wayland(w) => w.set_contents_rects(canvas, rects),
         }
     }
 

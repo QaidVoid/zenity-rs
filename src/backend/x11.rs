@@ -93,6 +93,8 @@ pub(crate) struct X11Window {
     xkb_group: u8,
     cursor_text: xproto::Cursor,
     current_cursor: CursorShape,
+    /// Reusable buffer for ARGB pixel uploads (avoid per-frame allocation).
+    upload_buf: Vec<u8>,
 }
 
 impl X11Window {
@@ -249,6 +251,7 @@ impl X11Window {
             xkb_group: 0,
             cursor_text,
             current_cursor: CursorShape::Default,
+            upload_buf: Vec::new(),
         };
         win.set_class(WM_CLASS)?;
         win.set_window_type(WindowType::Dialog)?;
@@ -447,7 +450,7 @@ impl Window for X11Window {
     }
 
     fn set_contents(&mut self, canvas: &Canvas) -> Result<(), Error> {
-        let data = canvas.as_argb();
+        canvas.argb_into(&mut self.upload_buf);
         self.conn
             .put_image(
                 ImageFormat::Z_PIXMAP,
@@ -459,9 +462,56 @@ impl Window for X11Window {
                 0,
                 0,
                 24,
-                &data,
+                &self.upload_buf,
             )?
             .check()?;
+        Ok(())
+    }
+
+    fn set_contents_rects(
+        &mut self,
+        canvas: &Canvas,
+        rects: &[(u32, u32, u32, u32)],
+    ) -> Result<(), Error> {
+        let cw = canvas.width();
+        let ch = canvas.height();
+        if rects.is_empty() {
+            return Ok(());
+        }
+        // If the union of rects covers the whole surface (or a single full rect
+        // is given), a single PutImage is cheaper than many.
+        if rects.len() == 1
+            && rects[0].0 == 0
+            && rects[0].1 == 0
+            && rects[0].2 == cw
+            && rects[0].3 == ch
+        {
+            return self.set_contents(canvas);
+        }
+        for &(x, y, w, h) in rects {
+            // Clamp to canvas bounds defensively.
+            let (x, y) = (x.min(cw), y.min(ch));
+            let (w, h) = (w.min(cw.saturating_sub(x)), h.min(ch.saturating_sub(y)));
+            if w == 0 || h == 0 {
+                continue;
+            }
+            canvas.argb_rect_into(x, y, w, h, &mut self.upload_buf);
+            // PutImage src offset is (0,0); data is the extracted sub-rect.
+            self.conn
+                .put_image(
+                    ImageFormat::Z_PIXMAP,
+                    self.window,
+                    self.gc,
+                    w.try_into().unwrap(),
+                    h.try_into().unwrap(),
+                    x.try_into().unwrap(),
+                    y.try_into().unwrap(),
+                    0,
+                    24,
+                    &self.upload_buf,
+                )?
+                .check()?;
+        }
         Ok(())
     }
 

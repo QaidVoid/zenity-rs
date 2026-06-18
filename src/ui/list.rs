@@ -304,6 +304,10 @@ impl ListBuilder {
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
 
+        // Title font is static for the dialog's lifetime - load it ONCE (not per frame).
+        let title_font_size = 18.0 * 1.5 * scale;
+        let title_font = Font::load_with_size(title_font_size);
+
         // Scale dimensions for physical rendering
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let row_height = (BASE_ROW_HEIGHT as f32 * scale) as u32;
@@ -430,70 +434,96 @@ impl ListBuilder {
         // Create sub-canvas for the list area to enable clipping
         let mut list_canvas = Canvas::new(list_w, list_h);
 
-        // Draw function with scaled parameters
-        let draw = |canvas: &mut Canvas,
-                    list_canvas: &mut Canvas,
-                    colors: &Colors,
-                    font: &Font,
-                    title: &str,
-                    text: &str,
-                    checkbox_column_header: &Option<String>,
-                    columns: &[&str],
-                    rows: &[Vec<String>],
-                    col_widths: &[u32],
-                    selected: &[bool],
-                    single_selected: Option<usize>,
-                    scroll_offset: usize,
-                    h_scroll_offset: u32,
-                    hovered_row: Option<usize>,
-                    mode: ListMode,
-                    ok_button: &Button,
-                    cancel_button: &Button,
-                    total_content_width: u32,
-                    // Scaled parameters
-                    padding: u32,
-                    row_height: u32,
-                    checkbox_size: u32,
-                    checkbox_col: u32,
-                    list_x: i32,
-                    list_y: i32,
-                    list_w: u32,
-                    list_h: u32,
-                    visible_rows: usize,
-                    text_y: i32,
-                    scale: f32,
-                    v_scrollbar_hovered: bool,
-                    h_scrollbar_hovered: bool| {
-            let width = canvas.width() as f32;
-            let height = canvas.height() as f32;
-            let radius = BASE_CORNER_RADIUS * scale;
+        // ---- Pre-render static text once (avoids re-rasterizing glyphs every frame) ----
+        let header_text_color = rgb(140, 140, 140);
+        let selected_text_color = rgb(255, 255, 255);
+        let normal_text_color = colors.text;
 
-            canvas.fill_dialog_bg(
-                width,
-                height,
-                colors.window_bg,
-                colors.window_border,
-                colors.window_shadow,
-                radius,
-            );
+        let checkbox_header_canvas: Option<Canvas> = checkbox_column_header
+            .as_ref()
+            .map(|h| font.render(h).with_color(header_text_color).finish());
+        let column_header_canvases: Vec<Canvas> = columns
+            .iter()
+            .map(|c| font.render(c).with_color(header_text_color).finish())
+            .collect();
+        // Pre-render every cell in both color variants; the scroll loop only blits.
+        let cell_normal: Vec<Vec<Canvas>> = display_rows
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|cell| font.render(cell).with_color(normal_text_color).finish())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let cell_selected: Vec<Vec<Canvas>> = display_rows
+            .iter()
+            .map(|row| {
+                row.iter()
+                    .map(|cell| font.render(cell).with_color(selected_text_color).finish())
+                    .collect::<Vec<_>>()
+            })
+            .collect();
 
-            // Draw title if present
-            if !title.is_empty() {
-                // Render title with larger font (1.5x normal size)
-                let title_font_size = 18.0 * 1.5 * scale;
-                let title_font = Font::load_with_size(title_font_size);
-                let title_rendered = title_font.render(title).with_color(colors.text).finish();
-                let title_x = (width as i32 - title_rendered.width() as i32) / 2;
-                let title_y = padding as i32;
-                canvas.draw_canvas(&title_rendered, title_x, title_y);
-            }
+        // ---- Chrome layer: dialog bg + title + prompt, rendered once and blitted ----
+        let radius = BASE_CORNER_RADIUS * scale;
+        let title_rendered: Option<Canvas> = if !self.title.is_empty() {
+            Some(
+                title_font
+                    .render(&self.title)
+                    .with_color(colors.text)
+                    .finish(),
+            )
+        } else {
+            None
+        };
+        let prompt_rendered: Option<Canvas> = if !self.text.is_empty() {
+            Some(font.render(&self.text).with_color(colors.text).finish())
+        } else {
+            None
+        };
+        let mut chrome_canvas = Canvas::new(physical_width, physical_height);
+        chrome_canvas.fill_dialog_bg(
+            physical_width as f32,
+            physical_height as f32,
+            colors.window_bg,
+            colors.window_border,
+            colors.window_shadow,
+            radius,
+        );
+        if let Some(tc) = &title_rendered {
+            let title_x = (physical_width as i32 - tc.width() as i32) / 2;
+            chrome_canvas.draw_canvas(tc, title_x, padding as i32);
+        }
+        if let Some(tc) = &prompt_rendered {
+            chrome_canvas.draw_canvas(tc, padding as i32, text_y);
+        }
 
-            // Draw text prompt
-            if !text.is_empty() {
-                let tc = font.render(text).with_color(colors.text).finish();
-                canvas.draw_canvas(&tc, padding as i32, text_y);
-            }
-
+        // ---- List renderer: draws only the list area into list_canvas ----
+        let draw_list = |list_canvas: &mut Canvas,
+                         colors: &Colors,
+                         columns: &[&str],
+                         checkbox_header_canvas: &Option<Canvas>,
+                         column_header_canvases: &[Canvas],
+                         rows: &[Vec<String>],
+                         cell_normal: &[Vec<Canvas>],
+                         cell_selected: &[Vec<Canvas>],
+                         col_widths: &[u32],
+                         selected: &[bool],
+                         single_selected: Option<usize>,
+                         scroll_offset: usize,
+                         h_scroll_offset: u32,
+                         hovered_row: Option<usize>,
+                         mode: ListMode,
+                         total_content_width: u32,
+                         row_height: u32,
+                         checkbox_size: u32,
+                         checkbox_col: u32,
+                         list_w: u32,
+                         list_h: u32,
+                         visible_rows: usize,
+                         scale: f32,
+                         v_scrollbar_hovered: bool,
+                         h_scrollbar_hovered: bool| {
             // Clear list canvas
             list_canvas.fill(colors.input_bg);
 
@@ -501,16 +531,15 @@ impl ListBuilder {
 
             // Draw header if columns exist
             let mut data_y_local = 0i32;
-            if !columns.is_empty() || checkbox_column_header.is_some() {
+            if !columns.is_empty() || checkbox_header_canvas.is_some() {
                 let header_bg = darken(colors.input_bg, 0.05);
                 list_canvas.fill_rect(0.0, 0.0, list_w as f32, row_height as f32, header_bg);
 
                 let mut cx = -(h_scroll_offset as i32);
 
                 // Draw checkbox column header if present
-                if let Some(header) = checkbox_column_header {
-                    let tc = font.render(header).with_color(rgb(140, 140, 140)).finish();
-                    list_canvas.draw_canvas(&tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
+                if let Some(tc) = checkbox_header_canvas {
+                    list_canvas.draw_canvas(tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
                     cx = checkbox_col as i32 - h_scroll_offset as i32;
                 } else {
                     cx = checkbox_col as i32 - h_scroll_offset as i32;
@@ -518,15 +547,14 @@ impl ListBuilder {
 
                 let column_gap = (16.0 * scale) as i32;
                 // Add gap after checkbox column if there are data columns
-                if !columns.is_empty() && checkbox_column_header.is_some() {
+                if !columns.is_empty() && checkbox_header_canvas.is_some() {
                     cx += column_gap;
                 }
-                for (i, col) in columns.iter().enumerate() {
-                    let tc = font.render(col).with_color(rgb(140, 140, 140)).finish();
-                    list_canvas.draw_canvas(&tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
+                for (i, tc) in column_header_canvases.iter().enumerate() {
+                    list_canvas.draw_canvas(tc, cx + (8.0 * scale) as i32, (6.0 * scale) as i32);
                     cx += col_widths.get(i).copied().unwrap_or((100.0 * scale) as u32) as i32;
                     // Add gap between columns
-                    if i < columns.len() - 1 {
+                    if i < columns.len().saturating_sub(1) {
                         cx += column_gap;
                     }
                 }
@@ -551,7 +579,6 @@ impl ListBuilder {
             for (vi, ri) in
                 (scroll_offset..rows.len().min(scroll_offset + data_visible)).enumerate()
             {
-                let row = &rows[ri];
                 let ry = data_y_local + (vi as u32 * row_height) as i32;
 
                 // Background
@@ -604,32 +631,28 @@ impl ListBuilder {
                     }
                 }
 
-                // Cell values
+                // Cell values (pre-rendered; pick color variant by selection state)
+                let row_cells = if is_selected {
+                    &cell_selected[ri]
+                } else {
+                    &cell_normal[ri]
+                };
                 let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
                 let column_gap = (16.0 * scale) as i32;
                 // Add gap after checkbox column if there are data columns
-                if !row.is_empty()
-                    && self.mode != ListMode::Single
-                    && self.mode != ListMode::Multiple
-                {
+                if !row_cells.is_empty() && mode != ListMode::Single && mode != ListMode::Multiple {
                     cx += column_gap;
                 }
-                for (ci, cell) in row.iter().enumerate() {
+                for (ci, tc) in row_cells.iter().enumerate() {
                     if ci < col_widths.len() {
-                        let text_color = if is_selected {
-                            rgb(255, 255, 255)
-                        } else {
-                            colors.text
-                        };
-                        let tc = font.render(cell).with_color(text_color).finish();
                         list_canvas.draw_canvas(
-                            &tc,
+                            tc,
                             cx + (8.0 * scale) as i32,
                             ry + (6.0 * scale) as i32,
                         );
                         cx += col_widths[ci] as i32;
                         // Add gap between columns
-                        if ci < row.len() - 1 {
+                        if ci < row_cells.len().saturating_sub(1) {
                             cx += column_gap;
                         }
                     }
@@ -735,26 +758,19 @@ impl ListBuilder {
                 colors.input_border,
                 1.0,
             );
-
-            // Draw the list canvas to main canvas
-            canvas.draw_canvas(list_canvas, list_x, list_y);
-
-            // Buttons
-            ok_button.draw_to(canvas, colors, font);
-            cancel_button.draw_to(canvas, colors, font);
         };
 
-        // Initial draw
-        draw(
-            &mut canvas,
+        // Initial composite (chrome + list + buttons) and a full upload.
+        canvas.draw_canvas(&chrome_canvas, 0, 0);
+        draw_list(
             &mut list_canvas,
             colors,
-            &font,
-            &self.title,
-            &self.text,
-            &checkbox_column_header,
             &columns,
+            &checkbox_header_canvas,
+            &column_header_canvases,
             &display_rows,
+            &cell_normal,
+            &cell_selected,
             &col_widths,
             &selected,
             single_selected,
@@ -762,25 +778,26 @@ impl ListBuilder {
             h_scroll_offset,
             hovered_row,
             self.mode,
-            &ok_button,
-            &cancel_button,
             total_content_width,
-            padding,
             row_height,
             checkbox_size,
             checkbox_col,
-            list_x,
-            list_y,
             list_w,
             list_h,
             visible_rows,
-            text_y,
             scale,
             v_scrollbar_hovered,
             h_scrollbar_hovered,
         );
+        canvas.draw_canvas(&list_canvas, list_x, list_y);
+        ok_button.draw_to(&mut canvas, colors, &font);
+        cancel_button.draw_to(&mut canvas, colors, &font);
         window.set_contents(&canvas)?;
         window.show()?;
+
+        // Dirty-region tracking flags. `full_redraw` persists across iterations
+        // (set by RedrawRequested); the list/button flags are reset each iteration.
+        let mut full_redraw = false;
 
         let header_height_px = if columns.is_empty() {
             0
@@ -796,10 +813,11 @@ impl ListBuilder {
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
+            let mut buttons_dirty = false;
 
             match &event {
                 WindowEvent::CloseRequested => return Ok(ListResult::Closed),
-                WindowEvent::RedrawRequested => needs_redraw = true,
+                WindowEvent::RedrawRequested => full_redraw = true,
                 WindowEvent::CursorMove(pos) => {
                     if window_dragging {
                         let _ = window.start_drag();
@@ -1251,8 +1269,8 @@ impl ListBuilder {
                 _ => {}
             }
 
-            needs_redraw |= ok_button.process_event(&event);
-            needs_redraw |= cancel_button.process_event(&event);
+            buttons_dirty |= ok_button.process_event(&event);
+            buttons_dirty |= cancel_button.process_event(&event);
 
             if ok_button.was_clicked() {
                 return Ok(get_result(&rows, &selected, single_selected, self.mode));
@@ -1348,46 +1366,117 @@ impl ListBuilder {
                     _ => {}
                 }
 
-                needs_redraw |= ok_button.process_event(&ev);
-                needs_redraw |= cancel_button.process_event(&ev);
+                buttons_dirty |= ok_button.process_event(&ev);
+                buttons_dirty |= cancel_button.process_event(&ev);
             }
 
-            if needs_redraw {
-                draw(
-                    &mut canvas,
-                    &mut list_canvas,
-                    colors,
-                    &font,
-                    &self.title,
-                    &self.text,
-                    &checkbox_column_header,
-                    &columns,
-                    &display_rows,
-                    &col_widths,
-                    &selected,
-                    single_selected,
-                    scroll_offset,
-                    h_scroll_offset,
-                    hovered_row,
-                    self.mode,
-                    &ok_button,
-                    &cancel_button,
-                    total_content_width,
-                    padding,
-                    row_height,
-                    checkbox_size,
-                    checkbox_col,
-                    list_x,
-                    list_y,
-                    list_w,
-                    list_h,
-                    visible_rows,
-                    text_y,
-                    scale,
-                    v_scrollbar_hovered,
-                    h_scrollbar_hovered,
-                );
-                window.set_contents(&canvas)?;
+            if full_redraw || needs_redraw || buttons_dirty {
+                if full_redraw {
+                    // Chrome + list + buttons, then a single full upload.
+                    canvas.draw_canvas(&chrome_canvas, 0, 0);
+                    draw_list(
+                        &mut list_canvas,
+                        colors,
+                        &columns,
+                        &checkbox_header_canvas,
+                        &column_header_canvases,
+                        &display_rows,
+                        &cell_normal,
+                        &cell_selected,
+                        &col_widths,
+                        &selected,
+                        single_selected,
+                        scroll_offset,
+                        h_scroll_offset,
+                        hovered_row,
+                        self.mode,
+                        total_content_width,
+                        row_height,
+                        checkbox_size,
+                        checkbox_col,
+                        list_w,
+                        list_h,
+                        visible_rows,
+                        scale,
+                        v_scrollbar_hovered,
+                        h_scrollbar_hovered,
+                    );
+                    canvas.draw_canvas(&list_canvas, list_x, list_y);
+                    ok_button.draw_to(&mut canvas, colors, &font);
+                    cancel_button.draw_to(&mut canvas, colors, &font);
+                    window.set_contents(&canvas)?;
+                    full_redraw = false;
+                } else {
+                    // Partial update: re-render and upload only the changed regions.
+                    let mut rects: Vec<(u32, u32, u32, u32)> = Vec::new();
+                    if needs_redraw {
+                        draw_list(
+                            &mut list_canvas,
+                            colors,
+                            &columns,
+                            &checkbox_header_canvas,
+                            &column_header_canvases,
+                            &display_rows,
+                            &cell_normal,
+                            &cell_selected,
+                            &col_widths,
+                            &selected,
+                            single_selected,
+                            scroll_offset,
+                            h_scroll_offset,
+                            hovered_row,
+                            self.mode,
+                            total_content_width,
+                            row_height,
+                            checkbox_size,
+                            checkbox_col,
+                            list_w,
+                            list_h,
+                            visible_rows,
+                            scale,
+                            v_scrollbar_hovered,
+                            h_scrollbar_hovered,
+                        );
+                        canvas.draw_canvas(&list_canvas, list_x, list_y);
+                        rects.push((list_x as u32, list_y as u32, list_w, list_h));
+                    }
+                    if buttons_dirty {
+                        // Restore chrome background under the buttons, then redraw them.
+                        canvas.blit_region(
+                            &chrome_canvas,
+                            ok_button.x() as u32,
+                            ok_button.y() as u32,
+                            ok_button.width(),
+                            ok_button.height(),
+                            ok_button.x() as u32,
+                            ok_button.y() as u32,
+                        );
+                        canvas.blit_region(
+                            &chrome_canvas,
+                            cancel_button.x() as u32,
+                            cancel_button.y() as u32,
+                            cancel_button.width(),
+                            cancel_button.height(),
+                            cancel_button.x() as u32,
+                            cancel_button.y() as u32,
+                        );
+                        ok_button.draw_to(&mut canvas, colors, &font);
+                        cancel_button.draw_to(&mut canvas, colors, &font);
+                        rects.push((
+                            ok_button.x() as u32,
+                            ok_button.y() as u32,
+                            ok_button.width(),
+                            ok_button.height(),
+                        ));
+                        rects.push((
+                            cancel_button.x() as u32,
+                            cancel_button.y() as u32,
+                            cancel_button.width(),
+                            cancel_button.height(),
+                        ));
+                    }
+                    window.set_contents_rects(&canvas, &rects)?;
+                }
             }
         }
     }

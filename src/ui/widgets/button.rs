@@ -18,6 +18,8 @@ pub(crate) struct Button {
     hovered: bool,
     pressed: bool,
     clicked: bool,
+    /// Cached rendered label canvas (text is static; avoids re-rasterizing every frame).
+    label_canvas: std::cell::RefCell<Option<Canvas>>,
 }
 
 const BASE_BUTTON_HEIGHT: u32 = 32;
@@ -45,6 +47,7 @@ impl Button {
             hovered: false,
             pressed: false,
             clicked: false,
+            label_canvas: std::cell::RefCell::new(None),
         }
     }
 
@@ -92,14 +95,19 @@ impl Button {
             1.0,
         );
 
-        // Draw button label
-        let text_canvas = font
-            .render(&self.label)
-            .with_color(colors.button_text)
-            .finish();
+        // Draw cached button label (rendered once on first use).
+        let mut cache = self.label_canvas.borrow_mut();
+        if cache.is_none() {
+            *cache = Some(
+                font.render(&self.label)
+                    .with_color(colors.button_text)
+                    .finish(),
+            );
+        }
+        let text_canvas = cache.as_ref().unwrap();
         let text_x = self.x + (self.width as i32 - text_canvas.width() as i32) / 2;
         let text_y = self.y + (self.height as i32 - text_canvas.height() as i32) / 2;
-        canvas.draw_canvas(&text_canvas, text_x, text_y);
+        canvas.draw_canvas(text_canvas, text_x, text_y);
     }
 }
 
@@ -128,6 +136,7 @@ impl Widget for Button {
     fn process_event(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::CursorMove(pos) | WindowEvent::CursorEnter(pos) => {
+                let was_hovered = self.hovered;
                 self.hovered = point_in_rect(
                     pos.x as i32,
                     pos.y as i32,
@@ -136,23 +145,28 @@ impl Widget for Button {
                     self.width,
                     self.height,
                 );
-                true
+                // Only signal a redraw when the visual hover state actually changes.
+                self.hovered != was_hovered
             }
             WindowEvent::CursorLeave => {
+                let changed = self.hovered || self.pressed;
                 self.hovered = false;
                 self.pressed = false;
-                true
+                changed
             }
             WindowEvent::ButtonPress(MouseButton::Left, _) if self.hovered => {
+                let was_pressed = self.pressed;
                 self.pressed = true;
-                true
+                !was_pressed
             }
             WindowEvent::ButtonRelease(MouseButton::Left, _) => {
+                let was_pressed = self.pressed;
                 if self.pressed && self.hovered {
                     self.clicked = true;
                 }
                 self.pressed = false;
-                true
+                // Redraw when the press state visually changes (depress feedback).
+                was_pressed
             }
             _ => false,
         }

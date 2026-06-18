@@ -98,26 +98,73 @@ impl Canvas {
         );
     }
 
-    /// Returns the pixel data as ARGB (for X11/Wayland compatibility).
-    /// The returned Vec has premultiplied alpha in ARGB format.
-    pub fn as_argb(&self) -> Vec<u8> {
-        let data = self.pixmap.data();
-        let mut argb = Vec::with_capacity(data.len());
-
-        // Convert RGBA to ARGB (premultiplied)
-        for chunk in data.chunks_exact(4) {
-            let r = chunk[0];
-            let g = chunk[1];
-            let b = chunk[2];
-            let a = chunk[3];
-            // ARGB order: B, G, R, A (little-endian u32)
-            argb.push(b);
-            argb.push(g);
-            argb.push(r);
-            argb.push(a);
+    /// Copies a rectangular region from `src` directly into this canvas (no
+    /// blending). Both source and destination are premultiplied RGBA, so a raw
+    /// byte copy is exact. Used to restore cached static regions (e.g. the
+    /// chrome layer behind dynamic widgets during partial redraws).
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_region(
+        &mut self,
+        src: &Canvas,
+        sx: u32,
+        sy: u32,
+        w: u32,
+        h: u32,
+        dx: u32,
+        dy: u32,
+    ) {
+        let spw = src.pixmap.width();
+        let dpw = self.pixmap.width();
+        let sdata = src.pixmap.data();
+        let ddata = self.pixmap.data_mut();
+        for row in 0..h {
+            let s_start = (((sy + row) * spw + sx) as usize) * 4;
+            let d_start = (((dy + row) * dpw + dx) as usize) * 4;
+            let len = (w as usize) * 4;
+            ddata[d_start..d_start + len].copy_from_slice(&sdata[s_start..s_start + len]);
         }
+    }
 
-        argb
+    /// Converts the whole canvas to premultiplied ARGB, reusing `out`'s capacity.
+    /// Output byte order is B, G, R, A (little-endian ARGB u32), matching X11/Wayland.
+    pub fn argb_into(&self, out: &mut Vec<u8>) {
+        out.clear();
+        out.reserve(self.pixmap.data().len());
+        swizzle_rgba_to_argb(self.pixmap.data(), out);
+    }
+
+    /// Converts a sub-rectangle to premultiplied ARGB, reusing `out`'s capacity.
+    /// Pixels are written row-major with no padding.
+    pub fn argb_rect_into(&self, x: u32, y: u32, w: u32, h: u32, out: &mut Vec<u8>) {
+        let pw = self.pixmap.width();
+        out.clear();
+        out.reserve((w as usize) * (h as usize) * 4);
+        let data = self.pixmap.data();
+        for row in 0..h {
+            let base = (((y + row) * pw + x) as usize) * 4;
+            swizzle_rgba_to_argb(&data[base..base + (w as usize) * 4], out);
+        }
+    }
+
+    /// Copies + swizzles a sub-rectangle into a destination buffer that holds a
+    /// full window pixmap with the given stride (bytes per scanline). Used for
+    /// Wayland SHM partial updates where the destination lives in `dst` at the
+    /// same coordinates as in the canvas.
+    pub fn blit_argb_rect(&self, x: u32, y: u32, w: u32, h: u32, dst: &mut [u8], dst_stride: u32) {
+        let pw = self.pixmap.width();
+        let data = self.pixmap.data();
+        for row in 0..h {
+            let src_base = (((y + row) * pw + x) as usize) * 4;
+            let dst_base = ((y + row) * dst_stride + x * 4) as usize;
+            let sb = &data[src_base..src_base + (w as usize) * 4];
+            let db = &mut dst[dst_base..dst_base + (w as usize) * 4];
+            for (s, d) in sb.chunks_exact(4).zip(db.chunks_exact_mut(4)) {
+                d[0] = s[2]; // B
+                d[1] = s[1]; // G
+                d[2] = s[0]; // R
+                d[3] = s[3]; // A
+            }
+        }
     }
 
     /// Fills a dialog background with subtle shadow and border.
@@ -157,6 +204,18 @@ impl Canvas {
             border_color,
             border_width,
         );
+    }
+}
+
+/// Appends RGBA pixels (R,G,B,A byte order) as premultiplied ARGB
+/// (B,G,R,A byte order) to `out`. tiny-skia already stores premultiplied alpha,
+/// so no un-premultiplication is needed.
+fn swizzle_rgba_to_argb(rgba: &[u8], out: &mut Vec<u8>) {
+    for c in rgba.chunks_exact(4) {
+        out.push(c[2]); // B
+        out.push(c[1]); // G
+        out.push(c[0]); // R
+        out.push(c[3]); // A
     }
 }
 
