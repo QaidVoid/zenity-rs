@@ -761,7 +761,9 @@ impl ListBuilder {
         };
 
         // Initial composite (chrome + list + buttons) and a full upload.
-        canvas.draw_canvas(&chrome_canvas, 0, 0);
+        // Chrome and list are fully opaque, so a raw byte copy is correct and
+        // far faster than tiny-skia's source-over compositing (draw_canvas).
+        canvas.blit_region(&chrome_canvas, 0, 0, physical_width, physical_height, 0, 0);
         draw_list(
             &mut list_canvas,
             colors,
@@ -789,7 +791,15 @@ impl ListBuilder {
             v_scrollbar_hovered,
             h_scrollbar_hovered,
         );
-        canvas.draw_canvas(&list_canvas, list_x, list_y);
+        canvas.blit_region(
+            &list_canvas,
+            0,
+            0,
+            list_w,
+            list_h,
+            list_x as u32,
+            list_y as u32,
+        );
         ok_button.draw_to(&mut canvas, colors, &font);
         cancel_button.draw_to(&mut canvas, colors, &font);
         window.set_contents(&canvas)?;
@@ -810,6 +820,7 @@ impl ListBuilder {
         } else {
             visible_rows.saturating_sub(1)
         };
+
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
@@ -1373,7 +1384,9 @@ impl ListBuilder {
             if full_redraw || needs_redraw || buttons_dirty {
                 if full_redraw {
                     // Chrome + list + buttons, then a single full upload.
-                    canvas.draw_canvas(&chrome_canvas, 0, 0);
+                    // Chrome and list are fully opaque, so a raw byte copy is correct and
+                    // far faster than tiny-skia's source-over compositing (draw_canvas).
+                    canvas.blit_region(&chrome_canvas, 0, 0, physical_width, physical_height, 0, 0);
                     draw_list(
                         &mut list_canvas,
                         colors,
@@ -1401,7 +1414,15 @@ impl ListBuilder {
                         v_scrollbar_hovered,
                         h_scrollbar_hovered,
                     );
-                    canvas.draw_canvas(&list_canvas, list_x, list_y);
+                    canvas.blit_region(
+                        &list_canvas,
+                        0,
+                        0,
+                        list_w,
+                        list_h,
+                        list_x as u32,
+                        list_y as u32,
+                    );
                     ok_button.draw_to(&mut canvas, colors, &font);
                     cancel_button.draw_to(&mut canvas, colors, &font);
                     window.set_contents(&canvas)?;
@@ -1437,7 +1458,15 @@ impl ListBuilder {
                             v_scrollbar_hovered,
                             h_scrollbar_hovered,
                         );
-                        canvas.draw_canvas(&list_canvas, list_x, list_y);
+                        canvas.blit_region(
+                            &list_canvas,
+                            0,
+                            0,
+                            list_w,
+                            list_h,
+                            list_x as u32,
+                            list_y as u32,
+                        );
                         rects.push((list_x as u32, list_y as u32, list_w, list_h));
                     }
                     if buttons_dirty {
