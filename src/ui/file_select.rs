@@ -1189,20 +1189,21 @@ impl FileSelectBuilder {
                         if mouse_x >= padding as i32 && mouse_x < padding as i32 + btn_size {
                             if history_index > 0 {
                                 history_index -= 1;
-                                navigate_to_directory(
-                                    history[history_index].clone(),
-                                    &mut current_dir,
-                                    &mut history,
-                                    &mut history_index,
+                                current_dir = history[history_index].clone();
+                                load_directory(
+                                    &current_dir,
                                     &mut all_entries,
                                     self.directory,
                                     show_hidden,
+                                );
+                                update_filtered(
+                                    &all_entries,
                                     &search_text,
                                     &mut filtered_entries,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
                                     &self.filters,
                                 );
+                                selected_indices.clear();
+                                scroll_offset = 0;
                                 needs_redraw = true;
                             }
                         }
@@ -1212,20 +1213,21 @@ impl FileSelectBuilder {
                         {
                             if history_index + 1 < history.len() {
                                 history_index += 1;
-                                navigate_to_directory(
-                                    history[history_index].clone(),
-                                    &mut current_dir,
-                                    &mut history,
-                                    &mut history_index,
+                                current_dir = history[history_index].clone();
+                                load_directory(
+                                    &current_dir,
                                     &mut all_entries,
                                     self.directory,
                                     show_hidden,
+                                );
+                                update_filtered(
+                                    &all_entries,
                                     &search_text,
                                     &mut filtered_entries,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
                                     &self.filters,
                                 );
+                                selected_indices.clear();
+                                scroll_offset = 0;
                                 needs_redraw = true;
                             }
                         }
