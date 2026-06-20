@@ -1437,6 +1437,9 @@ impl FileSelectBuilder {
                     }
 
                     // Input focus management
+                    let search_focused_before = search_input.has_focus();
+                    let filename_focused_before =
+                        filename_input.as_ref().is_some_and(|f| f.has_focus());
                     let in_search = mouse_x >= search_x
                         && mouse_x < search_x + search_width as i32
                         && mouse_y >= search_y
@@ -1469,6 +1472,12 @@ impl FileSelectBuilder {
                             search_input.set_completion(None);
                         }
                         search_input.set_focus(in_search);
+                    }
+                    if search_input.has_focus() != search_focused_before
+                        || filename_input.as_ref().is_some_and(|f| f.has_focus())
+                            != filename_focused_before
+                    {
+                        needs_redraw = true;
                     }
                 }
                 WindowEvent::ButtonRelease(_, _) => {
