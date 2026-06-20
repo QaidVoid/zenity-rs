@@ -249,9 +249,33 @@ impl FileSelectBuilder {
         let mut history_index: usize = 0;
 
         // Current state
-        let mut current_dir = self
-            .start_path
-            .unwrap_or_else(|| dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")));
+        // Resolve the initial directory (and optional preselected file name) from
+        // --filename / start_path. A directory opens in place; a file path opens
+        // its parent and yields the file name for preselection (zenity semantics).
+        let (mut current_dir, preselected_name) = match &self.start_path {
+            Some(p) => (p.clone(), None),
+            None if self.filename.is_empty() => {
+                (dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")), None)
+            }
+            None => {
+                let path = Path::new(&self.filename);
+                if path.is_dir() {
+                    (path.to_path_buf(), None)
+                } else {
+                    let name = path.file_name().map(|n| n.to_string_lossy().to_string());
+                    let dir = path
+                        .parent()
+                        .filter(|p| !p.as_os_str().is_empty() && p.is_dir())
+                        .map(|p| p.to_path_buf())
+                        .unwrap_or_else(|| {
+                            std::env::current_dir().unwrap_or_else(|_| {
+                                dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+                            })
+                        });
+                    (dir, name)
+                }
+            }
+        };
         history.push(current_dir.clone());
 
         let mut all_entries: Vec<DirEntry> = Vec::new();
@@ -315,6 +339,30 @@ impl FileSelectBuilder {
         let list_h = main_h - path_bar_height - header_offset;
         let visible_items = (list_h / item_height) as usize;
 
+        // Preselect the file named by --filename in single-selection open mode,
+        // scrolling it into view.
+        if let Some((idx, pos)) = (!save_mode && !self.directory && !self.multiple)
+            .then_some(())
+            .and(preselected_name.as_deref())
+            .and_then(|name| {
+                filtered_entries.iter().enumerate().find_map(|(pos, &i)| {
+                    all_entries[i]
+                        .name
+                        .eq_ignore_ascii_case(name)
+                        .then_some((i, pos))
+                })
+            })
+        {
+            selected_indices.insert(idx);
+            scroll_offset = if pos < scroll_offset {
+                pos
+            } else if pos >= scroll_offset + visible_items {
+                pos + 1 - visible_items
+            } else {
+                scroll_offset
+            };
+        }
+
         // Calculate section heights
         let section_header_height = (BASE_SECTION_HEADER_HEIGHT as f32 * scale) as u32;
         let item_height_scaled = item_height;
@@ -334,8 +382,8 @@ impl FileSelectBuilder {
         let filename_label_h = (BASE_FILENAME_LABEL_HEIGHT as f32 * scale) as i32;
         let mut filename_input = if save_mode {
             let mut input = TextInput::new(main_w).with_placeholder("Enter filename...");
-            if !self.filename.is_empty() {
-                input = input.with_default_text(&self.filename);
+            if let Some(name) = &preselected_name {
+                input = input.with_default_text(name);
             }
             input.set_focus(true);
             input.set_position(main_x, filename_y + filename_label_h);
