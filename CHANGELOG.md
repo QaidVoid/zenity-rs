@@ -1,4 +1,21 @@
 
+## [0.2.9](https://github.com/QaidVoid/zenity-rs/compare/v0.2.8...v0.2.9) - 2026-06-20
+
+### Added
+
+- *(file_select)* Make breadcrumb path clickable - ([31e7907](https://github.com/QaidVoid/zenity-rs/commit/31e7907496649355a62573b72f090858fdef6266))
+
+### Fixed
+
+- *(file_select)* Preserve history on back/forward nav - ([40d49af](https://github.com/QaidVoid/zenity-rs/commit/40d49af1293ba966969dae8f05e8af1b61d77d17))
+- *(file_select)* Elide popup items that overflow the width - ([7be48c2](https://github.com/QaidVoid/zenity-rs/commit/7be48c2a3af14eeff4bd7406d61dbc8350f6eb6e))
+- *(file_select)* Redraw on input focus change - ([ea5a060](https://github.com/QaidVoid/zenity-rs/commit/ea5a0604b3eaf22165408bd5f0a8c4d8f73cdc71))
+- *(file_select)* Honor --filename for initial dir and preselection - ([fc1e342](https://github.com/QaidVoid/zenity-rs/commit/fc1e342935f0ffc3507b343123f18d7513953c95))
+
+### Other
+
+- Cache text/chrome and add damage tracking for list dialog ([#40](https://github.com/QaidVoid/zenity-rs/pull/40)) - ([fe187b3](https://github.com/QaidVoid/zenity-rs/commit/fe187b317d7122101a43448b01d8023f6f92bb0f))
+
 ## [0.2.8](https://github.com/QaidVoid/zenity-rs/compare/v0.2.7...v0.2.8) - 2026-06-01
 
 ### Fixed
