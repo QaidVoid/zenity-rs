@@ -247,11 +247,67 @@ impl TextInfoBuilder {
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);
 
+        // Pre-render the static chrome (bg + title + text-area) and each text
+        // line ONCE into opaque canvases. Per-frame work then reduces to raw
+        // byte copies (blit_region) instead of re-rasterizing the background and
+        // dozens of text lines every scroll frame.
+        let radius = BASE_CORNER_RADIUS * scale;
+        let title_font_size = 18.0 * 1.5 * scale;
+        let title_font = Font::load_with_size(title_font_size);
+        let mut chrome_canvas = Canvas::new(physical_width, physical_height);
+        chrome_canvas.fill_dialog_bg(
+            physical_width as f32,
+            physical_height as f32,
+            colors.window_bg,
+            colors.window_border,
+            colors.window_shadow,
+            radius,
+        );
+        if !self.title.is_empty() {
+            let title_rendered = title_font
+                .render(&self.title)
+                .with_color(colors.text)
+                .finish();
+            let title_x = (physical_width as i32 - title_rendered.width() as i32) / 2;
+            chrome_canvas.draw_canvas(&title_rendered, title_x, padding as i32);
+        }
+        chrome_canvas.fill_rounded_rect(
+            text_area_x as f32,
+            text_area_y as f32,
+            text_area_w as f32,
+            text_area_h as f32,
+            6.0 * scale,
+            colors.input_bg,
+        );
+        chrome_canvas.stroke_rounded_rect(
+            text_area_x as f32,
+            text_area_y as f32,
+            text_area_w as f32,
+            text_area_h as f32,
+            6.0 * scale,
+            colors.input_border,
+            1.0,
+        );
+        let line_canvases: Vec<Canvas> = wrapped_lines
+            .iter()
+            .map(|line| {
+                if line.is_empty() {
+                    return Canvas::new(1, 1);
+                }
+                let tc = font.render(line).with_color(colors.text).finish();
+                let mut lc = Canvas::new(tc.width().max(1), line_height);
+                lc.fill(colors.input_bg);
+                lc.draw_canvas(&tc, 0, 0);
+                lc
+            })
+            .collect();
+
         // Draw function
         let draw = |canvas: &mut Canvas,
                     colors: &Colors,
                     font: &Font,
-                    title: &str,
+                    chrome: &Canvas,
+                    line_canvases: &[Canvas],
                     wrapped_lines: &[String],
                     scroll_offset: usize,
                     visible_lines: usize,
@@ -271,50 +327,29 @@ impl TextInfoBuilder {
                     checkbox_y: i32,
                     scale: f32,
                     scrollbar_hovered: bool| {
-            let width = canvas.width() as f32;
-            let height = canvas.height() as f32;
-            let radius = BASE_CORNER_RADIUS * scale;
+            // Chrome (opaque) - raw byte copy, far faster than re-rasterizing the
+            // full dialog background every frame.
+            let cw = canvas.width();
+            let ch = canvas.height();
+            canvas.blit_region(chrome, 0, 0, cw, ch, 0, 0);
 
-            canvas.fill_dialog_bg(
-                width,
-                height,
-                colors.window_bg,
-                colors.window_border,
-                colors.window_shadow,
-                radius,
-            );
-
-            // Draw title if present
-            if !title.is_empty() {
-                // Render title with larger font (1.5x normal size)
-                let title_font_size = 18.0 * 1.5 * scale;
-                let title_font = Font::load_with_size(title_font_size);
-                let title_rendered = title_font.render(title).with_color(colors.text).finish();
-                let title_x = (width as i32 - title_rendered.width() as i32) / 2;
-                let title_y = padding as i32;
-                canvas.draw_canvas(&title_rendered, title_x, title_y);
-            }
-
-            // Text area background
-            canvas.fill_rounded_rect(
-                text_area_x as f32,
-                text_area_y as f32,
-                text_area_w as f32,
-                text_area_h as f32,
-                6.0 * scale,
-                colors.input_bg,
-            );
-
-            // Draw visible lines
+            // Visible text lines (opaque, pre-rendered) - raw copy each.
             let text_padding = (8.0 * scale) as i32;
             for (i, line_idx) in
                 (scroll_offset..wrapped_lines.len().min(scroll_offset + visible_lines)).enumerate()
             {
-                let line = &wrapped_lines[line_idx];
-                if !line.is_empty() {
-                    let tc = font.render(line).with_color(colors.text).finish();
+                let lc = &line_canvases[line_idx];
+                if lc.width() > 1 {
                     let y = text_area_y + text_padding + (i as u32 * line_height) as i32;
-                    canvas.draw_canvas(&tc, text_area_x + text_padding, y);
+                    canvas.blit_region(
+                        lc,
+                        0,
+                        0,
+                        lc.width(),
+                        lc.height(),
+                        (text_area_x + text_padding) as u32,
+                        y as u32,
+                    );
                 }
             }
 
@@ -438,7 +473,8 @@ impl TextInfoBuilder {
             &mut canvas,
             colors,
             &font,
-            &self.title,
+            &chrome_canvas,
+            &line_canvases,
             &wrapped_lines,
             scroll_offset,
             visible_lines,
@@ -761,7 +797,8 @@ impl TextInfoBuilder {
                     &mut canvas,
                     colors,
                     &font,
-                    &self.title,
+                    &chrome_canvas,
+                    &line_canvases,
                     &wrapped_lines,
                     scroll_offset,
                     visible_lines,

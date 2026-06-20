@@ -351,32 +351,45 @@ impl FileSelectBuilder {
 
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(window_width, window_height);
+
+        // Chrome-layer cache. The static parts of the dialog (background, toolbar,
+        // nav buttons, sidebar, path bar, column headers) are re-rendered only
+        // when one of these chrome-affecting values changes; during scroll only the
+        // file list is repainted on top.
+        #[derive(Clone, PartialEq)]
+        struct ChromeSig {
+            dir: PathBuf,
+            show_hidden: bool,
+            hovered_qa: Option<usize>,
+            hovered_drive: Option<usize>,
+            history_index: usize,
+            history_len: usize,
+            search: String,
+            search_focused: bool,
+            filename: Option<(String, bool)>,
+            qa_len: usize,
+            drives_len: usize,
+        }
+        let mut chrome_canvas = Canvas::new(window_width, window_height);
+        let mut chrome_sig: Option<ChromeSig> = None;
+
         let mut mouse_x = 0i32;
         let mut mouse_y = 0i32;
 
         // Draw function - captures scaled variables from enclosing scope
-        let draw = |canvas: &mut Canvas,
-                    colors: &Colors,
-                    font: &Font,
-                    current_dir: &Path,
-                    quick_access: &[QuickAccess],
-                    all_entries: &[DirEntry],
-                    filtered_entries: &[usize],
-                    selected_indices: &HashSet<usize>,
-                    scroll_offset: usize,
-                    hovered_quick_access: Option<usize>,
-                    hovered_entry: Option<usize>,
-                    show_hidden: bool,
-                    search_input: &TextInput,
-                    ok_button: &Button,
-                    cancel_button: &Button,
-                    history: &[PathBuf],
-                    history_index: usize,
-                    mounted_drives: &[MountPoint],
-                    hovered_drive: Option<usize>,
-                    scale: f32,
-                    scrollbar_hovered: bool,
-                    filename_input: Option<&TextInput>| {
+        let draw_chrome = |canvas: &mut Canvas,
+                           colors: &Colors,
+                           font: &Font,
+                           current_dir: &Path,
+                           quick_access: &[QuickAccess],
+                           mounted_drives: &[MountPoint],
+                           hovered_quick_access: Option<usize>,
+                           hovered_drive: Option<usize>,
+                           history: &[PathBuf],
+                           history_index: usize,
+                           show_hidden: bool,
+                           search_input: &TextInput,
+                           scale: f32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
             let radius = BASE_CORNER_RADIUS * scale;
@@ -672,7 +685,23 @@ impl FileSelectBuilder {
                 1.0,
                 colors.input_border,
             );
+        };
 
+        // Dynamic layer: the scrollable file list + scrollbar + inputs + buttons.
+        // Redrawn every frame on top of the cached chrome.
+        let draw_dynamic = |canvas: &mut Canvas,
+                            colors: &Colors,
+                            font: &Font,
+                            all_entries: &[DirEntry],
+                            filtered_entries: &[usize],
+                            selected_indices: &HashSet<usize>,
+                            scroll_offset: usize,
+                            hovered_entry: Option<usize>,
+                            scale: f32,
+                            scrollbar_hovered: bool,
+                            ok_button: &Button,
+                            cancel_button: &Button,
+                            filename_input: Option<&TextInput>| {
             // File list
             let list_x = main_x;
             for (vi, &ei) in filtered_entries
@@ -841,28 +870,53 @@ impl FileSelectBuilder {
         };
 
         // Initial draw
-        draw(
+        let sig = ChromeSig {
+            dir: current_dir.to_path_buf(),
+            show_hidden,
+            hovered_qa: hovered_quick_access,
+            hovered_drive,
+            history_index,
+            history_len: history.len(),
+            search: search_input.text().to_owned(),
+            search_focused: search_input.has_focus(),
+            filename: filename_input
+                .as_ref()
+                .map(|f| (f.text().to_owned(), f.has_focus())),
+            qa_len: quick_access.len(),
+            drives_len: mounted_drives.len(),
+        };
+        if chrome_sig.as_ref() != Some(&sig) {
+            draw_chrome(
+                &mut chrome_canvas,
+                colors,
+                &font,
+                &current_dir,
+                &quick_access,
+                &mounted_drives,
+                hovered_quick_access,
+                hovered_drive,
+                &history,
+                history_index,
+                show_hidden,
+                &search_input,
+                scale,
+            );
+            chrome_sig = Some(sig);
+        }
+        canvas.blit_region(&chrome_canvas, 0, 0, window_width, window_height, 0, 0);
+        draw_dynamic(
             &mut canvas,
             colors,
             &font,
-            &current_dir,
-            &quick_access,
             &all_entries,
             &filtered_entries,
             &selected_indices,
             scroll_offset,
-            hovered_quick_access,
             hovered_entry,
-            show_hidden,
-            &search_input,
-            &ok_button,
-            &cancel_button,
-            &history,
-            history_index,
-            &mounted_drives,
-            hovered_drive,
             scale,
             scrollbar_hovered,
+            &ok_button,
+            &cancel_button,
             filename_input.as_ref(),
         );
         if save_mode && !completion_matches.is_empty() {
@@ -1959,28 +2013,53 @@ impl FileSelectBuilder {
             }
 
             if needs_redraw {
-                draw(
+                let sig = ChromeSig {
+                    dir: current_dir.to_path_buf(),
+                    show_hidden,
+                    hovered_qa: hovered_quick_access,
+                    hovered_drive,
+                    history_index,
+                    history_len: history.len(),
+                    search: search_input.text().to_owned(),
+                    search_focused: search_input.has_focus(),
+                    filename: filename_input
+                        .as_ref()
+                        .map(|f| (f.text().to_owned(), f.has_focus())),
+                    qa_len: quick_access.len(),
+                    drives_len: mounted_drives.len(),
+                };
+                if chrome_sig.as_ref() != Some(&sig) {
+                    draw_chrome(
+                        &mut chrome_canvas,
+                        colors,
+                        &font,
+                        &current_dir,
+                        &quick_access,
+                        &mounted_drives,
+                        hovered_quick_access,
+                        hovered_drive,
+                        &history,
+                        history_index,
+                        show_hidden,
+                        &search_input,
+                        scale,
+                    );
+                    chrome_sig = Some(sig);
+                }
+                canvas.blit_region(&chrome_canvas, 0, 0, window_width, window_height, 0, 0);
+                draw_dynamic(
                     &mut canvas,
                     colors,
                     &font,
-                    &current_dir,
-                    &quick_access,
                     &all_entries,
                     &filtered_entries,
                     &selected_indices,
                     scroll_offset,
-                    hovered_quick_access,
                     hovered_entry,
-                    show_hidden,
-                    &search_input,
-                    &ok_button,
-                    &cancel_button,
-                    &history,
-                    history_index,
-                    &mounted_drives,
-                    hovered_drive,
                     scale,
                     scrollbar_hovered,
+                    &ok_button,
+                    &cancel_button,
                     filename_input.as_ref(),
                 );
                 if save_mode && !completion_matches.is_empty() {

@@ -314,15 +314,62 @@ impl Window for WaylandWindow {
     }
 
     fn set_contents(&mut self, canvas: &Canvas) -> Result<(), Error> {
-        // Copy pixel data from Canvas to shared memory buffer
-        let src = canvas.as_argb();
+        // Swizzle pixels directly into the SHM buffer (no intermediate Vec).
+        let stride = self.physical_width * 4;
         let dst = self.shm_pool.data_mut();
-        dst[..src.len()].copy_from_slice(&src);
+        canvas.blit_argb_rect(0, 0, canvas.width(), canvas.height(), dst, stride as u32);
 
-        // Attach buffer and damage the surface (use physical dimensions)
+        // Attach buffer and damage the whole surface.
         if let Some(surface) = &self.state.surface {
             surface.attach(Some(&self.buffer), 0, 0);
             surface.damage_buffer(0, 0, self.physical_width, self.physical_height);
+            surface.commit();
+        }
+
+        self.conn.flush()?;
+        Ok(())
+    }
+
+    fn set_contents_rects(
+        &mut self,
+        canvas: &Canvas,
+        rects: &[(u32, u32, u32, u32)],
+    ) -> Result<(), Error> {
+        if rects.is_empty() {
+            return Ok(());
+        }
+        let cw = canvas.width();
+        let ch = canvas.height();
+        let stride = (self.physical_width * 4) as u32;
+
+        // Fallback to a full upload if a single rect already covers everything
+        // (avoids per-rect overhead with no benefit).
+        if rects.len() == 1
+            && rects[0].0 == 0
+            && rects[0].1 == 0
+            && rects[0].2 == cw
+            && rects[0].3 == ch
+        {
+            return self.set_contents(canvas);
+        }
+
+        let dst = self.shm_pool.data_mut();
+        let surface = self.state.surface.clone();
+        if let Some(surface) = &surface {
+            surface.attach(Some(&self.buffer), 0, 0);
+        }
+        for &(x, y, w, h) in rects {
+            let (x, y) = (x.min(cw), y.min(ch));
+            let (w, h) = (w.min(cw.saturating_sub(x)), h.min(ch.saturating_sub(y)));
+            if w == 0 || h == 0 {
+                continue;
+            }
+            canvas.blit_argb_rect(x, y, w, h, dst, stride);
+            if let Some(surface) = &surface {
+                surface.damage_buffer(x as i32, y as i32, w as i32, h as i32);
+            }
+        }
+        if let Some(surface) = &surface {
             surface.commit();
         }
 
