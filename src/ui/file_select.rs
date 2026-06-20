@@ -2537,6 +2537,33 @@ fn find_all_completions(
 const POPUP_ITEM_HEIGHT: i32 = 26;
 const MAX_POPUP_ITEMS: usize = 8;
 
+/// Truncates `text` to fit within `max_width` pixels, appending an ellipsis
+/// ("…") when it had to be cut. Width is color-independent, so measurement uses
+/// a placeholder color.
+fn truncate_to_width(text: &str, max_width: i32, font: &Font) -> String {
+    let measure = |s: &str| font.render(s).with_color(rgb(0, 0, 0)).finish().width() as i32;
+    if measure(text) <= max_width {
+        return text.to_string();
+    }
+    let ellipsis = "…";
+    let ell_w = measure(ellipsis);
+    if max_width <= ell_w {
+        return ellipsis.to_string();
+    }
+    let mut out = String::new();
+    let mut w = 0i32;
+    for c in text.chars() {
+        let cw = measure(&c.to_string());
+        if w + cw > max_width - ell_w {
+            break;
+        }
+        out.push(c);
+        w += cw;
+    }
+    out.push('…');
+    out
+}
+
 fn draw_completion_popup(
     canvas: &mut Canvas,
     font: &Font,
@@ -2592,7 +2619,8 @@ fn draw_completion_popup(
         } else {
             colors.text
         };
-        let label = font.render(name).with_color(text_color).finish();
+        let display = truncate_to_width(name, width as i32 - 12, font);
+        let label = font.render(&display).with_color(text_color).finish();
         let text_y = item_y + (POPUP_ITEM_HEIGHT - label.height() as i32) / 2;
         canvas.draw_canvas(&label, x + 6, text_y);
     }
