@@ -1248,6 +1248,41 @@ impl FileSelectBuilder {
                         }
                     }
 
+                    // Breadcrumb (path bar) click
+                    if mouse_y >= main_y
+                        && mouse_y < main_y + path_bar_height as i32
+                        && mouse_x >= main_x
+                        && mouse_x < main_x + main_w as i32
+                    {
+                        let crumbs = breadcrumb_layout(
+                            &current_dir,
+                            main_x + (8.0 * scale) as i32,
+                            main_w as i32 - (16.0 * scale) as i32,
+                            &font,
+                        );
+                        // The last segment is the current dir; skip it to avoid a no-op reload.
+                        for c in crumbs.iter().take(crumbs.len().saturating_sub(1)) {
+                            if mouse_x >= c.x && mouse_x < c.x + c.w {
+                                navigate_to_directory(
+                                    c.path.clone(),
+                                    &mut current_dir,
+                                    &mut history,
+                                    &mut history_index,
+                                    &mut all_entries,
+                                    self.directory,
+                                    show_hidden,
+                                    &search_text,
+                                    &mut filtered_entries,
+                                    &mut selected_indices,
+                                    &mut scroll_offset,
+                                    &self.filters,
+                                );
+                                needs_redraw = true;
+                                break;
+                            }
+                        }
+                    }
+
                     // Quick access click
                     if !clicking_scrollbar {
                         if let Some(idx) = hovered_quick_access {
@@ -2619,6 +2654,83 @@ fn draw_toggle(
     };
     let tc = font.render(label).with_color(text_color).finish();
     canvas.draw_canvas(&tc, x + (6.0 * scale) as i32, y + (6.0 * scale) as i32);
+}
+
+/// One clickable breadcrumb segment.
+struct Crumb {
+    path: PathBuf,
+    x: i32,
+    w: i32,
+}
+
+/// Computes the breadcrumb layout for hit-testing.
+///
+/// Mirrors the rendering logic in [`draw_breadcrumbs`]: when the full path does not
+/// fit, leading components are collapsed into an ellipsis and only the trailing
+/// components remain. Returns each visible named segment with the accumulated
+/// filesystem path it navigates to, its left edge (absolute x), and text width.
+/// The collapsed ellipsis marker is intentionally excluded (it is not a target).
+fn breadcrumb_layout(path: &Path, x: i32, max_w: i32, font: &Font) -> Vec<Crumb> {
+    let components: Vec<_> = path.components().collect();
+    let num = components.len();
+    if num == 0 {
+        return Vec::new();
+    }
+
+    let measure = |s: &str| font.render(s).with_color(rgb(0, 0, 0)).finish().width() as i32;
+    let sep_w = measure(" / ");
+    let ellipsis_w = measure("...") + 8;
+
+    let mut widths = Vec::with_capacity(num);
+    let mut accs: Vec<PathBuf> = Vec::with_capacity(num);
+    let mut acc = PathBuf::new();
+    let mut total = 0i32;
+    for (i, comp) in components.iter().enumerate() {
+        acc.push(comp);
+        accs.push(acc.clone());
+        let raw = comp.as_os_str().to_string_lossy();
+        let w = measure(if raw.is_empty() { "/" } else { raw.as_ref() });
+        widths.push(w);
+        total += w;
+        if i < num - 1 && !matches!(comp, std::path::Component::RootDir) {
+            total += sep_w;
+        }
+    }
+
+    let show = if total > max_w {
+        (1..=num.min(4))
+            .rev()
+            .find(|&n| {
+                let start = num - n;
+                let mut t = if start > 0 { ellipsis_w } else { 0 };
+                for (i, w) in widths.iter().enumerate().skip(start) {
+                    t += w;
+                    if i < num - 1 && !matches!(components[i], std::path::Component::RootDir) {
+                        t += sep_w;
+                    }
+                }
+                t <= max_w
+            })
+            .unwrap_or(1)
+    } else {
+        num
+    };
+    let start = num - show;
+
+    let mut cx = x + if start > 0 { ellipsis_w } else { 0 };
+    let mut out = Vec::with_capacity(show);
+    for i in start..num {
+        out.push(Crumb {
+            path: accs[i].clone(),
+            x: cx,
+            w: widths[i],
+        });
+        cx += widths[i];
+        if i < num - 1 && !matches!(components[i], std::path::Component::RootDir) {
+            cx += sep_w;
+        }
+    }
+    out
 }
 
 fn draw_breadcrumbs(
