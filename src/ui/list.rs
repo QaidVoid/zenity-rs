@@ -61,6 +61,7 @@ pub struct ListBuilder {
     rows: Vec<Vec<String>>,
     mode: ListMode,
     hidden_columns: Vec<usize>,
+    hide_header: bool,
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
@@ -75,6 +76,7 @@ impl ListBuilder {
             rows: Vec::new(),
             mode: ListMode::Single,
             hidden_columns: Vec::new(),
+            hide_header: false,
             width: None,
             height: None,
             colors: None,
@@ -148,6 +150,11 @@ impl ListBuilder {
         if col > 0 {
             self.hidden_columns.push(col - 1); // Convert to 0-based
         }
+        self
+    }
+
+    pub fn hide_header(mut self) -> Self {
+        self.hide_header = true;
         self
     }
 
@@ -233,6 +240,10 @@ impl ListBuilder {
         let num_cols = columns.len().max(1);
         let num_rows = rows.len();
 
+        // render the column header row, suppressed by --hide-header
+        let show_header = !self.hide_header
+            && (!columns.is_empty() || checkbox_column_header.is_some());
+
         // Column gap for separation (in logical units at scale 1.0)
         let logical_column_gap = 16u32;
 
@@ -271,10 +282,10 @@ impl ListBuilder {
         // Calculate logical height
         let logical_title_height = if self.title.is_empty() { 0 } else { 32 };
         let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
-        let logical_header_height = if columns.is_empty() {
-            0
-        } else {
+        let logical_header_height = if show_header {
             BASE_ROW_HEIGHT
+        } else {
+            0
         };
         let logical_list_height =
             (num_rows as u32 * BASE_ROW_HEIGHT).clamp(BASE_ROW_HEIGHT * 3, BASE_MAX_HEIGHT - 100);
@@ -523,7 +534,8 @@ impl ListBuilder {
                          visible_rows: usize,
                          scale: f32,
                          v_scrollbar_hovered: bool,
-                         h_scrollbar_hovered: bool| {
+                         h_scrollbar_hovered: bool,
+                         show_header: bool| {
             // Clear list canvas
             list_canvas.fill(colors.input_bg);
 
@@ -531,7 +543,7 @@ impl ListBuilder {
 
             // Draw header if columns exist
             let mut data_y_local = 0i32;
-            if !columns.is_empty() || checkbox_header_canvas.is_some() {
+            if show_header {
                 let header_bg = darken(colors.input_bg, 0.05);
                 list_canvas.fill_rect(0.0, 0.0, list_w as f32, row_height as f32, header_bg);
 
@@ -571,10 +583,10 @@ impl ListBuilder {
             }
 
             // Draw rows
-            let data_visible = if columns.is_empty() {
-                visible_rows
-            } else {
+            let data_visible = if show_header {
                 visible_rows.saturating_sub(1)
+            } else {
+                visible_rows
             };
             for (vi, ri) in
                 (scroll_offset..rows.len().min(scroll_offset + data_visible)).enumerate()
@@ -663,10 +675,10 @@ impl ListBuilder {
             if rows.len() > data_visible {
                 let sb_x = list_w as i32 - (8.0 * scale) as i32;
                 let sb_h = list_h as f32
-                    - if columns.is_empty() {
-                        0.0
-                    } else {
+                    - if show_header {
                         row_height as f32 + 1.0
+                    } else {
+                        0.0
                     };
                 let sb_y = data_y_local as f32;
                 let thumb_h =
@@ -790,6 +802,7 @@ impl ListBuilder {
             scale,
             v_scrollbar_hovered,
             h_scrollbar_hovered,
+            show_header,
         );
         canvas.blit_region(
             &list_canvas,
@@ -809,16 +822,16 @@ impl ListBuilder {
         // (set by RedrawRequested); the list/button flags are reset each iteration.
         let mut full_redraw = false;
 
-        let header_height_px = if columns.is_empty() {
-            0
-        } else {
+        let header_height_px = if show_header {
             row_height + 1
+        } else {
+            0
         };
         let data_y = list_y + header_height_px as i32;
-        let data_visible = if columns.is_empty() {
-            visible_rows
-        } else {
+        let data_visible = if show_header {
             visible_rows.saturating_sub(1)
+        } else {
+            visible_rows
         };
 
         loop {
@@ -848,16 +861,16 @@ impl ListBuilder {
 
                         if v_thumb_drag && rows.len() > data_visible {
                             let sb_h_f32 = list_h as f32
-                                - if columns.is_empty() {
-                                    0.0
-                                } else {
+                                - if show_header {
                                     row_height as f32 + 1.0
+                                } else {
+                                    0.0
                                 };
                             let sb_h = sb_h_f32 as i32;
-                            let sb_y = if columns.is_empty() {
-                                0
-                            } else {
+                            let sb_y = if show_header {
                                 (row_height + 1) as i32
+                            } else {
+                                0
                             };
                             let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
                                 * sb_h_f32)
@@ -992,15 +1005,15 @@ impl ListBuilder {
                                     clicking_scrollbar = true;
 
                                     let sb_h_f32 = list_h as f32
-                                        - if columns.is_empty() {
-                                            0.0
-                                        } else {
+                                        - if show_header {
                                             row_height as f32 + 1.0
+                                        } else {
+                                            0.0
                                         };
-                                    let sb_y = if columns.is_empty() {
-                                        0
-                                    } else {
+                                    let sb_y = if show_header {
                                         (row_height + 1) as i32
+                                    } else {
+                                        0
                                     };
                                     let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
                                         * sb_h_f32)
@@ -1306,10 +1319,10 @@ impl ListBuilder {
                             if rows.len() > data_visible {
                                 let sb_x = list_w as i32 - (8.0 * scale) as i32;
                                 let sb_h_f32 = list_h as f32
-                                    - if columns.is_empty() {
-                                        0.0
-                                    } else {
+                                    - if show_header {
                                         row_height as f32 + 1.0
+                                    } else {
+                                        0.0
                                     };
                                 let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
                                     * sb_h_f32)
@@ -1413,6 +1426,7 @@ impl ListBuilder {
                         scale,
                         v_scrollbar_hovered,
                         h_scrollbar_hovered,
+                        show_header,
                     );
                     canvas.blit_region(
                         &list_canvas,
@@ -1457,6 +1471,7 @@ impl ListBuilder {
                             scale,
                             v_scrollbar_hovered,
                             h_scrollbar_hovered,
+                            show_header,
                         );
                         canvas.blit_region(
                             &list_canvas,
