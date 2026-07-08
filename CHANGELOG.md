@@ -1,4 +1,10 @@
 
+## [0.2.10](https://github.com/QaidVoid/zenity-rs/compare/v0.2.9...v0.2.10) - 2026-07-08
+
+### Added
+
+- Support `--hide-header` flag ([#42](https://github.com/QaidVoid/zenity-rs/pull/42)) - ([b5c8174](https://github.com/QaidVoid/zenity-rs/commit/b5c8174a17f41ba0fd9ffee5955b0e542755e17c))
+
 ## [0.2.9](https://github.com/QaidVoid/zenity-rs/compare/v0.2.8...v0.2.9) - 2026-06-20
 
 ### Added
