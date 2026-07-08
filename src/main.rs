@@ -176,6 +176,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut checklist = false;
     let mut radiolist = false;
     let mut hidden_columns: Vec<usize> = Vec::new();
+    let mut hide_header = false;
 
     // Calendar options
     let mut cal_year: Option<u32> = None;
@@ -307,6 +308,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("checklist") => checklist = true,
             Long("radiolist") => radiolist = true,
             Long("hide-column") => hidden_columns.push(parser.value()?.string()?.parse()?),
+            Long("hide-header") => hide_header = true,
 
             // Calendar options
             Long("year") => cal_year = Some(parser.value()?.string()?.parse()?),
@@ -575,6 +577,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             }
             for col in &hidden_columns {
                 builder = builder.hide_column(*col);
+            }
+            if hide_header {
+                builder = builder.hide_header();
             }
 
             // Determine column count for rows
@@ -904,6 +909,7 @@ USAGE:
     --radiolist       Enable single-select with radio buttons
     --multiple        Enable multi-select without checkboxes
     --hide-column=N   Hide column N (1-based, can be repeated)
+    --hide-header     Hide the column header row
     [VALUES...]       Row values (number must match column count)
 
   --calendar              Display a calendar date picker
