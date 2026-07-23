@@ -1,5 +1,9 @@
 # zenity-rs
 
+[![GitHub Downloads](https://img.shields.io/github/downloads/QaidVoid/zenity-rs/total?logo=github&label=GitHub%20Downloads)](https://github.com/QaidVoid/zenity-rs/releases/latest)
+[![CI Build Status](https://github.com//QaidVoid/zenity-rs/actions/workflows/release.yaml/badge.svg)](https://github.com/QaidVoid/zenity-rs/releases/latest)
+[![Latest Stable Release](https://img.shields.io/github/v/release/QaidVoid/zenity-rs)](https://github.com/QaidVoid/zenity-rs/releases/latest)
+
 A lightweight, pure Rust implementation for displaying GUI dialogs from the command line. Designed for shell scripts and CLI tools that need simple user interaction.
 
 ## Features
