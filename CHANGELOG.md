@@ -1,4 +1,18 @@
 
+## [0.2.11](https://github.com/QaidVoid/zenity-rs/compare/v0.2.10...v0.2.11) - 2026-08-21
+
+### Fixed
+
+- Correct flipped return with --extra-button dialogs ([#45](https://github.com/QaidVoid/zenity-rs/pull/45)) - ([405045c](https://github.com/QaidVoid/zenity-rs/commit/405045cbad8551005746779fc2deae9e336908e5))
+
+### Other
+
+- Share window setup across dialogs - ([7c4822e](https://github.com/QaidVoid/zenity-rs/commit/7c4822e05e426d01161493a5a4653ad6dcf2beb9))
+- Drop unused error channel from result handlers - ([6b37240](https://github.com/QaidVoid/zenity-rs/commit/6b37240086d589fbb3e0792a23c65eb4746ce14a))
+- Format list.rs with rustfmt - ([ad3ba72](https://github.com/QaidVoid/zenity-rs/commit/ad3ba72576cafaadac465417437fbf0bd5d5027f))
+- Collapse duplicated message dialog arms - ([fc396c0](https://github.com/QaidVoid/zenity-rs/commit/fc396c08691d76882aff217b299b9d4aea565139))
+- Add badges - ([091fb53](https://github.com/QaidVoid/zenity-rs/commit/091fb53f1c0ddcd250e93c2113dc646c7feca439))
+
 ## [0.2.10](https://github.com/QaidVoid/zenity-rs/compare/v0.2.9...v0.2.10) - 2026-07-08
 
 ### Added
