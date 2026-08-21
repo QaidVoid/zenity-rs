@@ -3,12 +3,13 @@
 use std::io::Read;
 
 use crate::{
-    backend::{Window, WindowEvent, create_window},
+    backend::{Window, WindowEvent},
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_END,
-        KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN, KEY_UP,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_TITLE_FONT_SIZE, Colors,
+        KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN, KEY_UP,
+        open_window,
         widgets::{Widget, button::Button},
     },
 };
@@ -128,15 +129,8 @@ impl TextInfoBuilder {
             .max(BASE_MIN_HEIGHT);
 
         // Create window with LOGICAL dimensions
-        let mut window = create_window(logical_width as u16, logical_height as u16)?;
-        window.set_title(if self.title.is_empty() {
-            "Text"
-        } else {
-            &self.title
-        })?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        let (mut window, scale, physical_width, physical_height) =
+            open_window(&self.title, "Text", logical_width, logical_height)?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
@@ -145,10 +139,6 @@ impl TextInfoBuilder {
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let line_height = (BASE_LINE_HEIGHT as f32 * scale) as u32;
         let checkbox_size = (BASE_CHECKBOX_SIZE as f32 * scale) as u32;
-
-        // Calculate physical dimensions
-        let physical_width = (logical_width as f32 * scale) as u32;
-        let physical_height = (logical_height as f32 * scale) as u32;
 
         // Create buttons at physical scale
         let mut ok_button = Button::new("OK", &font, scale);
@@ -252,7 +242,7 @@ impl TextInfoBuilder {
         // byte copies (blit_region) instead of re-rasterizing the background and
         // dozens of text lines every scroll frame.
         let radius = BASE_CORNER_RADIUS * scale;
-        let title_font_size = 18.0 * 1.5 * scale;
+        let title_font_size = BASE_TITLE_FONT_SIZE * scale;
         let title_font = Font::load_with_size(title_font_size);
         let mut chrome_canvas = Canvas::new(physical_width, physical_height);
         chrome_canvas.fill_dialog_bg(

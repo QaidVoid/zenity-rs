@@ -3,12 +3,12 @@
 use std::time::{Duration, Instant};
 
 use crate::{
-    backend::{MouseButton, Window, WindowEvent, create_window},
+    backend::{MouseButton, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, ButtonPreset, Colors,
-        DialogResult, Icon, KEY_ESCAPE, KEY_RETURN,
+        DialogResult, Icon, KEY_ESCAPE, KEY_RETURN, open_window,
         widgets::{Widget, button::Button},
     },
 };
@@ -207,11 +207,9 @@ impl MessageBuilder {
         let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions - window will handle physical scaling
-        let mut window = create_window(logical_width, logical_height)?;
-        window.set_title(&self.title)?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        // The caller resolves the default title, so no fallback is needed here.
+        let (mut window, scale, physical_width, physical_height) =
+            open_window(&self.title, "", logical_width as u32, logical_height as u32)?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
@@ -227,10 +225,6 @@ impl MessageBuilder {
             .iter()
             .map(|l| Button::new(l, &font, scale))
             .collect();
-
-        // Calculate physical dimensions
-        let physical_width = (logical_width as f32 * scale) as u32;
-        let physical_height = (logical_height as f32 * scale) as u32;
 
         // Pre-render text to get actual height
         let text_canvas = if self.no_wrap {

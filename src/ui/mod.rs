@@ -11,7 +11,37 @@ pub(crate) mod scale;
 pub(crate) mod text_info;
 pub(crate) mod widgets;
 
-use crate::render::{Rgba, rgb};
+use crate::{
+    backend::{AnyWindow, Window, create_window},
+    error::Error,
+    render::{Rgba, rgb},
+};
+
+/// Create a dialog window sized in logical units, title it, and report the
+/// compositor scale factor together with the matching physical size.
+///
+/// Every dialog derives its physical geometry this way, so the logical to
+/// physical conversion lives here rather than being repeated per dialog. Pass
+/// an empty `default_title` when the caller has already resolved the title.
+pub(crate) fn open_window(
+    title: &str,
+    default_title: &str,
+    logical_width: u32,
+    logical_height: u32,
+) -> Result<(AnyWindow, f32, u32, u32), Error> {
+    let mut window = create_window(logical_width as u16, logical_height as u16)?;
+    window.set_title(if title.is_empty() {
+        default_title
+    } else {
+        title
+    })?;
+
+    let scale = window.scale_factor();
+    let physical_width = (logical_width as f32 * scale) as u32;
+    let physical_height = (logical_height as f32 * scale) as u32;
+
+    Ok((window, scale, physical_width, physical_height))
+}
 
 // XKB keysym constants shared across dialog implementations
 pub(crate) const KEY_BACKSPACE: u32 = 0xff08;
@@ -37,6 +67,7 @@ pub(crate) const KEY_SPACE: u32 = 0x20;
 pub(crate) const BASE_CORNER_RADIUS: f32 = 8.0;
 pub(crate) const BASE_BUTTON_HEIGHT: u32 = 32;
 pub(crate) const BASE_BUTTON_SPACING: u32 = 10;
+pub(crate) const BASE_TITLE_FONT_SIZE: f32 = 18.0 * 1.5;
 
 /// Color theme for dialogs.
 #[derive(Debug, Clone, Copy)]

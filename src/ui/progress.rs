@@ -11,11 +11,11 @@ use std::{
 use libc::{SIGTERM, getppid, kill};
 
 use crate::{
-    backend::{Window, WindowEvent, create_window},
+    backend::{Window, WindowEvent},
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors,
+        BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, open_window,
         widgets::{Widget, button::Button, progress_bar::ProgressBar},
     },
 };
@@ -166,15 +166,12 @@ impl ProgressBuilder {
         let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions
-        let mut window = create_window(logical_width, logical_height)?;
-        window.set_title(if self.title.is_empty() {
-            "Progress"
-        } else {
-            &self.title
-        })?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        let (mut window, scale, physical_width, physical_height) = open_window(
+            &self.title,
+            "Progress",
+            logical_width as u32,
+            logical_height as u32,
+        )?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
@@ -188,10 +185,6 @@ impl ProgressBuilder {
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let bar_width = (BASE_BAR_WIDTH as f32 * scale) as u32;
         let text_height = (BASE_TEXT_HEIGHT as f32 * scale) as u32;
-
-        // Calculate physical dimensions
-        let physical_width = (logical_width as f32 * scale) as u32;
-        let physical_height = (logical_height as f32 * scale) as u32;
 
         // Create progress bar at physical scale
         let mut progress_bar = ProgressBar::new(bar_width, scale);

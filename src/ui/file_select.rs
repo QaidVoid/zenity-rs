@@ -8,12 +8,12 @@ use std::{
 };
 
 use crate::{
-    backend::{MouseButton, Window, WindowEvent, create_window},
+    backend::{MouseButton, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_BACKSPACE,
-        KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP,
+        KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP, open_window,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -196,7 +196,8 @@ impl FileSelectBuilder {
         let logical_height = self.height.unwrap_or(BASE_WINDOW_HEIGHT);
 
         // Create window with LOGICAL dimensions first
-        let mut window = create_window(logical_width as u16, logical_height as u16)?;
+        // Resolved here rather than inside open_window because the save-mode
+        // filename label reuses it.
         let title = if self.title.is_empty() {
             if self.directory {
                 "Select Directory"
@@ -208,17 +209,13 @@ impl FileSelectBuilder {
         } else {
             &self.title
         };
-        window.set_title(title)?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        let (mut window, scale, window_width, window_height) =
+            open_window(title, "", logical_width, logical_height)?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
 
         // Scale dimensions for physical rendering
-        let window_width = (logical_width as f32 * scale) as u32;
-        let window_height = (logical_height as f32 * scale) as u32;
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let sidebar_width = (BASE_SIDEBAR_WIDTH as f32 * scale) as u32;
         let toolbar_height = (BASE_TOOLBAR_HEIGHT as f32 * scale) as u32;

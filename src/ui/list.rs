@@ -1,12 +1,13 @@
 //! List selection dialog implementation.
 
 use crate::{
-    backend::{MouseButton, Window, WindowEvent, create_window},
+    backend::{MouseButton, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
-        KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT, KEY_SPACE, KEY_UP,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_TITLE_FONT_SIZE, Colors,
+        KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT, KEY_SPACE,
+        KEY_UP, open_window,
         widgets::{Widget, button::Button},
     },
 };
@@ -298,31 +299,20 @@ impl ListBuilder {
         let logical_height = self.height.unwrap_or(calc_height);
 
         // Create window with LOGICAL dimensions
-        let mut window = create_window(logical_width as u16, logical_height as u16)?;
-        window.set_title(if self.title.is_empty() {
-            "Select"
-        } else {
-            &self.title
-        })?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        let (mut window, scale, physical_width, physical_height) =
+            open_window(&self.title, "Select", logical_width, logical_height)?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
 
         // Title font is static for the dialog's lifetime - load it ONCE (not per frame).
-        let title_font_size = 18.0 * 1.5 * scale;
+        let title_font_size = BASE_TITLE_FONT_SIZE * scale;
         let title_font = Font::load_with_size(title_font_size);
 
         // Scale dimensions for physical rendering
         let padding = (BASE_PADDING as f32 * scale) as u32;
         let row_height = (BASE_ROW_HEIGHT as f32 * scale) as u32;
         let checkbox_size = (BASE_CHECKBOX_SIZE as f32 * scale) as u32;
-
-        // Calculate physical dimensions
-        let physical_width = (logical_width as f32 * scale) as u32;
-        let physical_height = (logical_height as f32 * scale) as u32;
 
         // Recalculate column widths at physical scale
         let mut col_widths: Vec<u32> = vec![(100.0 * scale) as u32; num_cols];

@@ -1,11 +1,12 @@
 //! Entry dialog implementation for text input.
 
 use crate::{
-    backend::{CursorShape, Window, WindowEvent, create_window},
+    backend::{CursorShape, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
+        open_window,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -135,19 +136,12 @@ impl EntryBuilder {
         let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions
-        let mut window = create_window(logical_width, logical_height)?;
-        window.set_title(if self.title.is_empty() {
-            "Entry"
-        } else {
-            &self.title
-        })?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
-
-        // Calculate physical dimensions from logical dimensions
-        let physical_width = (logical_width as f32 * scale) as u32;
-        let physical_height = (logical_height as f32 * scale) as u32;
+        let (mut window, scale, physical_width, physical_height) = open_window(
+            &self.title,
+            "Entry",
+            logical_width as u32,
+            logical_height as u32,
+        )?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);

@@ -1,12 +1,12 @@
 //! Forms dialog implementation for multiple input fields.
 
 use crate::{
-    backend::{CursorShape, Window, WindowEvent, create_window},
+    backend::{CursorShape, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
-        KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB,
+        KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB, open_window,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -178,15 +178,12 @@ impl FormsBuilder {
         let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions
-        let mut window = create_window(logical_width, logical_height)?;
-        window.set_title(if self.title.is_empty() {
-            "Forms"
-        } else {
-            &self.title
-        })?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        let (mut window, scale, physical_width, physical_height) = open_window(
+            &self.title,
+            "Forms",
+            logical_width as u32,
+            logical_height as u32,
+        )?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
@@ -197,10 +194,6 @@ impl FormsBuilder {
         let field_spacing = (BASE_FIELD_SPACING as f32 * scale) as u32;
         let label_width = (BASE_LABEL_WIDTH as f32 * scale) as u32;
         let input_width = (BASE_INPUT_WIDTH as f32 * scale) as u32;
-
-        // Calculate physical dimensions
-        let physical_width = (logical_width as f32 * scale) as u32;
-        let physical_height = (logical_height as f32 * scale) as u32;
 
         // Create buttons at physical scale
         let mut ok_button = Button::new("OK", &font, scale);

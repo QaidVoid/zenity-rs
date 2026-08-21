@@ -1,12 +1,12 @@
 //! Calendar date picker dialog implementation.
 
 use crate::{
-    backend::{MouseButton, Window, WindowEvent, create_window},
+    backend::{MouseButton, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
-        KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP,
+        KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP, open_window,
         widgets::{Widget, button::Button},
     },
 };
@@ -154,15 +154,13 @@ impl CalendarBuilder {
         let logical_height = self.height.unwrap_or(calc_height);
 
         // Create window with LOGICAL dimensions
-        let mut window = create_window(logical_width as u16, logical_height as u16)?;
-        window.set_title(if self.title.is_empty() {
-            "Calendar selection"
-        } else {
-            &self.title
-        })?;
-
-        // Get the actual scale factor from the window (compositor scale)
-        let scale = window.scale_factor();
+        // Calendar lays out from logical units, so the physical size is unused here.
+        let (mut window, scale, _, _) = open_window(
+            &self.title,
+            "Calendar selection",
+            logical_width,
+            logical_height,
+        )?;
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
