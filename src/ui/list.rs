@@ -241,8 +241,8 @@ impl ListBuilder {
         let num_rows = rows.len();
 
         // render the column header row, suppressed by --hide-header
-        let show_header = !self.hide_header
-            && (!columns.is_empty() || checkbox_column_header.is_some());
+        let show_header =
+            !self.hide_header && (!columns.is_empty() || checkbox_column_header.is_some());
 
         // Column gap for separation (in logical units at scale 1.0)
         let logical_column_gap = 16u32;
@@ -282,11 +282,7 @@ impl ListBuilder {
         // Calculate logical height
         let logical_title_height = if self.title.is_empty() { 0 } else { 32 };
         let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
-        let logical_header_height = if show_header {
-            BASE_ROW_HEIGHT
-        } else {
-            0
-        };
+        let logical_header_height = if show_header { BASE_ROW_HEIGHT } else { 0 };
         let logical_list_height =
             (num_rows as u32 * BASE_ROW_HEIGHT).clamp(BASE_ROW_HEIGHT * 3, BASE_MAX_HEIGHT - 100);
         let calc_height = (BASE_PADDING * 2
@@ -822,11 +818,7 @@ impl ListBuilder {
         // (set by RedrawRequested); the list/button flags are reset each iteration.
         let mut full_redraw = false;
 
-        let header_height_px = if show_header {
-            row_height + 1
-        } else {
-            0
-        };
+        let header_height_px = if show_header { row_height + 1 } else { 0 };
         let data_y = list_y + header_height_px as i32;
         let data_visible = if show_header {
             visible_rows.saturating_sub(1)
