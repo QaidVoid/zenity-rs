@@ -370,107 +370,29 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
 
     // Build and show the dialog
     match dialog_type {
-        DialogType::Info => {
+        DialogType::Info | DialogType::Warning | DialogType::Error | DialogType::Question => {
+            let (default_title, default_icon, default_preset) = match dialog_type {
+                DialogType::Info => ("Information", Icon::Info, ButtonPreset::Ok),
+                DialogType::Warning => ("Warning", Icon::Warning, ButtonPreset::Ok),
+                DialogType::Error => ("Error", Icon::Error, ButtonPreset::Ok),
+                _ => ("Question", Icon::Question, ButtonPreset::YesNo),
+            };
             let preset = get_button_preset(
                 &ok_label,
                 &cancel_label,
                 &extra_buttons,
                 switch_mode,
-                ButtonPreset::Ok,
+                default_preset,
             );
             let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() {
-                    "Information"
+                    default_title
                 } else {
                     &title
                 })
                 .text(&text)
-                .icon(get_icon(&icon_name, Icon::Info))
-                .buttons(preset);
-            let builder = apply_message_options(
-                builder,
-                timeout,
-                width,
-                height,
-                no_wrap,
-                no_markup,
-                ellipsize,
-                switch_mode,
-                &extra_buttons,
-            );
-            let result = builder.show()?;
-            Ok(handle_message_result(result, preset_count, &extra_buttons))
-        }
-        DialogType::Warning => {
-            let preset = get_button_preset(
-                &ok_label,
-                &cancel_label,
-                &extra_buttons,
-                switch_mode,
-                ButtonPreset::Ok,
-            );
-            let preset_count = preset.len();
-            let builder = message()
-                .title(if title.is_empty() { "Warning" } else { &title })
-                .text(&text)
-                .icon(get_icon(&icon_name, Icon::Warning))
-                .buttons(preset);
-            let builder = apply_message_options(
-                builder,
-                timeout,
-                width,
-                height,
-                no_wrap,
-                no_markup,
-                ellipsize,
-                switch_mode,
-                &extra_buttons,
-            );
-            let result = builder.show()?;
-            Ok(handle_message_result(result, preset_count, &extra_buttons))
-        }
-        DialogType::Error => {
-            let preset = get_button_preset(
-                &ok_label,
-                &cancel_label,
-                &extra_buttons,
-                switch_mode,
-                ButtonPreset::Ok,
-            );
-            let preset_count = preset.len();
-            let builder = message()
-                .title(if title.is_empty() { "Error" } else { &title })
-                .text(&text)
-                .icon(get_icon(&icon_name, Icon::Error))
-                .buttons(preset);
-            let builder = apply_message_options(
-                builder,
-                timeout,
-                width,
-                height,
-                no_wrap,
-                no_markup,
-                ellipsize,
-                switch_mode,
-                &extra_buttons,
-            );
-            let result = builder.show()?;
-            Ok(handle_message_result(result, preset_count, &extra_buttons))
-        }
-        DialogType::Question => {
-            let preset = get_button_preset(
-                &ok_label,
-                &cancel_label,
-                &extra_buttons,
-                switch_mode,
-                ButtonPreset::YesNo,
-            );
-            let preset_count = preset.len();
-            let builder = message()
-                .title(if title.is_empty() { "Question" } else { &title })
-                .text(&text)
-                .icon(get_icon(&icon_name, Icon::Question))
+                .icon(get_icon(&icon_name, default_icon))
                 .buttons(preset);
             let builder = apply_message_options(
                 builder,
