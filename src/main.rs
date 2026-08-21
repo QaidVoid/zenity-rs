@@ -13,27 +13,23 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn handle_message_result(
     result: zenity_rs::DialogResult,
+    preset_count: usize,
     extra_buttons: &[String],
-    default_cancel_index: Option<usize>,
 ) -> i32 {
     match result {
         zenity_rs::DialogResult::Button(idx) => {
-            if idx < extra_buttons.len() {
-                // Extra button clicked - labels are reversed in positioning
-                // so we need to reverse the index to get the correct label
-                let reversed_idx = extra_buttons.len() - 1 - idx;
-                println!("{}", extra_buttons[reversed_idx]);
-                1
-            } else if let Some(cancel_idx) = default_cancel_index {
-                if idx == cancel_idx {
-                    // Default cancel button (or No button) clicked
-                    1
-                } else {
-                    // Default OK (or Yes) button clicked
-                    0
+            // DialogResult::Button(idx) is in user-specified order: preset
+            // buttons first, then extra buttons (ui/message.rs maps the
+            // reversed display layout back via original_index). With --switch
+            // there are no preset buttons, so preset_count is 0.
+            if idx >= preset_count {
+                // Extra button clicked - print its label like original zenity
+                if let Some(label) = extra_buttons.get(idx - preset_count) {
+                    println!("{label}");
                 }
+                1
             } else {
-                // No cancel button, so first button is OK
+                // Preset button: first is OK/Yes -> 0, others (Cancel/No) -> 1
                 if idx == 0 { 0 } else { 1 }
             }
         }
@@ -375,6 +371,14 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // Build and show the dialog
     match dialog_type {
         DialogType::Info => {
+            let preset = get_button_preset(
+                &ok_label,
+                &cancel_label,
+                &extra_buttons,
+                switch_mode,
+                ButtonPreset::Ok,
+            );
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() {
                     "Information"
@@ -383,13 +387,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 })
                 .text(&text)
                 .icon(get_icon(&icon_name, Icon::Info))
-                .buttons(get_button_preset(
-                    &ok_label,
-                    &cancel_label,
-                    &extra_buttons,
-                    switch_mode,
-                    ButtonPreset::Ok,
-                ));
+                .buttons(preset);
             let builder = apply_message_options(
                 builder,
                 timeout,
@@ -402,20 +400,22 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(result, &extra_buttons, None))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Warning => {
+            let preset = get_button_preset(
+                &ok_label,
+                &cancel_label,
+                &extra_buttons,
+                switch_mode,
+                ButtonPreset::Ok,
+            );
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() { "Warning" } else { &title })
                 .text(&text)
                 .icon(get_icon(&icon_name, Icon::Warning))
-                .buttons(get_button_preset(
-                    &ok_label,
-                    &cancel_label,
-                    &extra_buttons,
-                    switch_mode,
-                    ButtonPreset::Ok,
-                ));
+                .buttons(preset);
             let builder = apply_message_options(
                 builder,
                 timeout,
@@ -428,20 +428,22 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(result, &extra_buttons, None))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Error => {
+            let preset = get_button_preset(
+                &ok_label,
+                &cancel_label,
+                &extra_buttons,
+                switch_mode,
+                ButtonPreset::Ok,
+            );
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() { "Error" } else { &title })
                 .text(&text)
                 .icon(get_icon(&icon_name, Icon::Error))
-                .buttons(get_button_preset(
-                    &ok_label,
-                    &cancel_label,
-                    &extra_buttons,
-                    switch_mode,
-                    ButtonPreset::Ok,
-                ));
+                .buttons(preset);
             let builder = apply_message_options(
                 builder,
                 timeout,
@@ -454,20 +456,22 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(result, &extra_buttons, None))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Question => {
+            let preset = get_button_preset(
+                &ok_label,
+                &cancel_label,
+                &extra_buttons,
+                switch_mode,
+                ButtonPreset::YesNo,
+            );
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() { "Question" } else { &title })
                 .text(&text)
                 .icon(get_icon(&icon_name, Icon::Question))
-                .buttons(get_button_preset(
-                    &ok_label,
-                    &cancel_label,
-                    &extra_buttons,
-                    switch_mode,
-                    ButtonPreset::YesNo,
-                ));
+                .buttons(preset);
             let builder = apply_message_options(
                 builder,
                 timeout,
@@ -480,11 +484,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(
-                result,
-                &extra_buttons,
-                Some(1 + extra_buttons.len()),
-            ))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Entry => {
             let mut builder = entry()
@@ -858,7 +858,7 @@ USAGE:
     --icon=ICON           Set the icon name (e.g., dialog-information, dialog-warning)
     --ok-label=TEXT       Set the label of the OK button
     --cancel-label=TEXT   Set the label of the Cancel button
-    --extra-button=TEXT   Add an extra button (outputs label text, exit code 1+)
+    --extra-button=TEXT   Add an extra button (outputs label text, exit code 1)
     --switch              Suppress OK/Cancel buttons, only show extra buttons
     --no-markup           Do not enable pango markup (for compatibility)
     --ellipsize           Enable ellipsizing in dialog text (for compatibility)
