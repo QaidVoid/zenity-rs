@@ -5,8 +5,8 @@ use std::{io::IsTerminal, process::ExitCode};
 use lexopt::prelude::*;
 use zenity_rs::{
     ButtonPreset, CalendarResult, EntryResult, FileSelectResult, FormsResult, Icon, ListResult,
-    ProgressResult, ScaleResult, TextInfoResult, calendar, entry, file_select, forms, list,
-    message, password, progress, scale, text_info,
+    ScaleResult, TextInfoResult, calendar, entry, file_select, forms, list, message, password,
+    progress, scale, text_info,
 };
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -420,7 +420,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_entry_result(result)
+            Ok(handle_entry_result(result))
         }
         DialogType::Password => {
             let mut builder = password()
@@ -433,7 +433,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_entry_result(result)
+            Ok(handle_entry_result(result))
         }
         DialogType::Progress => {
             let mut builder = progress()
@@ -452,7 +452,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_progress_result(result)
+            Ok(result.exit_code())
         }
         DialogType::FileSelection => {
             let mut builder = file_select();
@@ -477,7 +477,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_file_select_result(result, &separator)
+            Ok(handle_file_select_result(result, &separator))
         }
         DialogType::List => {
             let mut builder = list();
@@ -531,7 +531,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_list_result(result, &separator)
+            Ok(handle_list_result(result, &separator))
         }
         DialogType::Calendar => {
             let mut builder = calendar();
@@ -557,7 +557,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_calendar_result(result)
+            Ok(handle_calendar_result(result))
         }
         DialogType::TextInfo => {
             let mut builder = text_info();
@@ -578,7 +578,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_text_info_result(result, has_checkbox)
+            Ok(handle_text_info_result(result, has_checkbox))
         }
         DialogType::Scale => {
             let mut builder = scale();
@@ -601,7 +601,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_scale_result(result)
+            Ok(handle_scale_result(result))
         }
         DialogType::Forms => {
             let mut builder = forms();
@@ -626,49 +626,33 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            handle_forms_result(result, &separator)
+            Ok(handle_forms_result(result, &separator))
         }
     }
 }
 
-fn handle_list_result(
-    result: ListResult,
-    separator: &str,
-) -> Result<i32, Box<dyn std::error::Error>> {
-    match result {
-        ListResult::Selected(items) => {
-            println!("{}", items.join(separator));
-            Ok(0)
-        }
-        ListResult::Cancelled => Ok(1),
-        ListResult::Closed => Ok(1),
+fn handle_list_result(result: ListResult, separator: &str) -> i32 {
+    if let ListResult::Selected(items) = &result {
+        println!("{}", items.join(separator));
     }
+    result.exit_code()
 }
 
-fn handle_calendar_result(result: CalendarResult) -> Result<i32, Box<dyn std::error::Error>> {
-    match result {
-        CalendarResult::Selected {
-            year,
-            month,
-            day,
-        } => {
-            println!("{:04}-{:02}-{:02}", year, month, day);
-            Ok(0)
-        }
-        CalendarResult::Cancelled => Ok(1),
-        CalendarResult::Closed => Ok(1),
+fn handle_calendar_result(result: CalendarResult) -> i32 {
+    if let CalendarResult::Selected {
+        year,
+        month,
+        day,
+    } = &result
+    {
+        println!("{year:04}-{month:02}-{day:02}");
     }
+    result.exit_code()
 }
 
-fn handle_file_select_result(
-    result: FileSelectResult,
-    separator: &str,
-) -> Result<i32, Box<dyn std::error::Error>> {
-    match result {
-        FileSelectResult::Selected(path) => {
-            println!("{}", path.display());
-            Ok(0)
-        }
+fn handle_file_select_result(result: FileSelectResult, separator: &str) -> i32 {
+    match &result {
+        FileSelectResult::Selected(path) => println!("{}", path.display()),
         FileSelectResult::SelectedMultiple(paths) => {
             println!(
                 "{}",
@@ -677,73 +661,50 @@ fn handle_file_select_result(
                     .map(|p| p.display().to_string())
                     .collect::<Vec<_>>()
                     .join(separator)
-            );
-            Ok(0)
+            )
         }
-        FileSelectResult::Cancelled => Ok(1),
-        FileSelectResult::Closed => Ok(1),
+        FileSelectResult::Cancelled | FileSelectResult::Closed => {}
     }
+    result.exit_code()
 }
 
-fn handle_progress_result(result: ProgressResult) -> Result<i32, Box<dyn std::error::Error>> {
-    Ok(result.exit_code())
-}
-
-fn handle_entry_result(result: EntryResult) -> Result<i32, Box<dyn std::error::Error>> {
-    match result {
-        EntryResult::Text(text) => {
-            println!("{text}");
-            Ok(0)
-        }
-        EntryResult::Cancelled => Ok(1),
-        EntryResult::Closed => Ok(1),
+fn handle_entry_result(result: EntryResult) -> i32 {
+    if let EntryResult::Text(text) = &result {
+        println!("{text}");
     }
+    result.exit_code()
 }
 
-fn handle_text_info_result(
-    result: TextInfoResult,
-    has_checkbox: bool,
-) -> Result<i32, Box<dyn std::error::Error>> {
+/// Unlike the other handlers this cannot defer to `TextInfoResult::exit_code`:
+/// an unchecked checkbox only means failure when `--checkbox` was actually
+/// passed, which the dialog result alone does not record.
+fn handle_text_info_result(result: TextInfoResult, has_checkbox: bool) -> i32 {
     match result {
         TextInfoResult::Ok {
             checkbox_checked,
         } => {
-            // If checkbox was specified but not checked, return 1
-            // Otherwise return 0
             if has_checkbox && !checkbox_checked {
-                Ok(1)
+                1
             } else {
-                Ok(0)
+                0
             }
         }
-        TextInfoResult::Cancelled => Ok(1),
-        TextInfoResult::Closed => Ok(1),
+        TextInfoResult::Cancelled | TextInfoResult::Closed => 1,
     }
 }
 
-fn handle_scale_result(result: ScaleResult) -> Result<i32, Box<dyn std::error::Error>> {
-    match result {
-        ScaleResult::Value(v) => {
-            println!("{}", v);
-            Ok(0)
-        }
-        ScaleResult::Cancelled => Ok(1),
-        ScaleResult::Closed => Ok(1),
+fn handle_scale_result(result: ScaleResult) -> i32 {
+    if let ScaleResult::Value(v) = &result {
+        println!("{v}");
     }
+    result.exit_code()
 }
 
-fn handle_forms_result(
-    result: FormsResult,
-    separator: &str,
-) -> Result<i32, Box<dyn std::error::Error>> {
-    match result {
-        FormsResult::Values(values) => {
-            println!("{}", values.join(separator));
-            Ok(0)
-        }
-        FormsResult::Cancelled => Ok(1),
-        FormsResult::Closed => Ok(1),
+fn handle_forms_result(result: FormsResult, separator: &str) -> i32 {
+    if let FormsResult::Values(values) = &result {
+        println!("{}", values.join(separator));
     }
+    result.exit_code()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
