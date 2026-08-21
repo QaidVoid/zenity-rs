@@ -15,20 +15,14 @@ fn handle_message_result(
     result: zenity_rs::DialogResult,
     preset_count: usize,
     extra_buttons: &[String],
-    switch_mode: bool,
 ) -> i32 {
     match result {
         zenity_rs::DialogResult::Button(idx) => {
-            // DialogResult::Button(idx) is in user-specified order:
-            // preset buttons first, then extra buttons
-            // (ui/message.rs maps the reversed display layout back via original_index)
-            if switch_mode {
-                // --switch: only extra buttons are shown
-                if let Some(label) = extra_buttons.get(idx) {
-                    println!("{label}");
-                }
-                1
-            } else if idx >= preset_count {
+            // DialogResult::Button(idx) is in user-specified order: preset
+            // buttons first, then extra buttons (ui/message.rs maps the
+            // reversed display layout back via original_index). With --switch
+            // there are no preset buttons, so preset_count is 0.
+            if idx >= preset_count {
                 // Extra button clicked - print its label like original zenity
                 if let Some(label) = extra_buttons.get(idx - preset_count) {
                     println!("{label}");
@@ -384,7 +378,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 switch_mode,
                 ButtonPreset::Ok,
             );
-            let preset_count = preset.labels().len();
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() {
                     "Information"
@@ -406,12 +400,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(
-                result,
-                preset_count,
-                &extra_buttons,
-                switch_mode,
-            ))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Warning => {
             let preset = get_button_preset(
@@ -421,7 +410,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 switch_mode,
                 ButtonPreset::Ok,
             );
-            let preset_count = preset.labels().len();
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() { "Warning" } else { &title })
                 .text(&text)
@@ -439,12 +428,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(
-                result,
-                preset_count,
-                &extra_buttons,
-                switch_mode,
-            ))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Error => {
             let preset = get_button_preset(
@@ -454,7 +438,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 switch_mode,
                 ButtonPreset::Ok,
             );
-            let preset_count = preset.labels().len();
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() { "Error" } else { &title })
                 .text(&text)
@@ -472,12 +456,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(
-                result,
-                preset_count,
-                &extra_buttons,
-                switch_mode,
-            ))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Question => {
             let preset = get_button_preset(
@@ -487,7 +466,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 switch_mode,
                 ButtonPreset::YesNo,
             );
-            let preset_count = preset.labels().len();
+            let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() { "Question" } else { &title })
                 .text(&text)
@@ -505,12 +484,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 &extra_buttons,
             );
             let result = builder.show()?;
-            Ok(handle_message_result(
-                result,
-                preset_count,
-                &extra_buttons,
-                switch_mode,
-            ))
+            Ok(handle_message_result(result, preset_count, &extra_buttons))
         }
         DialogType::Entry => {
             let mut builder = entry()

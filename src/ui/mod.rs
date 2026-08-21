@@ -180,6 +180,22 @@ impl ButtonPreset {
             ButtonPreset::Custom(labels) => labels.clone(),
         }
     }
+
+    /// Number of buttons this preset renders.
+    pub fn len(&self) -> usize {
+        match self {
+            ButtonPreset::Ok | ButtonPreset::Close => 1,
+            ButtonPreset::OkCancel | ButtonPreset::YesNo => 2,
+            ButtonPreset::YesNoCancel => 3,
+            ButtonPreset::Empty => 0,
+            ButtonPreset::Custom(labels) => labels.len(),
+        }
+    }
+
+    /// Whether this preset renders no buttons at all.
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
 }
 
 /// Dialog result indicating which button was pressed.
