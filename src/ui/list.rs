@@ -19,6 +19,9 @@ const BASE_MIN_WIDTH: u32 = 350;
 const BASE_MAX_WIDTH: u32 = 600;
 const BASE_MIN_HEIGHT: u32 = 200;
 const BASE_MAX_HEIGHT: u32 = 450;
+const BASE_LIST_BUTTON_GAP: u32 = 18;
+/// Floor for an explicit `--width`, so both buttons stay on screen.
+const BASE_HARD_MIN_WIDTH: u32 = 240;
 
 /// List dialog result.
 #[derive(Debug, Clone)]
@@ -282,8 +285,8 @@ impl ListBuilder {
 
         // Calculate logical height
         let logical_title_height = if self.title.is_empty() { 0 } else { 32 };
-        let logical_text_height = if self.text.is_empty() { 0 } else { 24 };
-        let logical_header_height = if show_header { BASE_ROW_HEIGHT } else { 0 };
+        let logical_text_height = if self.text.is_empty() { 0 } else { 32 };
+        let logical_header_height = if show_header { BASE_ROW_HEIGHT + 1 } else { 0 };
         let logical_list_height =
             (num_rows as u32 * BASE_ROW_HEIGHT).clamp(BASE_ROW_HEIGHT * 3, BASE_MAX_HEIGHT - 100);
         let calc_height = (BASE_PADDING * 2
@@ -291,12 +294,22 @@ impl ListBuilder {
             + logical_text_height
             + logical_header_height
             + logical_list_height
-            + 50)
+            + BASE_LIST_BUTTON_GAP
+            + BASE_BUTTON_HEIGHT)
             .clamp(BASE_MIN_HEIGHT, BASE_MAX_HEIGHT);
 
+        // Smallest window that still fits the header, one row and the button row
+        let min_logical_height = BASE_PADDING * 2
+            + logical_title_height
+            + logical_text_height
+            + logical_header_height
+            + BASE_ROW_HEIGHT
+            + BASE_LIST_BUTTON_GAP
+            + BASE_BUTTON_HEIGHT;
+
         // Use custom dimensions if provided, otherwise use calculated defaults
-        let logical_width = self.width.unwrap_or(calc_width);
-        let logical_height = self.height.unwrap_or(calc_height);
+        let logical_width = self.width.unwrap_or(calc_width).max(BASE_HARD_MIN_WIDTH);
+        let logical_height = self.height.unwrap_or(calc_height).max(min_logical_height);
 
         // Create window with LOGICAL dimensions
         let (mut window, scale, physical_width, physical_height) =
@@ -338,9 +351,8 @@ impl ListBuilder {
         let text_height = if self.text.is_empty() {
             0
         } else {
-            (24.0 * scale) as u32
+            (24.0 * scale + 8.0 * scale) as u32
         };
-        let list_height = (logical_list_height as f32 * scale) as u32;
 
         // Calculate total content width including column gaps
         let column_gap = (16.0 * scale) as u32;
@@ -390,17 +402,21 @@ impl ListBuilder {
             y += title_height as i32;
         }
         if !self.text.is_empty() {
-            y += text_height as i32 + (8.0 * scale) as i32;
+            y += text_height as i32;
         }
 
+        let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
+        let button_y = physical_height.saturating_sub(padding + button_height) as i32;
+
+        // The list fills whatever space is left between the prompt and the buttons
         let list_x = padding as i32;
         let list_y = y;
-        let list_w = physical_width - padding * 2;
-        let list_h = list_height;
+        let list_w = physical_width.saturating_sub(padding * 2).max(1);
+        let list_h = (button_y as u32)
+            .saturating_sub(list_y as u32 + (BASE_LIST_BUTTON_GAP as f32 * scale) as u32)
+            .max(1);
         let visible_rows = (list_h / row_height) as usize;
 
-        let button_y =
-            (physical_height - padding - (BASE_BUTTON_HEIGHT as f32 * scale) as u32) as i32;
         let mut bx = physical_width as i32 - padding as i32;
         bx -= cancel_button.width() as i32;
         cancel_button.set_position(bx, button_y);

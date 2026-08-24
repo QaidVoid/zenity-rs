@@ -102,6 +102,9 @@ impl Canvas {
     /// blending). Both source and destination are premultiplied RGBA, so a raw
     /// byte copy is exact. Used to restore cached static regions (e.g. the
     /// chrome layer behind dynamic widgets during partial redraws).
+    ///
+    /// The region is clipped to both canvases, so an oversized request copies
+    /// what fits instead of panicking.
     #[allow(clippy::too_many_arguments)]
     pub fn blit_region(
         &mut self,
@@ -115,6 +118,13 @@ impl Canvas {
     ) {
         let spw = src.pixmap.width();
         let dpw = self.pixmap.width();
+        let sph = src.pixmap.height();
+        let dph = self.pixmap.height();
+        if sx >= spw || sy >= sph || dx >= dpw || dy >= dph {
+            return;
+        }
+        let w = w.min(spw - sx).min(dpw - dx);
+        let h = h.min(sph - sy).min(dph - dy);
         let sdata = src.pixmap.data();
         let ddata = self.pixmap.data_mut();
         for row in 0..h {
