@@ -276,14 +276,20 @@ impl WaylandWindow {
         })
     }
 
-    /// Updates the cursor on the pointer
+    /// Updates the cursor on the pointer.
+    ///
+    /// Themes disagree on cursor names, so each shape lists its aliases and the
+    /// first one the theme provides wins.
     fn update_cursor(&mut self) {
-        let cursor_name = match self.current_cursor {
-            CursorShape::Default => "default",
-            CursorShape::Text => "text",
+        let names: &[&str] = match self.current_cursor {
+            CursorShape::Default => &["default", "left_ptr", "arrow"],
+            CursorShape::Text => &["text", "xterm", "ibeam"],
         };
 
-        if let Some(cursor) = self.cursor_theme.get_cursor(cursor_name) {
+        for name in names {
+            let Some(cursor) = self.cursor_theme.get_cursor(name) else {
+                continue;
+            };
             let image = &cursor[0];
             let (width, height) = image.dimensions();
             let (xhot, yhot) = image.hotspot();
@@ -301,6 +307,7 @@ impl WaylandWindow {
                     yhot as i32,
                 );
             }
+            break;
         }
     }
 }
