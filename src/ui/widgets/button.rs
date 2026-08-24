@@ -3,7 +3,7 @@
 use super::{Widget, point_in_rect};
 use crate::{
     backend::{MouseButton, WindowEvent},
-    render::{Canvas, Font},
+    render::{Canvas, Font, Rgba},
     ui::Colors,
 };
 
@@ -18,6 +18,8 @@ pub(crate) struct Button {
     hovered: bool,
     pressed: bool,
     clicked: bool,
+    /// Filled with the accent color to mark the dialog's default action.
+    primary: bool,
     /// Cached rendered label canvas (text is static; avoids re-rasterizing every frame).
     label_canvas: std::cell::RefCell<Option<Canvas>>,
 }
@@ -47,8 +49,15 @@ impl Button {
             hovered: false,
             pressed: false,
             clicked: false,
+            primary: false,
             label_canvas: std::cell::RefCell::new(None),
         }
+    }
+
+    /// Marks this button as the dialog's default action.
+    pub fn primary(mut self) -> Self {
+        self.primary = true;
+        self
     }
 
     /// Returns true if the button was clicked this frame.
@@ -66,7 +75,9 @@ impl Button {
     /// Draws the button to a canvas.
     pub fn draw_to(&self, canvas: &mut Canvas, colors: &Colors, font: &Font) {
         // Determine button color based on state
-        let bg_color = if self.pressed {
+        let bg_color = if self.primary {
+            colors.accent
+        } else if self.pressed {
             colors.button_pressed
         } else if self.hovered {
             colors.button_hover
@@ -84,25 +95,44 @@ impl Button {
             bg_color,
         );
 
-        // Draw button outline
-        canvas.stroke_rounded_rect(
-            self.x as f32,
-            self.y as f32,
-            self.width as f32,
-            self.height as f32,
-            self.radius,
-            colors.button_outline,
-            1.0,
-        );
+        // A primary button carries its state as an overlay on the accent fill
+        if self.primary && (self.pressed || self.hovered) {
+            let overlay = if self.pressed {
+                Rgba::new(0, 0, 0, 40)
+            } else {
+                Rgba::new(255, 255, 255, 30)
+            };
+            canvas.fill_rounded_rect(
+                self.x as f32,
+                self.y as f32,
+                self.width as f32,
+                self.height as f32,
+                self.radius,
+                overlay,
+            );
+        }
+
+        if !self.primary {
+            canvas.stroke_rounded_rect(
+                self.x as f32,
+                self.y as f32,
+                self.width as f32,
+                self.height as f32,
+                self.radius,
+                colors.button_outline,
+                1.0,
+            );
+        }
 
         // Draw cached button label (rendered once on first use).
         let mut cache = self.label_canvas.borrow_mut();
         if cache.is_none() {
-            *cache = Some(
-                font.render(&self.label)
-                    .with_color(colors.button_text)
-                    .finish(),
-            );
+            let color = if self.primary {
+                colors.accent_text
+            } else {
+                colors.button_text
+            };
+            *cache = Some(font.render(&self.label).with_color(color).finish());
         }
         let text_canvas = cache.as_ref().unwrap();
         let text_x = self.x + (self.width as i32 - text_canvas.width() as i32) / 2;
