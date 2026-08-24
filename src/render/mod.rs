@@ -81,6 +81,74 @@ impl Canvas {
             .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
     }
 
+    /// Fills a closed polygon through the given points.
+    pub fn fill_polygon(&mut self, points: &[(f32, f32)], color: Rgba) {
+        let Some(path) = polyline_path(points, true) else {
+            return;
+        };
+        let mut paint = Paint::default();
+        paint.set_color(color.into());
+        paint.anti_alias = true;
+        self.pixmap.fill_path(
+            &path,
+            &paint,
+            tiny_skia::FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+    }
+
+    /// Strokes an open path through the given points, with round caps and joins.
+    pub fn stroke_polyline(&mut self, points: &[(f32, f32)], color: Rgba, width: f32) {
+        let Some(path) = polyline_path(points, false) else {
+            return;
+        };
+        let mut paint = Paint::default();
+        paint.set_color(color.into());
+        paint.anti_alias = true;
+        let stroke = tiny_skia::Stroke {
+            width,
+            line_cap: tiny_skia::LineCap::Round,
+            line_join: tiny_skia::LineJoin::Round,
+            ..Default::default()
+        };
+        self.pixmap
+            .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
+    /// Fills a circle.
+    pub fn fill_circle(&mut self, cx: f32, cy: f32, radius: f32, color: Rgba) {
+        let Some(path) = circle_path(cx, cy, radius) else {
+            return;
+        };
+        let mut paint = Paint::default();
+        paint.set_color(color.into());
+        paint.anti_alias = true;
+        self.pixmap.fill_path(
+            &path,
+            &paint,
+            tiny_skia::FillRule::Winding,
+            Transform::identity(),
+            None,
+        );
+    }
+
+    /// Strokes a circle outline.
+    pub fn stroke_circle(&mut self, cx: f32, cy: f32, radius: f32, color: Rgba, width: f32) {
+        let Some(path) = circle_path(cx, cy, radius) else {
+            return;
+        };
+        let mut paint = Paint::default();
+        paint.set_color(color.into());
+        paint.anti_alias = true;
+        let stroke = tiny_skia::Stroke {
+            width,
+            ..Default::default()
+        };
+        self.pixmap
+            .stroke_path(&path, &paint, &stroke, Transform::identity(), None);
+    }
+
     /// Draws another canvas onto this one at the given position.
     pub fn draw_canvas(&mut self, other: &Canvas, x: i32, y: i32) {
         self.draw_pixmap(other.pixmap.as_ref(), x, y);
@@ -227,6 +295,27 @@ fn swizzle_rgba_to_argb(rgba: &[u8], out: &mut Vec<u8>) {
         out.push(c[0]); // R
         out.push(c[3]); // A
     }
+}
+
+/// Creates a path through the given points, optionally closed.
+fn polyline_path(points: &[(f32, f32)], close: bool) -> Option<tiny_skia::Path> {
+    let (&(x, y), rest) = points.split_first()?;
+    let mut pb = PathBuilder::new();
+    pb.move_to(x, y);
+    for &(px, py) in rest {
+        pb.line_to(px, py);
+    }
+    if close {
+        pb.close();
+    }
+    pb.finish()
+}
+
+/// Creates a circle path.
+fn circle_path(cx: f32, cy: f32, radius: f32) -> Option<tiny_skia::Path> {
+    let mut pb = PathBuilder::new();
+    pb.push_circle(cx, cy, radius);
+    pb.finish()
 }
 
 /// Creates a rounded rectangle path.

@@ -412,6 +412,16 @@ impl Font {
         None
     }
 
+    /// Distance from the top of a line box to the baseline, in pixels.
+    pub fn ascent(&self) -> f32 {
+        self.primary.ascent()
+    }
+
+    /// Height of one line box, in pixels.
+    pub fn line_height(&self) -> f32 {
+        self.primary.height()
+    }
+
     /// Returns a renderer for the given text.
     pub fn render<'a>(&'a self, text: &'a str) -> TextRenderer<'a> {
         TextRenderer {
@@ -447,6 +457,15 @@ impl<'a> TextRenderer<'a> {
 
     /// Renders the text and returns a Canvas containing it.
     pub fn finish(self) -> Canvas {
+        self.finish_with_baseline().0
+    }
+
+    /// Renders the text and also reports how far the baseline sits below the top
+    /// of the returned canvas.
+    ///
+    /// The canvas is cropped to the glyph bounds, so two strings only line up
+    /// when they are placed by baseline rather than by canvas edge.
+    pub fn finish_with_baseline(self) -> (Canvas, i32) {
         let (placed, trailing_space) = self.layout();
         let glyphs = self.resolve_glyphs(placed);
 
@@ -454,7 +473,7 @@ impl<'a> TextRenderer<'a> {
             // Text is only whitespace - size canvas from trailing space advance
             let w = (trailing_space.ceil() as u32 + 2).max(1);
             let h = (self.font.primary.height().ceil() as u32 + 2).max(1);
-            return Canvas::new(w, h);
+            return (Canvas::new(w, h), self.font.ascent().round() as i32);
         }
 
         let bounds = glyphs
@@ -547,9 +566,12 @@ impl<'a> TextRenderer<'a> {
             }
         }
 
-        Canvas {
-            pixmap,
-        }
+        (
+            Canvas {
+                pixmap,
+            },
+            base_y,
+        )
     }
 
     /// Computes the size of the rendered text without actually rendering it.

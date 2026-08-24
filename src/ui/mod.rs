@@ -89,6 +89,22 @@ pub struct Colors {
     pub progress_border: Rgba,
     pub window_border: Rgba,
     pub window_shadow: Rgba,
+    /// Highlight color for primary buttons, focus and selection.
+    pub accent: Rgba,
+    /// Text drawn on top of a solid `accent` fill.
+    pub accent_text: Rgba,
+    /// Raised panel behind grouped controls.
+    pub surface: Rgba,
+    /// Recessed panel behind scrollable content.
+    pub surface_alt: Rgba,
+    /// Hairline between sections.
+    pub separator: Rgba,
+    /// Translucent overlay for a hovered row.
+    pub row_hover: Rgba,
+    /// Translucent accent for a selected row.
+    pub row_selected: Rgba,
+    /// De-emphasized text such as column headers and metadata.
+    pub text_muted: Rgba,
 }
 
 /// Light theme colors.
@@ -110,6 +126,14 @@ pub static THEME_LIGHT: Colors = Colors {
     progress_border: rgb(200, 200, 200),
     window_border: rgb(180, 180, 180),
     window_shadow: Rgba::new(0, 0, 0, 50),
+    accent: rgb(53, 132, 228),
+    accent_text: rgb(255, 255, 255),
+    surface: rgb(240, 240, 240),
+    surface_alt: rgb(255, 255, 255),
+    separator: rgb(220, 220, 220),
+    row_hover: Rgba::new(0, 0, 0, 15),
+    row_selected: Rgba::new(53, 132, 228, 45),
+    text_muted: rgb(110, 110, 110),
 };
 
 /// Dark theme colors.
@@ -131,6 +155,14 @@ pub static THEME_DARK: Colors = Colors {
     progress_border: rgb(90, 90, 90),
     window_border: rgb(70, 70, 70),
     window_shadow: Rgba::new(0, 0, 0, 80),
+    accent: rgb(84, 148, 228),
+    accent_text: rgb(255, 255, 255),
+    surface: rgb(54, 54, 54),
+    surface_alt: rgb(38, 38, 38),
+    separator: rgb(66, 66, 66),
+    row_hover: Rgba::new(255, 255, 255, 18),
+    row_selected: Rgba::new(84, 148, 228, 64),
+    text_muted: rgb(150, 150, 150),
 };
 
 /// Detect the current system theme.
