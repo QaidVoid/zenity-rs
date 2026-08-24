@@ -1,4 +1,22 @@
 
+## [0.2.12](https://github.com/QaidVoid/zenity-rs/compare/v0.2.11...v0.2.12) - 2026-08-24
+
+### Added
+
+- *(file-selection)* Redesign the dialog - ([ac8813a](https://github.com/QaidVoid/zenity-rs/commit/ac8813aa6b2a4be1625b250292e0745621258493))
+- *(input)* Select text with the mouse and keyboard - ([5e64067](https://github.com/QaidVoid/zenity-rs/commit/5e640675f0466560b4ac141082bfac02661aaf15))
+- Add drawing primitives and theme tokens - ([cced637](https://github.com/QaidVoid/zenity-rs/commit/cced63792e0dffd68cdf09ab9bd0a16be85d5125))
+
+### Fixed
+
+- *(wayland)* Try the cursor names themes actually ship - ([46f7592](https://github.com/QaidVoid/zenity-rs/commit/46f7592ee35b8c8de3f956ac3cd99da11b1ce23a))
+- Render list rows when no --column is given - ([f92868c](https://github.com/QaidVoid/zenity-rs/commit/f92868cf52e1d71d3de29de25546287048383a09))
+- Size list box from window instead of row count - ([cb4dcab](https://github.com/QaidVoid/zenity-rs/commit/cb4dcab1584b1003424a436444530cb495b272c0))
+
+### Other
+
+- Fix clippy issues - ([b59a19e](https://github.com/QaidVoid/zenity-rs/commit/b59a19eb61588bd35abfb4c4515221c5b0781a1b))
+
 ## [0.2.11](https://github.com/QaidVoid/zenity-rs/compare/v0.2.10...v0.2.11) - 2026-08-21
 
 ### Fixed
