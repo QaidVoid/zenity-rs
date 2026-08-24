@@ -7,7 +7,7 @@ use crate::{
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
         open_window,
-        widgets::{Widget, button::Button, text_input::TextInput},
+        widgets::{Widget, button::Button, point_in_rect, text_input::TextInput},
     },
 };
 
@@ -252,6 +252,8 @@ impl EntryBuilder {
 
         // Event loop
         let mut window_dragging = false;
+        let mut cursor_x = 0i32;
+        let mut cursor_y = 0i32;
         loop {
             let event = window.wait_for_event()?;
 
@@ -280,8 +282,8 @@ impl EntryBuilder {
                         window_dragging = false;
                     }
 
-                    let cursor_x = pos.x as i32;
-                    let cursor_y = pos.y as i32;
+                    cursor_x = pos.x as i32;
+                    cursor_y = pos.y as i32;
 
                     // Check if cursor is over the input field
                     let ix = input.x();
@@ -306,7 +308,16 @@ impl EntryBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
-                    window_dragging = true;
+                    // Dragging the background moves the window; dragging inside the
+                    // field selects text, so the two must not both claim the press
+                    window_dragging = !point_in_rect(
+                        cursor_x,
+                        cursor_y,
+                        input.x(),
+                        input.y(),
+                        input.width(),
+                        input.height(),
+                    );
                 }
                 WindowEvent::ButtonRelease(crate::backend::MouseButton::Left, _) => {
                     window_dragging = false;

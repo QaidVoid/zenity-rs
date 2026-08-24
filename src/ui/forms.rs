@@ -377,8 +377,9 @@ impl FormsBuilder {
                     });
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
+                    // Dragging the background moves the window; dragging inside a
+                    // field selects text, so the two must not both claim the press
                     window_dragging = true;
-                    // Check if clicking on any input field
                     for (i, input) in inputs.iter().enumerate() {
                         let ix = input.x();
                         let iy = input.y();
@@ -390,6 +391,7 @@ impl FormsBuilder {
                             && cursor_y >= iy
                             && cursor_y < iy + ih as i32
                         {
+                            window_dragging = false;
                             if i != focused_index {
                                 inputs[focused_index].set_focus(false);
                                 focused_index = i;

@@ -545,6 +545,7 @@ impl FileSelectBuilder {
             history_len: usize,
             search: String,
             search_focused: bool,
+            search_caret: (usize, Option<usize>),
             filename: Option<(String, bool)>,
             qa_len: usize,
             drives_len: usize,
@@ -1062,6 +1063,7 @@ impl FileSelectBuilder {
             history_len: history.len(),
             search: search_input.text().to_owned(),
             search_focused: search_input.has_focus(),
+            search_caret: search_input.caret(),
             filename: filename_input
                 .as_ref()
                 .map(|f| (f.text().to_owned(), f.has_focus())),
@@ -1254,8 +1256,40 @@ impl FileSelectBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
-                    window_dragging = true;
                     let mut clicking_scrollbar = false;
+                    // Dragging the background moves the window. Anything the dialog
+                    // can drag itself (text selection, the scrollbar, rows) has to
+                    // keep the press, or the compositor grabs the pointer instead.
+                    let in_widget = |x: i32, y: i32, w: u32, h: u32| {
+                        mouse_x >= x
+                            && mouse_x < x + w as i32
+                            && mouse_y >= y
+                            && mouse_y < y + h as i32
+                    };
+                    window_dragging = !(in_widget(main_x, main_y, main_w, main_h)
+                        || in_widget(sidebar_x, sidebar_y, sidebar_width, sidebar_h)
+                        || in_widget(
+                            search_input.x(),
+                            search_input.y(),
+                            search_input.width(),
+                            search_input.height(),
+                        )
+                        || filename_input
+                            .as_ref()
+                            .is_some_and(|fi| in_widget(fi.x(), fi.y(), fi.width(), fi.height()))
+                        || toolbar_buttons.iter().any(|b| b.contains(mouse_x, mouse_y))
+                        || in_widget(
+                            ok_button.x(),
+                            ok_button.y(),
+                            ok_button.width(),
+                            ok_button.height(),
+                        )
+                        || in_widget(
+                            cancel_button.x(),
+                            cancel_button.y(),
+                            cancel_button.width(),
+                            cancel_button.height(),
+                        ));
                     // A click inside an open popup belongs to that popup alone: it must
                     // not select the row behind it, and it must not drop the focus the
                     // popup depends on before its own handler runs below.
@@ -2182,6 +2216,7 @@ impl FileSelectBuilder {
                     history_len: history.len(),
                     search: search_input.text().to_owned(),
                     search_focused: search_input.has_focus(),
+                    search_caret: search_input.caret(),
                     filename: filename_input
                         .as_ref()
                         .map(|f| (f.text().to_owned(), f.has_focus())),
