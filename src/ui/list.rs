@@ -206,6 +206,13 @@ impl ListBuilder {
             }
         };
 
+        // Without --column the values still form unnamed columns
+        let all_columns = if all_columns.is_empty() {
+            vec![""; rows.iter().map(Vec::len).max().unwrap_or(0)]
+        } else {
+            all_columns
+        };
+
         // Adjust hidden column indices for radiolist/checklist mode
         // In these modes, zenity's column 1 is TRUE/FALSE which we strip,
         // so user's column N becomes internal index N-2 (N-1 for 0-based, then -1 for stripped column)
@@ -245,8 +252,8 @@ impl ListBuilder {
         let num_rows = rows.len();
 
         // render the column header row, suppressed by --hide-header
-        let show_header =
-            !self.hide_header && (!columns.is_empty() || checkbox_column_header.is_some());
+        let show_header = !self.hide_header
+            && (columns.iter().any(|c| !c.is_empty()) || checkbox_column_header.is_some());
 
         // Column gap for separation (in logical units at scale 1.0)
         let logical_column_gap = 16u32;
