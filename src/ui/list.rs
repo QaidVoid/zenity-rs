@@ -1087,8 +1087,8 @@ impl ListBuilder {
                     }
 
                     // Only process row selection if not clicking on scrollbar
-                    if !clicking_scrollbar {
-                        if let Some(ri) = hovered_row {
+                    if !clicking_scrollbar
+                        && let Some(ri) = hovered_row {
                             match self.mode {
                                 ListMode::Single => {
                                     single_selected = Some(ri);
@@ -1125,7 +1125,6 @@ impl ListBuilder {
                             }
                             needs_redraw = true;
                         }
-                    }
                 }
                 WindowEvent::ButtonRelease(_, _) => {
                     window_dragging = false;
@@ -1145,13 +1144,12 @@ impl ListBuilder {
                                     needs_redraw = true;
                                 }
                             }
-                            crate::backend::ScrollDirection::Down => {
-                                if total_content_width > list_w {
+                            crate::backend::ScrollDirection::Down
+                                if total_content_width > list_w => {
                                     let max_scroll = total_content_width.saturating_sub(list_w);
                                     h_scroll_offset = (h_scroll_offset + 100).min(max_scroll);
                                     needs_redraw = true;
                                 }
-                            }
                             _ => {}
                         }
                     } else {
@@ -1270,14 +1268,12 @@ impl ListBuilder {
                             }
                         }
                         KEY_SPACE => {
-                            if self.mode == ListMode::Checklist || self.mode == ListMode::Multiple {
-                                if let Some(ri) = hovered_row.or(single_selected) {
-                                    if let Some(sel) = selected.get_mut(ri) {
+                            if (self.mode == ListMode::Checklist || self.mode == ListMode::Multiple)
+                                && let Some(ri) = hovered_row.or(single_selected)
+                                    && let Some(sel) = selected.get_mut(ri) {
                                         *sel = !*sel;
                                         needs_redraw = true;
                                     }
-                                }
-                            }
                         }
                         KEY_RETURN => {
                             // Return selected
@@ -1289,12 +1285,11 @@ impl ListBuilder {
                         _ => {}
                     }
                 }
-                WindowEvent::KeyRelease(key_event) => {
+                WindowEvent::KeyRelease(key_event)
                     // Handle shift release for scroll mode
-                    if key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT {
+                    if (key_event.keysym == KEY_LSHIFT || key_event.keysym == KEY_RSHIFT) => {
                         h_scroll_mode = false;
                     }
-                }
                 _ => {}
             }
 
@@ -1547,22 +1542,20 @@ fn get_result(
 
     match mode {
         ListMode::Single => {
-            if let Some(idx) = single_selected {
-                if let Some(row) = rows.get(idx) {
-                    if let Some(val) = row.first() {
-                        result.push(val.clone());
-                    }
-                }
+            if let Some(idx) = single_selected
+                && let Some(row) = rows.get(idx)
+                && let Some(val) = row.first()
+            {
+                result.push(val.clone());
             }
         }
         ListMode::Multiple | ListMode::Checklist | ListMode::Radiolist => {
             for (i, &sel) in selected.iter().enumerate() {
-                if sel {
-                    if let Some(row) = rows.get(i) {
-                        if let Some(val) = row.first() {
-                            result.push(val.clone());
-                        }
-                    }
+                if sel
+                    && let Some(row) = rows.get(i)
+                    && let Some(val) = row.first()
+                {
+                    result.push(val.clone());
                 }
             }
         }

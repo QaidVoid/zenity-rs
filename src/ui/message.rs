@@ -241,7 +241,7 @@ impl MessageBuilder {
 
         if use_vertical_layout {
             // Vertical layout: stack buttons vertically, full width
-            for idx in 0..buttons.len() {
+            for (idx, button) in buttons.iter_mut().enumerate() {
                 let button_y = physical_height as i32
                     - padding as i32
                     - button_height as i32
@@ -252,7 +252,7 @@ impl MessageBuilder {
                 let button_width = physical_width as i32 - 2 * padding as i32;
 
                 // Update button width and position
-                buttons[idx].set_width(button_width as u32);
+                button.set_width(button_width as u32);
                 button_positions.push((button_x, button_y));
             }
         } else {
@@ -302,10 +302,10 @@ impl MessageBuilder {
 
         loop {
             // Check timeout
-            if let Some(deadline) = deadline {
-                if Instant::now() >= deadline {
-                    return Ok(DialogResult::Timeout);
-                }
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(DialogResult::Timeout);
             }
 
             // Get event (use polling with sleep if timeout is set)
@@ -351,10 +351,8 @@ impl MessageBuilder {
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
                     dragging = true;
                 }
-                WindowEvent::ButtonRelease(MouseButton::Left, _) => {
-                    if dragging {
-                        dragging = false;
-                    }
+                WindowEvent::ButtonRelease(MouseButton::Left, _) if dragging => {
+                    dragging = false;
                 }
                 _ => {}
             }
@@ -371,11 +369,9 @@ impl MessageBuilder {
             }
 
             // Handle drag
-            if dragging {
-                if let WindowEvent::CursorMove(_) = &event {
-                    let _ = window.start_drag();
-                    dragging = false;
-                }
+            if dragging && let WindowEvent::CursorMove(_) = &event {
+                let _ = window.start_drag();
+                dragging = false;
             }
 
             // Batch process pending events

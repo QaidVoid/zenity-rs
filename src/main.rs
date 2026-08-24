@@ -84,8 +84,8 @@ fn get_button_preset(
     default
 }
 
-fn apply_message_options(
-    builder: zenity_rs::MessageBuilder,
+/// Message dialog options shared by every `--info`/`--warning`/`--error`/`--question` run.
+struct MessageOptions<'a> {
     timeout: Option<u32>,
     width: Option<u32>,
     height: Option<u32>,
@@ -93,8 +93,23 @@ fn apply_message_options(
     no_markup: bool,
     ellipsize: bool,
     switch_mode: bool,
-    _extra_buttons: &[String],
+    extra_buttons: &'a [String],
+}
+
+fn apply_message_options(
+    builder: zenity_rs::MessageBuilder,
+    options: MessageOptions<'_>,
 ) -> zenity_rs::MessageBuilder {
+    let MessageOptions {
+        timeout,
+        width,
+        height,
+        no_wrap,
+        no_markup,
+        ellipsize,
+        switch_mode,
+        extra_buttons,
+    } = options;
     let mut builder = builder;
     if let Some(t) = timeout {
         builder = builder.timeout(t);
@@ -117,7 +132,7 @@ fn apply_message_options(
     if switch_mode {
         builder = builder.switch(true);
     }
-    for btn in _extra_buttons {
+    for btn in extra_buttons {
         builder = builder.extra_button(btn);
     }
     builder
@@ -396,14 +411,16 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .buttons(preset);
             let builder = apply_message_options(
                 builder,
-                timeout,
-                width,
-                height,
-                no_wrap,
-                no_markup,
-                ellipsize,
-                switch_mode,
-                &extra_buttons,
+                MessageOptions {
+                    timeout,
+                    width,
+                    height,
+                    no_wrap,
+                    no_markup,
+                    ellipsize,
+                    switch_mode,
+                    extra_buttons: &extra_buttons,
+                },
             );
             let result = builder.show()?;
             Ok(handle_message_result(result, preset_count, &extra_buttons))

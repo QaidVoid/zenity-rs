@@ -494,31 +494,31 @@ impl TextInput {
             );
 
             // Draw ghost completion text after cursor
-            if let Some(ref suffix) = self.completion {
-                if !suffix.is_empty() {
-                    let ghost_canvas = font
-                        .render(suffix)
-                        .with_color(colors.input_placeholder)
-                        .finish();
-                    let ghost_y = self.y + (self.height as i32 - ghost_canvas.height() as i32) / 2;
-                    let ghost_x = cursor_x + 1;
-                    let available = (self.x + self.width as i32 - INPUT_PADDING - ghost_x) as u32;
-                    if available > 0 {
-                        if ghost_canvas.width() > available {
-                            let mut clipped =
-                                crate::render::Canvas::new(available, ghost_canvas.height());
-                            clipped.pixmap.draw_pixmap(
-                                0,
-                                0,
-                                ghost_canvas.pixmap.as_ref(),
-                                &tiny_skia::PixmapPaint::default(),
-                                tiny_skia::Transform::identity(),
-                                None,
-                            );
-                            canvas.draw_canvas(&clipped, ghost_x, ghost_y);
-                        } else {
-                            canvas.draw_canvas(&ghost_canvas, ghost_x, ghost_y);
-                        }
+            if let Some(ref suffix) = self.completion
+                && !suffix.is_empty()
+            {
+                let ghost_canvas = font
+                    .render(suffix)
+                    .with_color(colors.input_placeholder)
+                    .finish();
+                let ghost_y = self.y + (self.height as i32 - ghost_canvas.height() as i32) / 2;
+                let ghost_x = cursor_x + 1;
+                let available = (self.x + self.width as i32 - INPUT_PADDING - ghost_x) as u32;
+                if available > 0 {
+                    if ghost_canvas.width() > available {
+                        let mut clipped =
+                            crate::render::Canvas::new(available, ghost_canvas.height());
+                        clipped.pixmap.draw_pixmap(
+                            0,
+                            0,
+                            ghost_canvas.pixmap.as_ref(),
+                            &tiny_skia::PixmapPaint::default(),
+                            tiny_skia::Transform::identity(),
+                            None,
+                        );
+                        canvas.draw_canvas(&clipped, ghost_x, ghost_y);
+                    } else {
+                        canvas.draw_canvas(&ghost_canvas, ghost_x, ghost_y);
                     }
                 }
             }

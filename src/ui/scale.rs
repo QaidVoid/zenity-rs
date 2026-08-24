@@ -531,11 +531,9 @@ impl ScaleBuilder {
                             needs_redraw = true;
                         }
                     }
-                    WindowEvent::ButtonRelease(MouseButton::Left, _) => {
-                        if dragging {
-                            dragging = false;
-                            needs_redraw = true;
-                        }
+                    WindowEvent::ButtonRelease(MouseButton::Left, _) if dragging => {
+                        dragging = false;
+                        needs_redraw = true;
                     }
                     _ => {}
                 }

@@ -517,12 +517,11 @@ impl Dispatch<WlRegistry, ()> for WaylandState {
                 "wl_seat" => {
                     state.seat = Some(registry.bind(name, version.min(9), qh, ()));
                 }
-                "wl_output" => {
+                "wl_output"
                     // Bind wl_output version 2+ to get scale events
-                    if version >= 2 {
+                    if version >= 2 => {
                         state.output = Some(registry.bind(name, version.min(4), qh, ()));
                     }
-                }
                 _ => {}
             }
         }
@@ -804,19 +803,19 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
                 fd,
                 size,
             } => {
-                if format == WEnum::Value(wl_keyboard::KeymapFormat::XkbV1) {
-                    if let Ok(mmap) = unsafe {
+                if format == WEnum::Value(wl_keyboard::KeymapFormat::XkbV1)
+                    && let Ok(mmap) = unsafe {
                         let file = std::fs::File::from_raw_fd(fd.into_raw_fd());
                         memmap2::Mmap::map(&file)
-                    } {
-                        let keymap_bytes = &mmap[..size as usize];
-                        let context = kbvm::xkb::Context::default();
-                        let mut diagnostics: Vec<kbvm::xkb::diagnostic::Diagnostic> = Vec::new();
-                        if let Ok(keymap) =
-                            context.keymap_from_bytes(&mut diagnostics, None, keymap_bytes)
-                        {
-                            state.lookup_table = Some(keymap.to_builder().build_lookup_table());
-                        }
+                    }
+                {
+                    let keymap_bytes = &mmap[..size as usize];
+                    let context = kbvm::xkb::Context::default();
+                    let mut diagnostics: Vec<kbvm::xkb::diagnostic::Diagnostic> = Vec::new();
+                    if let Ok(keymap) =
+                        context.keymap_from_bytes(&mut diagnostics, None, keymap_bytes)
+                    {
+                        state.lookup_table = Some(keymap.to_builder().build_lookup_table());
                     }
                 }
             }

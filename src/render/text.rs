@@ -107,13 +107,13 @@ fn fontconfig_dirs() -> Vec<PathBuf> {
     for conf in &conf_paths {
         if conf.is_file() {
             parse_fontconfig_file(conf, &mut dirs);
-        } else if conf.is_dir() {
-            if let Ok(rd) = std::fs::read_dir(conf) {
-                for entry in rd.flatten() {
-                    let path = entry.path();
-                    if path.extension().and_then(|e| e.to_str()) == Some("conf") {
-                        parse_fontconfig_file(&path, &mut dirs);
-                    }
+        } else if conf.is_dir()
+            && let Ok(rd) = std::fs::read_dir(conf)
+        {
+            for entry in rd.flatten() {
+                let path = entry.path();
+                if path.extension().and_then(|e| e.to_str()) == Some("conf") {
+                    parse_fontconfig_file(&path, &mut dirs);
                 }
             }
         }
@@ -270,10 +270,10 @@ fn find_fallback_for_char(c: char) -> Option<FontArc> {
 
     // Fast path: check active (matched) fonts already in memory
     for entry in cache.iter() {
-        if let Some(ref font) = entry.font {
-            if font.glyph_id(c).0 != 0 {
-                return Some(font.clone());
-            }
+        if let Some(ref font) = entry.font
+            && font.glyph_id(c).0 != 0
+        {
+            return Some(font.clone());
         }
     }
 
@@ -375,10 +375,10 @@ impl Font {
                 continue;
             }
 
-            if let Ok(data) = std::fs::read(&entry.path) {
-                if let Ok(font) = FontArc::try_from_vec(data) {
-                    return font;
-                }
+            if let Ok(data) = std::fs::read(&entry.path)
+                && let Ok(font) = FontArc::try_from_vec(data)
+            {
+                return font;
             }
         }
 
@@ -402,10 +402,10 @@ impl Font {
                 continue;
             }
 
-            if let Ok(data) = std::fs::read(&entry.path) {
-                if let Ok(font) = FontArc::try_from_vec(data) {
-                    return Some(font);
-                }
+            if let Ok(data) = std::fs::read(&entry.path)
+                && let Ok(font) = FontArc::try_from_vec(data)
+            {
+                return Some(font);
             }
         }
 
@@ -616,24 +616,23 @@ impl<'a> TextRenderer<'a> {
                 // Try raster image (colored emoji / bitmap glyphs)
                 let font_ref: &FontArc = pg.fallback.as_ref().unwrap_or(&self.font.primary.font);
 
-                if let Some(img) = font_ref.glyph_raster_image2(pg.glyph.id, ppem) {
-                    if matches!(img.format, GlyphImageFormat::Png) {
-                        if let Ok(src) = Pixmap::decode_png(img.data) {
-                            let scale = self.font.px_scale.y / img.pixels_per_em as f32;
-                            let target_w = (img.width as f32 * scale).round().max(1.0) as u32;
-                            let target_h = (img.height as f32 * scale).round().max(1.0) as u32;
-                            let scaled = scale_pixmap(&src, target_w, target_h);
-                            // origin is offset from (baseline + ascent) in image pixels
-                            let fb_ascent = font_ref.as_scaled(self.font.px_scale).ascent();
-                            let x = pg.glyph.position.x + img.origin.x * scale;
-                            let y = pg.glyph.position.y - fb_ascent + img.origin.y * scale;
-                            return Some(RenderedGlyph::Raster {
-                                pixmap: scaled,
-                                x,
-                                y,
-                            });
-                        }
-                    }
+                if let Some(img) = font_ref.glyph_raster_image2(pg.glyph.id, ppem)
+                    && matches!(img.format, GlyphImageFormat::Png)
+                    && let Ok(src) = Pixmap::decode_png(img.data)
+                {
+                    let scale = self.font.px_scale.y / img.pixels_per_em as f32;
+                    let target_w = (img.width as f32 * scale).round().max(1.0) as u32;
+                    let target_h = (img.height as f32 * scale).round().max(1.0) as u32;
+                    let scaled = scale_pixmap(&src, target_w, target_h);
+                    // origin is offset from (baseline + ascent) in image pixels
+                    let fb_ascent = font_ref.as_scaled(self.font.px_scale).ascent();
+                    let x = pg.glyph.position.x + img.origin.x * scale;
+                    let y = pg.glyph.position.y - fb_ascent + img.origin.y * scale;
+                    return Some(RenderedGlyph::Raster {
+                        pixmap: scaled,
+                        x,
+                        y,
+                    });
                 }
 
                 None
@@ -685,10 +684,10 @@ impl<'a> TextRenderer<'a> {
                 };
 
                 // Only kern within the same (primary) font
-                if fallback.is_none() {
-                    if let Some(last_id) = last_primary_glyph {
-                        x += self.font.primary.kern(last_id, glyph_id);
-                    }
+                if fallback.is_none()
+                    && let Some(last_id) = last_primary_glyph
+                {
+                    x += self.font.primary.kern(last_id, glyph_id);
                 }
 
                 let glyph = Glyph {
@@ -791,16 +790,17 @@ fn scale_pixmap(src: &Pixmap, target_w: u32, target_h: u32) -> Pixmap {
                 }
             }
 
-            if count > 0 {
-                dst_pixels[(dy * target_w + dx) as usize] =
-                    tiny_skia::PremultipliedColorU8::from_rgba(
-                        (r_sum / count) as u8,
-                        (g_sum / count) as u8,
-                        (b_sum / count) as u8,
-                        (a_sum / count) as u8,
-                    )
-                    .unwrap();
-            }
+            let Some(count) = std::num::NonZeroU32::new(count) else {
+                continue;
+            };
+            let count = count.get();
+            dst_pixels[(dy * target_w + dx) as usize] = tiny_skia::PremultipliedColorU8::from_rgba(
+                (r_sum / count) as u8,
+                (g_sum / count) as u8,
+                (b_sum / count) as u8,
+                (a_sum / count) as u8,
+            )
+            .unwrap();
         }
     }
 

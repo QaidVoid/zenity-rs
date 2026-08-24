@@ -486,10 +486,11 @@ impl X11Window {
 
                 // Get character from lookup and emit TextInput for printable characters
                 let ch: Option<char> = lookup.into_iter().flat_map(|p| p.char()).next();
-                if let Some(c) = ch {
-                    if !c.is_control() && !modifiers.contains(Modifiers::CTRL) {
-                        return Some(WindowEvent::TextInput(c));
-                    }
+                if let Some(c) = ch
+                    && !c.is_control()
+                    && !modifiers.contains(Modifiers::CTRL)
+                {
+                    return Some(WindowEvent::TextInput(c));
                 }
 
                 WindowEvent::KeyPress(KeyEvent {

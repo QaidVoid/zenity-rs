@@ -256,22 +256,22 @@ fn find_wayland_socket() -> Option<String> {
 
     for entry in rd.flatten() {
         let fname = entry.file_name();
-        if let Some(s) = fname.to_str() {
-            if let Some(suffix) = s.strip_prefix("wayland-") {
-                if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_digit()) {
-                    continue;
-                }
+        if let Some(s) = fname.to_str()
+            && let Some(suffix) = s.strip_prefix("wayland-")
+        {
+            if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_digit()) {
+                continue;
+            }
 
-                candidate_count += 1;
+            candidate_count += 1;
 
-                if s == "wayland-0" {
-                    chosen = Some(s.to_string());
-                    break;
-                }
+            if s == "wayland-0" {
+                chosen = Some(s.to_string());
+                break;
+            }
 
-                if chosen.is_none() {
-                    chosen = Some(s.to_string());
-                }
+            if chosen.is_none() {
+                chosen = Some(s.to_string());
             }
         }
     }

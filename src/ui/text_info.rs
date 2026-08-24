@@ -572,57 +572,55 @@ impl TextInfoBuilder {
                     clicking_scrollbar = false;
 
                     // Check if clicking anywhere in scrollbar area (thumb OR track)
-                    if let Some((mx, my)) = last_cursor_pos {
-                        if total_lines > visible_lines {
-                            let scrollbar_width = if scrollbar_hovered {
-                                12.0 * scale
+                    if let Some((mx, my)) = last_cursor_pos
+                        && total_lines > visible_lines
+                    {
+                        let scrollbar_width = if scrollbar_hovered {
+                            12.0 * scale
+                        } else {
+                            8.0 * scale
+                        };
+                        let scrollbar_x = text_area_x + text_area_w as i32 - scrollbar_width as i32;
+
+                        // Block all clicks in scrollbar area
+                        if mx >= scrollbar_x
+                            && mx < text_area_x + text_area_w as i32
+                            && my >= text_area_y
+                            && my < text_area_y + text_area_h as i32
+                        {
+                            clicking_scrollbar = true;
+
+                            // Now check if clicking specifically on the thumb for dragging
+                            let text_area_mx = mx - text_area_x;
+                            let text_area_my = my - text_area_y;
+
+                            let sb_x = text_area_w as i32 - scrollbar_width as i32;
+                            let sb_y_f32 = 4.0 * scale;
+                            let sb_y = sb_y_f32 as i32;
+                            let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
+                            let sb_h = sb_h_f32 as i32;
+
+                            let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
+                                * sb_h_f32)
+                                .max(20.0 * scale);
+                            let thumb_h = thumb_h_f32 as i32;
+
+                            let max_scroll = total_lines.saturating_sub(visible_lines);
+                            let thumb_y = if max_scroll > 0 {
+                                let max_thumb_y = sb_h - thumb_h;
+                                ((scroll_offset as f32 / max_scroll as f32) * max_thumb_y as f32)
+                                    as i32
                             } else {
-                                8.0 * scale
+                                0
                             };
-                            let scrollbar_x =
-                                text_area_x + text_area_w as i32 - scrollbar_width as i32;
 
-                            // Block all clicks in scrollbar area
-                            if mx >= scrollbar_x
-                                && mx < text_area_x + text_area_w as i32
-                                && my >= text_area_y
-                                && my < text_area_y + text_area_h as i32
+                            if text_area_mx >= sb_x
+                                && text_area_mx < sb_x + scrollbar_width as i32
+                                && text_area_my >= sb_y + thumb_y
+                                && text_area_my < sb_y + thumb_y + thumb_h
                             {
-                                clicking_scrollbar = true;
-
-                                // Now check if clicking specifically on the thumb for dragging
-                                let text_area_mx = mx - text_area_x;
-                                let text_area_my = my - text_area_y;
-
-                                let sb_x = text_area_w as i32 - scrollbar_width as i32;
-                                let sb_y_f32 = 4.0 * scale;
-                                let sb_y = sb_y_f32 as i32;
-                                let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
-                                let sb_h = sb_h_f32 as i32;
-
-                                let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
-                                    * sb_h_f32)
-                                    .max(20.0 * scale);
-                                let thumb_h = thumb_h_f32 as i32;
-
-                                let max_scroll = total_lines.saturating_sub(visible_lines);
-                                let thumb_y = if max_scroll > 0 {
-                                    let max_thumb_y = sb_h - thumb_h;
-                                    ((scroll_offset as f32 / max_scroll as f32)
-                                        * max_thumb_y as f32)
-                                        as i32
-                                } else {
-                                    0
-                                };
-
-                                if text_area_mx >= sb_x
-                                    && text_area_mx < sb_x + scrollbar_width as i32
-                                    && text_area_my >= sb_y + thumb_y
-                                    && text_area_my < sb_y + thumb_y + thumb_h
-                                {
-                                    thumb_drag = true;
-                                    thumb_drag_offset = Some(text_area_my - (sb_y + thumb_y));
-                                }
+                                thumb_drag = true;
+                                thumb_drag_offset = Some(text_area_my - (sb_y + thumb_y));
                             }
                         }
                     }
@@ -737,37 +735,36 @@ impl TextInfoBuilder {
                     WindowEvent::ButtonPress(button, _modifiers)
                         if *button == crate::backend::MouseButton::Left =>
                     {
-                        if let Some((mx, my)) = last_cursor_pos {
-                            if total_lines > visible_lines {
-                                let sb_x = text_area_w as i32 - (10.0 * scale) as i32;
-                                let sb_y_f32 = 4.0 * scale;
-                                let sb_y = sb_y_f32 as i32;
-                                let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
-                                let sb_h = sb_h_f32 as i32;
+                        if let Some((mx, my)) = last_cursor_pos
+                            && total_lines > visible_lines
+                        {
+                            let sb_x = text_area_w as i32 - (10.0 * scale) as i32;
+                            let sb_y_f32 = 4.0 * scale;
+                            let sb_y = sb_y_f32 as i32;
+                            let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
+                            let sb_h = sb_h_f32 as i32;
 
-                                let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
-                                    * sb_h_f32)
-                                    .max(20.0 * scale);
-                                let thumb_h = thumb_h_f32 as i32;
+                            let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
+                                * sb_h_f32)
+                                .max(20.0 * scale);
+                            let thumb_h = thumb_h_f32 as i32;
 
-                                let max_scroll = total_lines.saturating_sub(visible_lines);
-                                let max_thumb_y = sb_h - thumb_h;
-                                let thumb_y = if max_scroll > 0 {
-                                    ((scroll_offset as f32 / max_scroll as f32)
-                                        * max_thumb_y as f32)
-                                        as i32
-                                } else {
-                                    0
-                                };
+                            let max_scroll = total_lines.saturating_sub(visible_lines);
+                            let max_thumb_y = sb_h - thumb_h;
+                            let thumb_y = if max_scroll > 0 {
+                                ((scroll_offset as f32 / max_scroll as f32) * max_thumb_y as f32)
+                                    as i32
+                            } else {
+                                0
+                            };
 
-                                if mx >= text_area_x + sb_x
-                                    && mx < text_area_x + sb_x + (6.0 * scale) as i32
-                                    && my >= text_area_y + sb_y + thumb_y
-                                    && my < text_area_y + sb_y + thumb_y + thumb_h
-                                {
-                                    thumb_drag = true;
-                                    thumb_drag_offset = Some(my - (text_area_y + sb_y + thumb_y));
-                                }
+                            if mx >= text_area_x + sb_x
+                                && mx < text_area_x + sb_x + (6.0 * scale) as i32
+                                && my >= text_area_y + sb_y + thumb_y
+                                && my < text_area_y + sb_y + thumb_y + thumb_h
+                            {
+                                thumb_drag = true;
+                                thumb_drag_offset = Some(my - (text_area_y + sb_y + thumb_y));
                             }
                         }
                     }

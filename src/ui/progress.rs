@@ -240,10 +240,10 @@ impl ProgressBuilder {
                     if tx.send(StdinMessage::Pulsate).is_err() {
                         break;
                     }
-                } else if let Ok(num) = trimmed.parse::<u32>() {
-                    if tx.send(StdinMessage::Progress(num.min(100))).is_err() {
-                        break;
-                    }
+                } else if let Ok(num) = trimmed.parse::<u32>()
+                    && tx.send(StdinMessage::Progress(num.min(100))).is_err()
+                {
+                    break;
                 }
             }
 

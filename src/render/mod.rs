@@ -236,7 +236,7 @@ impl Canvas {
             let dst_base = ((y + row) * dst_stride + x * 4) as usize;
             let sb = &data[src_base..src_base + (w as usize) * 4];
             let db = &mut dst[dst_base..dst_base + (w as usize) * 4];
-            for (s, d) in sb.chunks_exact(4).zip(db.chunks_exact_mut(4)) {
+            for (s, d) in sb.as_chunks::<4>().0.iter().zip(db.as_chunks_mut::<4>().0) {
                 d[0] = s[2]; // B
                 d[1] = s[1]; // G
                 d[2] = s[0]; // R
@@ -289,7 +289,7 @@ impl Canvas {
 /// (B,G,R,A byte order) to `out`. tiny-skia already stores premultiplied alpha,
 /// so no un-premultiplication is needed.
 fn swizzle_rgba_to_argb(rgba: &[u8], out: &mut Vec<u8>) {
-    for c in rgba.chunks_exact(4) {
+    for c in rgba.as_chunks::<4>().0 {
         out.push(c[2]); // B
         out.push(c[1]); // G
         out.push(c[0]); // R

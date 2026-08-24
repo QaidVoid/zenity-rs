@@ -1114,8 +1114,7 @@ impl FileSelectBuilder {
                 colors,
                 &completion_matches,
                 completion_popup_index,
-                x,
-                y,
+                (x, y),
                 main_w,
             );
         }
@@ -1127,8 +1126,7 @@ impl FileSelectBuilder {
                 colors,
                 &search_matches,
                 search_popup_index,
-                x,
-                y,
+                (x, y),
                 search_width,
             );
         }
@@ -1315,11 +1313,11 @@ impl FileSelectBuilder {
                             filtered_entries.len(),
                             scroll_offset,
                             scrollbar_hovered,
-                        ) {
-                            if (mouse_y as f32) >= thumb_y && (mouse_y as f32) < thumb_y + thumb_h {
-                                thumb_drag = true;
-                                thumb_drag_offset = Some(mouse_y - thumb_y as i32);
-                            }
+                        ) && (mouse_y as f32) >= thumb_y
+                            && (mouse_y as f32) < thumb_y + thumb_h
+                        {
+                            thumb_drag = true;
+                            thumb_drag_offset = Some(mouse_y - thumb_y as i32);
                         }
                     }
 
@@ -1531,12 +1529,12 @@ impl FileSelectBuilder {
                                     // In save mode, single click on file populates filename input
                                     if save_mode {
                                         let entry = &all_entries[ei];
-                                        if !entry.is_dir {
-                                            if let Some(ref mut fi) = filename_input {
-                                                fi.set_text(&entry.name);
-                                                completion_matches.clear();
-                                                completion_popup_index = 0;
-                                            }
+                                        if !entry.is_dir
+                                            && let Some(ref mut fi) = filename_input
+                                        {
+                                            fi.set_text(&entry.name);
+                                            completion_matches.clear();
+                                            completion_popup_index = 0;
                                         }
                                     }
                                 }
@@ -1604,19 +1602,19 @@ impl FileSelectBuilder {
                                 needs_redraw = true;
                             }
                         }
-                        crate::backend::ScrollDirection::Down => {
-                            if scroll_offset + visible_items < filtered_entries.len() {
-                                scroll_offset = (scroll_offset + 3)
-                                    .min(filtered_entries.len().saturating_sub(visible_items));
-                                needs_redraw = true;
-                            }
+                        crate::backend::ScrollDirection::Down
+                            if scroll_offset + visible_items < filtered_entries.len() =>
+                        {
+                            scroll_offset = (scroll_offset + 3)
+                                .min(filtered_entries.len().saturating_sub(visible_items));
+                            needs_redraw = true;
                         }
                         _ => {}
                     }
                 }
                 WindowEvent::KeyPress(key_event) => {
                     let filename_has_focus =
-                        filename_input.as_ref().map_or(false, |fi| fi.has_focus());
+                        filename_input.as_ref().is_some_and(|fi| fi.has_focus());
 
                     if key_event.keysym == KEY_ESCAPE {
                         if search_input.has_focus() {
@@ -1686,10 +1684,9 @@ impl FileSelectBuilder {
 
                                         if let Some(pos) =
                                             filtered_entries.iter().position(|&e| e == idx)
+                                            && pos < scroll_offset
                                         {
-                                            if pos < scroll_offset {
-                                                scroll_offset = pos;
-                                            }
+                                            scroll_offset = pos;
                                         }
                                         needs_redraw = true;
                                     }
@@ -1728,10 +1725,9 @@ impl FileSelectBuilder {
 
                                         if let Some(pos) =
                                             filtered_entries.iter().position(|&e| e == idx)
+                                            && pos + 1 >= scroll_offset + visible_items
                                         {
-                                            if pos + 1 >= scroll_offset + visible_items {
-                                                scroll_offset = pos + 1 - visible_items + 1;
-                                            }
+                                            scroll_offset = pos + 1 - visible_items + 1;
                                         }
                                         needs_redraw = true;
                                     }
@@ -1803,74 +1799,71 @@ impl FileSelectBuilder {
                 let mut search_popup_handled = false;
 
                 // Handle search popup keyboard navigation
-                if !search_matches.is_empty() && search_input.has_focus() {
-                    if let WindowEvent::KeyPress(key_event) = &event {
-                        const POPUP_KEY_UP: u32 = 0xff52;
-                        const POPUP_KEY_DOWN: u32 = 0xff54;
-                        match key_event.keysym {
-                            POPUP_KEY_UP => {
-                                if search_popup_index > 0 {
-                                    search_popup_index -= 1;
-                                } else {
-                                    search_popup_index = search_matches.len() - 1;
-                                }
-                                let text = search_input.text().to_string();
-                                let name = &search_matches[search_popup_index];
-                                if name.to_lowercase().starts_with(&text.to_lowercase()) {
-                                    let pc = text.chars().count();
-                                    search_input
-                                        .set_completion(Some(name.chars().skip(pc).collect()));
-                                } else {
-                                    search_input.set_completion(None);
-                                }
-                                needs_redraw = true;
-                                search_popup_handled = true;
+                if !search_matches.is_empty()
+                    && search_input.has_focus()
+                    && let WindowEvent::KeyPress(key_event) = &event
+                {
+                    const POPUP_KEY_UP: u32 = 0xff52;
+                    const POPUP_KEY_DOWN: u32 = 0xff54;
+                    match key_event.keysym {
+                        POPUP_KEY_UP => {
+                            if search_popup_index > 0 {
+                                search_popup_index -= 1;
+                            } else {
+                                search_popup_index = search_matches.len() - 1;
                             }
-                            POPUP_KEY_DOWN => {
-                                search_popup_index =
-                                    (search_popup_index + 1) % search_matches.len();
-                                let text = search_input.text().to_string();
-                                let name = &search_matches[search_popup_index];
-                                if name.to_lowercase().starts_with(&text.to_lowercase()) {
-                                    let pc = text.chars().count();
-                                    search_input
-                                        .set_completion(Some(name.chars().skip(pc).collect()));
-                                } else {
-                                    search_input.set_completion(None);
-                                }
-                                needs_redraw = true;
-                                search_popup_handled = true;
-                            }
-                            _ => {}
-                        }
-                    }
-                }
-
-                // Handle click on search popup item
-                if !search_matches.is_empty() && search_input.has_focus() {
-                    if let WindowEvent::ButtonPress(MouseButton::Left, _) = &event {
-                        let rect = search_popup_rect(search_matches.len());
-                        if let Some(idx) =
-                            popup_item_at(rect, search_matches.len(), mouse_x, mouse_y)
-                        {
-                            search_input.set_text(&search_matches[idx]);
-                            search_matches.clear();
-                            search_popup_index = 0;
-                            let new_search = search_input.text().to_lowercase();
-                            if new_search != search_text {
-                                search_text = new_search;
-                                update_filtered(
-                                    &all_entries,
-                                    &search_text,
-                                    &mut filtered_entries,
-                                    &self.filters,
-                                );
-                                selected_indices.clear();
-                                scroll_offset = 0;
+                            let text = search_input.text().to_string();
+                            let name = &search_matches[search_popup_index];
+                            if name.to_lowercase().starts_with(&text.to_lowercase()) {
+                                let pc = text.chars().count();
+                                search_input.set_completion(Some(name.chars().skip(pc).collect()));
+                            } else {
+                                search_input.set_completion(None);
                             }
                             needs_redraw = true;
                             search_popup_handled = true;
                         }
+                        POPUP_KEY_DOWN => {
+                            search_popup_index = (search_popup_index + 1) % search_matches.len();
+                            let text = search_input.text().to_string();
+                            let name = &search_matches[search_popup_index];
+                            if name.to_lowercase().starts_with(&text.to_lowercase()) {
+                                let pc = text.chars().count();
+                                search_input.set_completion(Some(name.chars().skip(pc).collect()));
+                            } else {
+                                search_input.set_completion(None);
+                            }
+                            needs_redraw = true;
+                            search_popup_handled = true;
+                        }
+                        _ => {}
+                    }
+                }
+
+                // Handle click on search popup item
+                if !search_matches.is_empty()
+                    && search_input.has_focus()
+                    && let WindowEvent::ButtonPress(MouseButton::Left, _) = &event
+                {
+                    let rect = search_popup_rect(search_matches.len());
+                    if let Some(idx) = popup_item_at(rect, search_matches.len(), mouse_x, mouse_y) {
+                        search_input.set_text(&search_matches[idx]);
+                        search_matches.clear();
+                        search_popup_index = 0;
+                        let new_search = search_input.text().to_lowercase();
+                        if new_search != search_text {
+                            search_text = new_search;
+                            update_filtered(
+                                &all_entries,
+                                &search_text,
+                                &mut filtered_entries,
+                                &self.filters,
+                            );
+                            selected_indices.clear();
+                            scroll_offset = 0;
+                        }
+                        needs_redraw = true;
+                        search_popup_handled = true;
                     }
                 }
 
@@ -1982,60 +1975,60 @@ impl FileSelectBuilder {
                 let mut popup_handled = false;
 
                 // Handle popup keyboard navigation before passing event to input
-                if !completion_matches.is_empty() {
-                    if let WindowEvent::KeyPress(key_event) = &event {
-                        const POPUP_KEY_UP: u32 = 0xff52;
-                        const POPUP_KEY_DOWN: u32 = 0xff54;
-                        match key_event.keysym {
-                            POPUP_KEY_UP => {
-                                if completion_popup_index > 0 {
-                                    completion_popup_index -= 1;
-                                } else {
-                                    completion_popup_index = completion_matches.len() - 1;
-                                }
-                                let prefix = fi.text().to_string();
-                                let name = &completion_matches[completion_popup_index];
-                                let pc = prefix.chars().count();
-                                fi.set_completion(Some(name.chars().skip(pc).collect()));
-                                needs_redraw = true;
-                                popup_handled = true;
+                if !completion_matches.is_empty()
+                    && let WindowEvent::KeyPress(key_event) = &event
+                {
+                    const POPUP_KEY_UP: u32 = 0xff52;
+                    const POPUP_KEY_DOWN: u32 = 0xff54;
+                    match key_event.keysym {
+                        POPUP_KEY_UP => {
+                            if completion_popup_index > 0 {
+                                completion_popup_index -= 1;
+                            } else {
+                                completion_popup_index = completion_matches.len() - 1;
                             }
-                            POPUP_KEY_DOWN => {
-                                completion_popup_index =
-                                    (completion_popup_index + 1) % completion_matches.len();
-                                let prefix = fi.text().to_string();
-                                let name = &completion_matches[completion_popup_index];
-                                let pc = prefix.chars().count();
-                                fi.set_completion(Some(name.chars().skip(pc).collect()));
-                                needs_redraw = true;
-                                popup_handled = true;
-                            }
-                            _ => {}
+                            let prefix = fi.text().to_string();
+                            let name = &completion_matches[completion_popup_index];
+                            let pc = prefix.chars().count();
+                            fi.set_completion(Some(name.chars().skip(pc).collect()));
+                            needs_redraw = true;
+                            popup_handled = true;
                         }
+                        POPUP_KEY_DOWN => {
+                            completion_popup_index =
+                                (completion_popup_index + 1) % completion_matches.len();
+                            let prefix = fi.text().to_string();
+                            let name = &completion_matches[completion_popup_index];
+                            let pc = prefix.chars().count();
+                            fi.set_completion(Some(name.chars().skip(pc).collect()));
+                            needs_redraw = true;
+                            popup_handled = true;
+                        }
+                        _ => {}
                     }
                 }
 
                 // Handle click on popup item
-                if !completion_matches.is_empty() {
-                    if let WindowEvent::ButtonPress(MouseButton::Left, _) = &event {
-                        let popup_x = main_x;
-                        let popup_w = main_w as i32;
-                        let visible = completion_matches.len().min(MAX_POPUP_ITEMS) as i32;
-                        let popup_h = visible * POPUP_ITEM_HEIGHT + 2;
-                        let popup_y = filename_y + filename_label_h - popup_h;
-                        if mouse_x >= popup_x
-                            && mouse_x < popup_x + popup_w
-                            && mouse_y >= popup_y
-                            && mouse_y < popup_y + popup_h
-                        {
-                            let idx = ((mouse_y - popup_y - 1) / POPUP_ITEM_HEIGHT) as usize;
-                            if idx < completion_matches.len().min(MAX_POPUP_ITEMS) {
-                                fi.set_text(&completion_matches[idx]);
-                                completion_matches.clear();
-                                completion_popup_index = 0;
-                                needs_redraw = true;
-                                popup_handled = true;
-                            }
+                if !completion_matches.is_empty()
+                    && let WindowEvent::ButtonPress(MouseButton::Left, _) = &event
+                {
+                    let popup_x = main_x;
+                    let popup_w = main_w as i32;
+                    let visible = completion_matches.len().min(MAX_POPUP_ITEMS) as i32;
+                    let popup_h = visible * POPUP_ITEM_HEIGHT + 2;
+                    let popup_y = filename_y + filename_label_h - popup_h;
+                    if mouse_x >= popup_x
+                        && mouse_x < popup_x + popup_w
+                        && mouse_y >= popup_y
+                        && mouse_y < popup_y + popup_h
+                    {
+                        let idx = ((mouse_y - popup_y - 1) / POPUP_ITEM_HEIGHT) as usize;
+                        if idx < completion_matches.len().min(MAX_POPUP_ITEMS) {
+                            fi.set_text(&completion_matches[idx]);
+                            completion_matches.clear();
+                            completion_popup_index = 0;
+                            needs_redraw = true;
+                            popup_handled = true;
                         }
                     }
                 }
@@ -2267,8 +2260,7 @@ impl FileSelectBuilder {
                         colors,
                         &completion_matches,
                         completion_popup_index,
-                        x,
-                        y,
+                        (x, y),
                         main_w,
                     );
                 }
@@ -2279,8 +2271,10 @@ impl FileSelectBuilder {
                         colors,
                         &search_matches,
                         search_popup_index,
-                        search_popup_rect(search_matches.len()).0,
-                        search_popup_rect(search_matches.len()).1,
+                        {
+                            let (x, y, _, _) = search_popup_rect(search_matches.len());
+                            (x, y)
+                        },
                         search_width,
                     );
                 }
@@ -2698,10 +2692,10 @@ fn draw_completion_popup(
     colors: &Colors,
     matches: &[String],
     selected: usize,
-    x: i32,
-    y: i32,
+    position: (i32, i32),
     width: u32,
 ) {
+    let (x, y) = position;
     if matches.is_empty() {
         return;
     }
