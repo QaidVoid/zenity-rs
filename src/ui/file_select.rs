@@ -243,9 +243,43 @@ impl FileSelectBuilder {
     pub fn show(self) -> Result<FileSelectResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
+        // Save mode flag
+        let save_mode = self.save && !self.directory;
+
+        // Smallest window that still fits the fixed chrome plus one item row
+        let min_logical_width = BASE_PADDING * 2
+            + BASE_SIDEBAR_WIDTH
+            + BASE_CONTENT_GAP
+            + BASE_ITEM_HEIGHT
+            + if self.directory {
+                0
+            } else {
+                BASE_SIZE_COL_WIDTH
+            }
+            + BASE_DATE_COL_WIDTH
+            + BASE_SCROLLBAR_GUTTER;
+        let min_logical_height = BASE_PADDING * 2
+            + BASE_TOOLBAR_HEIGHT
+            + BASE_CONTENT_GAP
+            + BASE_PATH_BAR_HEIGHT
+            + BASE_COLUMN_HEADER_HEIGHT
+            + BASE_ITEM_HEIGHT
+            + BASE_FOOTER_HEIGHT
+            + if save_mode {
+                BASE_FILENAME_ROW_HEIGHT
+            } else {
+                0
+            };
+
         // Use custom dimensions if provided, otherwise use defaults
-        let logical_width = self.width.unwrap_or(BASE_WINDOW_WIDTH);
-        let logical_height = self.height.unwrap_or(BASE_WINDOW_HEIGHT);
+        let logical_width = self
+            .width
+            .unwrap_or(BASE_WINDOW_WIDTH)
+            .max(min_logical_width);
+        let logical_height = self
+            .height
+            .unwrap_or(BASE_WINDOW_HEIGHT)
+            .max(min_logical_height);
 
         // Create window with LOGICAL dimensions first
         // Resolved here rather than inside open_window because the save-mode
@@ -285,9 +319,6 @@ impl FileSelectBuilder {
 
         // Search input
         let mut search_input = TextInput::new(search_width).with_placeholder("Search...");
-
-        // Save mode flag
-        let save_mode = self.save && !self.directory;
 
         // Navigation history
         let mut history: Vec<PathBuf> = Vec::new();
@@ -1137,6 +1168,8 @@ impl FileSelectBuilder {
         loop {
             let event = window.wait_for_event()?;
             let mut needs_redraw = false;
+            let mut enter_pressed = false;
+            let mut ok_pressed = false;
 
             match &event {
                 WindowEvent::CloseRequested => return Ok(FileSelectResult::Closed),
@@ -1725,49 +1758,19 @@ impl FileSelectBuilder {
 
                                         if let Some(pos) =
                                             filtered_entries.iter().position(|&e| e == idx)
-                                            && pos + 1 >= scroll_offset + visible_items
+                                            && pos >= scroll_offset + visible_items
                                         {
-                                            scroll_offset = pos + 1 - visible_items + 1;
+                                            scroll_offset = (pos + 1 - visible_items).min(
+                                                filtered_entries
+                                                    .len()
+                                                    .saturating_sub(visible_items),
+                                            );
                                         }
                                         needs_redraw = true;
                                     }
                                 }
                             }
-                            KEY_RETURN => {
-                                if self.multiple && !selected_indices.is_empty() {
-                                    let selected_files: Vec<PathBuf> = selected_indices
-                                        .iter()
-                                        .filter(|&ei| !all_entries[*ei].is_dir)
-                                        .map(|&ei| all_entries[ei].path.clone())
-                                        .collect();
-                                    if !selected_files.is_empty() {
-                                        return Ok(FileSelectResult::SelectedMultiple(
-                                            selected_files,
-                                        ));
-                                    }
-                                } else if let Some(&sel) = selected_indices.iter().next() {
-                                    let entry = &all_entries[sel];
-                                    if entry.is_dir {
-                                        navigate_to_directory(
-                                            entry.path.clone(),
-                                            &mut current_dir,
-                                            &mut history,
-                                            &mut history_index,
-                                            &mut all_entries,
-                                            self.directory,
-                                            show_hidden,
-                                            &search_text,
-                                            &mut filtered_entries,
-                                            &mut selected_indices,
-                                            &mut scroll_offset,
-                                            &self.filters,
-                                        );
-                                        needs_redraw = true;
-                                    } else if !self.directory {
-                                        return Ok(FileSelectResult::Selected(entry.path.clone()));
-                                    }
-                                }
-                            }
+                            KEY_RETURN => enter_pressed = true,
                             KEY_BACKSPACE => {
                                 if let Some(parent) = current_dir.parent() {
                                     navigate_to_directory(
@@ -2112,19 +2115,59 @@ impl FileSelectBuilder {
                             return Ok(FileSelectResult::Selected(current_dir.join(&name)));
                         }
                     }
-                } else if self.multiple && !selected_indices.is_empty() {
-                    let selected_files: Vec<PathBuf> = selected_indices
+                } else {
+                    ok_pressed = true;
+                }
+            }
+
+            // Enter and OK share one activation path. A lone directory is
+            // entered rather than returned, except that OK in directory mode
+            // returns it; `..` is never a result.
+            if enter_pressed || ok_pressed {
+                let selected: Vec<&DirEntry> = selected_indices
+                    .iter()
+                    .map(|&ei| &all_entries[ei])
+                    .collect();
+                if self.multiple {
+                    let paths: Vec<PathBuf> = selected
                         .iter()
-                        .filter(|&ei| !all_entries[*ei].is_dir)
-                        .map(|&ei| all_entries[ei].path.clone())
+                        .filter(|e| e.is_dir == self.directory && e.name != "..")
+                        .map(|e| e.path.clone())
                         .collect();
-                    if !selected_files.is_empty() {
-                        return Ok(FileSelectResult::SelectedMultiple(selected_files));
+                    if !paths.is_empty() {
+                        return Ok(FileSelectResult::SelectedMultiple(paths));
                     }
-                } else if let Some(&sel) = selected_indices.iter().next() {
-                    let entry = &all_entries[sel];
+                }
+                let enter_dir = match selected.as_slice() {
+                    [entry]
+                        if entry.is_dir
+                            && (enter_pressed || !self.directory || entry.name == "..") =>
+                    {
+                        Some(entry.path.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(dest) = enter_dir {
+                    navigate_to_directory(
+                        dest,
+                        &mut current_dir,
+                        &mut history,
+                        &mut history_index,
+                        &mut all_entries,
+                        self.directory,
+                        show_hidden,
+                        &search_text,
+                        &mut filtered_entries,
+                        &mut selected_indices,
+                        &mut scroll_offset,
+                        &self.filters,
+                    );
+                    needs_redraw = true;
+                } else if !self.multiple
+                    && let Some(entry) = selected.first()
+                {
                     return Ok(FileSelectResult::Selected(entry.path.clone()));
-                } else if self.directory {
+                } else if ok_pressed && self.directory && selected.is_empty() {
                     return Ok(FileSelectResult::Selected(current_dir.clone()));
                 }
             }
