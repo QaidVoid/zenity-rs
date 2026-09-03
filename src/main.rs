@@ -59,29 +59,34 @@ fn get_icon(icon_name: &Option<String>, default: Icon) -> Icon {
     }
 }
 
+/// Applies `--ok-label` and `--cancel-label` on top of the dialog's default
+/// buttons, so overriding one label keeps the other button.
 fn get_button_preset(
     ok_label: &str,
     cancel_label: &str,
-    _extra_buttons: &[String],
     switch_mode: bool,
     default: ButtonPreset,
 ) -> ButtonPreset {
     if switch_mode {
         return ButtonPreset::Empty;
     }
-    if !ok_label.is_empty() || !cancel_label.is_empty() {
-        let mut labels = Vec::new();
-        if !ok_label.is_empty() {
-            labels.push(ok_label.to_string());
-        }
-        if !cancel_label.is_empty() {
-            labels.push(cancel_label.to_string());
-        }
-        if !labels.is_empty() {
-            return ButtonPreset::Custom(labels);
+    if ok_label.is_empty() && cancel_label.is_empty() {
+        return default;
+    }
+    let mut labels = default.labels();
+    if !ok_label.is_empty() {
+        match labels.first_mut() {
+            Some(first) => *first = ok_label.to_string(),
+            None => labels.push(ok_label.to_string()),
         }
     }
-    default
+    if !cancel_label.is_empty() {
+        match labels.get_mut(1) {
+            Some(second) => *second = cancel_label.to_string(),
+            None => labels.push(cancel_label.to_string()),
+        }
+    }
+    ButtonPreset::Custom(labels)
 }
 
 /// Message dialog options shared by every `--info`/`--warning`/`--error`/`--question` run.
@@ -205,8 +210,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut hide_value = false;
 
     // Forms options
-    let mut form_entries: Vec<String> = Vec::new();
-    let mut form_passwords: Vec<String> = Vec::new();
+    let mut form_fields: Vec<(bool, String)> = Vec::new();
 
     // Message dialog options
     let mut icon_name: Option<String> = None;
@@ -265,7 +269,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("no-wrap") => no_wrap = true,
             Long("no-markup") => no_markup = true,
             Long("ellipsize") => ellipsize = true,
-            Long("icon-name") | Long("icon") | Long("window-icon") => icon_name = Some(parser.value()?.string()?),
+            Long("icon-name") | Long("icon") | Long("window-icon") => {
+                icon_name = Some(parser.value()?.string()?)
+            }
             Long("switch") => switch_mode = true,
             Long("extra-button") => extra_buttons.push(parser.value()?.string()?),
             Long("ok-label") => ok_label = parser.value()?.string()?,
@@ -337,8 +343,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("hide-value") => hide_value = true,
 
             // Forms options
-            Long("add-entry") => form_entries.push(parser.value()?.string()?),
-            Long("add-password") => form_passwords.push(parser.value()?.string()?),
+            Long("add-entry") => form_fields.push((false, parser.value()?.string()?)),
+            Long("add-password") => form_fields.push((true, parser.value()?.string()?)),
 
             // Ignored options (for compatibility with zenity)
             Long("modal") => { /* Ignored */ }
@@ -392,13 +398,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 DialogType::Error => ("Error", Icon::Error, ButtonPreset::Ok),
                 _ => ("Question", Icon::Question, ButtonPreset::YesNo),
             };
-            let preset = get_button_preset(
-                &ok_label,
-                &cancel_label,
-                &extra_buttons,
-                switch_mode,
-                default_preset,
-            );
+            let preset = get_button_preset(&ok_label, &cancel_label, switch_mode, default_preset);
             let preset_count = preset.len();
             let builder = message()
                 .title(if title.is_empty() {
@@ -628,12 +628,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if !text.is_empty() {
                 builder = builder.text(&text);
             }
-            // Add fields in the order they were specified
-            for label in &form_entries {
-                builder = builder.add_entry(label);
-            }
-            for label in &form_passwords {
-                builder = builder.add_password(label);
+            for (is_password, label) in &form_fields {
+                builder = if *is_password {
+                    builder.add_password(label)
+                } else {
+                    builder.add_entry(label)
+                };
             }
             builder = builder.separator(&separator);
             if let Some(w) = width {
@@ -860,4 +860,31 @@ EXIT CODES:
     100 Error occurred
 "#
     );
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn labels(ok: &str, cancel: &str, default: ButtonPreset) -> Vec<String> {
+        get_button_preset(ok, cancel, false, default).labels()
+    }
+
+    #[test]
+    fn label_overrides_keep_other_buttons() {
+        assert_eq!(labels("", "", ButtonPreset::YesNo), ["Yes", "No"]);
+        assert_eq!(labels("Go", "", ButtonPreset::YesNo), ["Go", "No"]);
+        assert_eq!(labels("", "Abort", ButtonPreset::YesNo), ["Yes", "Abort"]);
+        assert_eq!(
+            labels("Go", "Abort", ButtonPreset::OkCancel),
+            ["Go", "Abort"]
+        );
+        assert_eq!(labels("", "Abort", ButtonPreset::Ok), ["OK", "Abort"]);
+        assert_eq!(labels("Go", "", ButtonPreset::Empty), ["Go"]);
+    }
+
+    #[test]
+    fn switch_mode_has_no_buttons() {
+        assert!(get_button_preset("Go", "Abort", true, ButtonPreset::YesNo).is_empty());
+    }
 }
