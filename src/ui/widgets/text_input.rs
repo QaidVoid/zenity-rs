@@ -1,7 +1,7 @@
 //! Text input widget for single-line text entry.
 
 use std::{
-    cell::RefCell,
+    cell::{Cell, RefCell},
     time::{Duration, Instant},
 };
 
@@ -15,9 +15,11 @@ use crate::{
     },
 };
 
-const INPUT_HEIGHT: u32 = 32;
-const INPUT_RADIUS: f32 = 5.0;
-const INPUT_PADDING: i32 = 8;
+const BASE_INPUT_HEIGHT: f32 = 32.0;
+const BASE_INPUT_RADIUS: f32 = 5.0;
+const BASE_INPUT_PADDING: f32 = 8.0;
+const BASE_SELECTION_INSET: f32 = 5.0;
+const BASE_CARET_INSET: f32 = 6.0;
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
 const KEY_A: u32 = 0x61;
 
@@ -27,6 +29,9 @@ pub struct TextInput {
     y: i32,
     width: u32,
     height: u32,
+    scale: f32,
+    radius: f32,
+    padding: i32,
     text: String,
     cursor_pos: usize,
     focused: bool,
@@ -44,6 +49,8 @@ pub struct TextInput {
     /// X offset of every character boundary, measured while drawing. Mouse
     /// hit-testing needs the font, which only `draw_to` has.
     offsets: RefCell<(String, Vec<f32>)>,
+    /// Horizontal scroll, in pixels, that keeps the caret inside the field.
+    scroll: Cell<f32>,
 }
 
 impl TextInput {
@@ -52,7 +59,10 @@ impl TextInput {
             x: 0,
             y: 0,
             width,
-            height: INPUT_HEIGHT,
+            height: BASE_INPUT_HEIGHT as u32,
+            scale: 1.0,
+            radius: BASE_INPUT_RADIUS,
+            padding: BASE_INPUT_PADDING as i32,
             text: String::new(),
             cursor_pos: 0,
             focused: false,
@@ -66,7 +76,18 @@ impl TextInput {
             last_click: None,
             pointer: (0, 0),
             offsets: RefCell::new((String::new(), Vec::new())),
+            scroll: Cell::new(0.0),
         }
+    }
+
+    /// Scales the field's height, corner radius and padding. `width` is
+    /// taken as already scaled by the caller.
+    pub fn with_scale(mut self, scale: f32) -> Self {
+        self.scale = scale;
+        self.height = (BASE_INPUT_HEIGHT * scale) as u32;
+        self.radius = BASE_INPUT_RADIUS * scale;
+        self.padding = (BASE_INPUT_PADDING * scale) as i32;
+        self
     }
 
     pub fn with_password(mut self, password: bool) -> Self {
@@ -139,7 +160,7 @@ impl TextInput {
     /// Character boundary nearest to a window x coordinate.
     fn char_at_x(&self, x: i32) -> usize {
         let offsets = self.offsets.borrow();
-        let target = (x - self.x - INPUT_PADDING) as f32;
+        let target = (x - self.x - self.padding) as f32 + self.scroll.get();
         offsets
             .1
             .iter()
@@ -396,7 +417,7 @@ impl TextInput {
             self.y as f32,
             self.width as f32,
             self.height as f32,
-            INPUT_RADIUS,
+            self.radius,
             bg_color,
         );
 
@@ -412,7 +433,7 @@ impl TextInput {
             self.y as f32,
             self.width as f32,
             self.height as f32,
-            INPUT_RADIUS,
+            self.radius,
             border_color,
             1.0,
         );
@@ -426,70 +447,62 @@ impl TextInput {
             (&display, colors.text)
         };
 
+        let available_width = (self.width as i32 - 2 * self.padding).max(1) as f32;
+        let text_x = self.x + self.padding;
+        let (caret_x, scroll) = {
+            let offsets = self.offsets.borrow();
+            let caret = offsets.1.get(self.cursor_pos).copied().unwrap_or(0.0);
+            let text_width = offsets.1.last().copied().unwrap_or(0.0);
+            let scroll = scroll_for(caret, text_width, available_width, self.scroll.get());
+            (caret - scroll, scroll)
+        };
+        self.scroll.set(scroll);
+
         // Selection highlight, painted behind the text
         if self.focused
             && let Some((start, end)) = self.selection()
         {
             let offsets = self.offsets.borrow();
             if let (Some(from), Some(to)) = (offsets.1.get(start), offsets.1.get(end)) {
-                let limit = (self.width as i32 - 2 * INPUT_PADDING) as f32;
-                let from = from.min(limit);
-                let to = to.min(limit);
+                let from = (from - scroll).clamp(0.0, available_width);
+                let to = (to - scroll).clamp(0.0, available_width);
+                let inset = (BASE_SELECTION_INSET * self.scale) as i32;
                 canvas.fill_rect(
-                    (self.x + INPUT_PADDING) as f32 + from,
-                    (self.y + 5) as f32,
+                    text_x as f32 + from,
+                    (self.y + inset) as f32,
                     to - from,
-                    (self.height - 10) as f32,
+                    (self.height as i32 - 2 * inset) as f32,
                     colors.row_selected,
                 );
             }
         }
 
         if !text_to_render.is_empty() {
-            let text_canvas = font.render(text_to_render).with_color(text_color).finish();
+            let (text_canvas, origin_x, _) = font
+                .render(text_to_render)
+                .with_color(text_color)
+                .finish_with_origin();
             let text_y = self.y + (self.height as i32 - text_canvas.height() as i32) / 2;
-
-            // Clip text to input width
-            let available_width = (self.width as i32 - 2 * INPUT_PADDING) as u32;
-            if text_canvas.width() > available_width {
-                // Create a sub-pixmap with only the visible portion
-                let mut visible_canvas =
-                    crate::render::Canvas::new(available_width, text_canvas.height());
-                visible_canvas.pixmap.draw_pixmap(
-                    0,
-                    0,
-                    text_canvas.pixmap.as_ref(),
-                    &tiny_skia::PixmapPaint::default(),
-                    tiny_skia::Transform::identity(),
-                    None,
-                );
-                canvas.draw_canvas(&visible_canvas, self.x + INPUT_PADDING, text_y);
-            } else {
-                canvas.draw_canvas(&text_canvas, self.x + INPUT_PADDING, text_y);
-            }
+            draw_clipped(
+                canvas,
+                &text_canvas,
+                text_x,
+                text_y,
+                available_width as u32,
+                -(scroll.round() as i32) - origin_x,
+            );
         }
 
         // Draw cursor
         if self.focused {
-            let cursor_x = self.x
-                + INPUT_PADDING
-                + self
-                    .offsets
-                    .borrow()
-                    .1
-                    .get(self.cursor_pos)
-                    .copied()
-                    .unwrap_or(0.0) as i32;
+            let cursor_x = text_x + caret_x.clamp(0.0, available_width) as i32;
+            let inset = (BASE_CARET_INSET * self.scale) as i32;
 
-            let cursor_y = self.y + 6;
-            let cursor_height = self.height as i32 - 12;
-
-            // Draw cursor line
             canvas.fill_rect(
                 cursor_x as f32,
-                cursor_y as f32,
+                (self.y + inset) as f32,
                 1.0,
-                cursor_height as f32,
+                (self.height as i32 - 2 * inset) as f32,
                 colors.text,
             );
 
@@ -497,29 +510,22 @@ impl TextInput {
             if let Some(ref suffix) = self.completion
                 && !suffix.is_empty()
             {
-                let ghost_canvas = font
+                let (ghost_canvas, origin_x, _) = font
                     .render(suffix)
                     .with_color(colors.input_placeholder)
-                    .finish();
+                    .finish_with_origin();
                 let ghost_y = self.y + (self.height as i32 - ghost_canvas.height() as i32) / 2;
                 let ghost_x = cursor_x + 1;
-                let available = (self.x + self.width as i32 - INPUT_PADDING - ghost_x) as u32;
+                let available = self.x + self.width as i32 - self.padding - ghost_x;
                 if available > 0 {
-                    if ghost_canvas.width() > available {
-                        let mut clipped =
-                            crate::render::Canvas::new(available, ghost_canvas.height());
-                        clipped.pixmap.draw_pixmap(
-                            0,
-                            0,
-                            ghost_canvas.pixmap.as_ref(),
-                            &tiny_skia::PixmapPaint::default(),
-                            tiny_skia::Transform::identity(),
-                            None,
-                        );
-                        canvas.draw_canvas(&clipped, ghost_x, ghost_y);
-                    } else {
-                        canvas.draw_canvas(&ghost_canvas, ghost_x, ghost_y);
-                    }
+                    draw_clipped(
+                        canvas,
+                        &ghost_canvas,
+                        ghost_x,
+                        ghost_y,
+                        available as u32,
+                        -origin_x,
+                    );
                 }
             }
         }
@@ -532,15 +538,7 @@ impl TextInput {
         if cache.0 == display && !cache.1.is_empty() {
             return;
         }
-        let mut offsets = Vec::with_capacity(display.chars().count() + 1);
-        offsets.push(0.0);
-        for (i, _) in display.char_indices().skip(1) {
-            offsets.push(font.render(&display[..i]).measure().0);
-        }
-        if !display.is_empty() {
-            offsets.push(font.render(display).measure().0);
-        }
-        *cache = (display.to_string(), offsets);
+        *cache = (display.to_string(), font.char_advances(display));
     }
 
     pub fn set_focus(&mut self, focused: bool) {
@@ -550,6 +548,39 @@ impl TextInput {
     pub fn has_focus(&self) -> bool {
         self.focused
     }
+}
+
+/// Scroll offset that keeps the caret visible, moving the current one only
+/// when the caret has left the visible span or the text has shrunk.
+fn scroll_for(caret: f32, text_width: f32, available: f32, current: f32) -> f32 {
+    let max_scroll = (text_width - available).max(0.0);
+    let scroll = if caret < current {
+        caret
+    } else if caret > current + available {
+        caret - available
+    } else {
+        current
+    };
+    scroll.clamp(0.0, max_scroll)
+}
+
+/// Draws `src` at `(x, y)` on `canvas`, showing only `width` columns of it
+/// starting `offset` pixels in (negative offsets shift `src` leftwards).
+fn draw_clipped(canvas: &mut Canvas, src: &Canvas, x: i32, y: i32, width: u32, offset: i32) {
+    if offset == 0 && src.width() <= width {
+        canvas.draw_canvas(src, x, y);
+        return;
+    }
+    let mut clipped = Canvas::new(width, src.height());
+    clipped.pixmap.draw_pixmap(
+        offset,
+        0,
+        src.pixmap.as_ref(),
+        &tiny_skia::PixmapPaint::default(),
+        tiny_skia::Transform::identity(),
+        None,
+    );
+    canvas.draw_canvas(&clipped, x, y);
 }
 
 impl Widget for TextInput {
@@ -652,5 +683,42 @@ mod tests {
         let mut input = input("abc");
         input.handle_key(KEY_A, Modifiers::CTRL);
         assert_eq!(input.selection(), Some((0, 3)));
+    }
+
+    #[test]
+    fn scroll_keeps_the_caret_inside_the_field() {
+        let available = 100.0;
+        for (caret, text_width, current) in [
+            (0.0, 50.0, 0.0),
+            (250.0, 250.0, 0.0),
+            (250.0, 250.0, 150.0),
+            (120.0, 250.0, 150.0),
+            (30.0, 250.0, 150.0),
+            (200.0, 250.0, 300.0),
+            (50.0, 50.0, 80.0),
+        ] {
+            let scroll = scroll_for(caret, text_width, available, current);
+            let visible = caret - scroll;
+            assert!(scroll >= 0.0, "caret {caret} current {current}");
+            assert!(scroll <= (text_width - available).max(0.0));
+            assert!(
+                (0.0..=available).contains(&visible),
+                "caret {caret} current {current}"
+            );
+        }
+    }
+
+    #[test]
+    fn scroll_stays_put_while_the_caret_is_visible() {
+        assert_eq!(scroll_for(160.0, 250.0, 100.0, 150.0), 150.0);
+        assert_eq!(scroll_for(250.0, 250.0, 100.0, 150.0), 150.0);
+    }
+
+    #[test]
+    fn with_scale_scales_the_box_metrics() {
+        let input = TextInput::new(300).with_scale(2.0);
+        assert_eq!(input.height(), 64);
+        assert_eq!(input.padding, 16);
+        assert_eq!(input.radius, 10.0);
     }
 }

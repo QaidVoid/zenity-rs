@@ -216,7 +216,11 @@ impl FormsBuilder {
         let mut inputs: Vec<TextInput> = self
             .fields
             .iter()
-            .map(|field| TextInput::new(input_width).with_password(field.is_password()))
+            .map(|field| {
+                TextInput::new(input_width)
+                    .with_scale(scale)
+                    .with_password(field.is_password())
+            })
             .collect();
 
         // Set first input as focused

@@ -159,6 +159,7 @@ impl EntryBuilder {
 
         // Create text input at physical scale
         let mut input = TextInput::new(input_width)
+            .with_scale(scale)
             .with_password(self.hide_text)
             .with_default_text(&self.entry_text);
         input.set_focus(true);

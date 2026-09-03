@@ -445,6 +445,53 @@ impl Font {
         self.primary.height()
     }
 
+    /// Resolves the glyph for `c`, trying the primary font, then the emoji
+    /// font, then any system font that has it.
+    fn glyph_for(&self, c: char) -> (GlyphId, Option<FontArc>) {
+        let primary_glyph_id = self.primary.font.glyph_id(c);
+        if primary_glyph_id.0 != 0 {
+            return (primary_glyph_id, None);
+        }
+        if let Some(ref emoji_font) = self.emoji {
+            let emoji_glyph_id = emoji_font.font.glyph_id(c);
+            if emoji_glyph_id.0 != 0 {
+                return (emoji_glyph_id, Some(emoji_font.font.clone()));
+            }
+        }
+        match find_fallback_for_char(c) {
+            Some(fb) => (fb.glyph_id(c), Some(fb)),
+            None => (primary_glyph_id, None),
+        }
+    }
+
+    /// Pen x position at every character boundary of `text`, laid out as a
+    /// single line exactly as `render(text).finish()` draws it. The first
+    /// entry is 0 and the last is the total advance, so the result has one
+    /// more entry than `text` has characters. Positions are relative to the
+    /// pen origin; see `TextRenderer::finish_with_origin` for how that maps to
+    /// the rendered canvas.
+    pub fn char_advances(&self, text: &str) -> Vec<f32> {
+        let mut advances = Vec::with_capacity(text.len() + 1);
+        let mut x: f32 = 0.0;
+        let mut last_primary_glyph: Option<GlyphId> = None;
+        for c in text.chars() {
+            let (glyph_id, fallback) = self.glyph_for(c);
+            if fallback.is_none()
+                && let Some(last_id) = last_primary_glyph
+            {
+                x += self.primary.kern(last_id, glyph_id);
+            }
+            advances.push(x.round());
+            x += match fallback {
+                Some(ref fb) => fb.as_scaled(self.px_scale).h_advance(glyph_id),
+                None => self.primary.h_advance(glyph_id),
+            };
+            last_primary_glyph = fallback.is_none().then_some(glyph_id);
+        }
+        advances.push(x.round());
+        advances
+    }
+
     /// Returns a renderer for the given text.
     pub fn render<'a>(&'a self, text: &'a str) -> TextRenderer<'a> {
         TextRenderer {
@@ -489,6 +536,17 @@ impl<'a> TextRenderer<'a> {
     /// The canvas is cropped to the glyph bounds, so two strings only line up
     /// when they are placed by baseline rather than by canvas edge.
     pub fn finish_with_baseline(self) -> (Canvas, i32) {
+        let (canvas, _, base_y) = self.finish_with_origin();
+        (canvas, base_y)
+    }
+
+    /// Renders the text and also reports where the pen origin sits inside the
+    /// returned canvas, as `(canvas, origin_x, baseline_y)`.
+    ///
+    /// The canvas is cropped to the glyph bounds, so pen positions such as
+    /// those from `Font::char_advances` map to canvas columns only after
+    /// adding `origin_x`.
+    pub fn finish_with_origin(self) -> (Canvas, i32, i32) {
         let (placed, trailing_space) = self.layout();
         let glyphs = self.resolve_glyphs(placed);
 
@@ -496,7 +554,7 @@ impl<'a> TextRenderer<'a> {
             // Text is only whitespace - size canvas from trailing space advance
             let w = (trailing_space.ceil() as u32 + 2).max(1);
             let h = (self.font.primary.height().ceil() as u32 + 2).max(1);
-            return (Canvas::new(w, h), self.font.ascent().round() as i32);
+            return (Canvas::new(w, h), 0, self.font.ascent().round() as i32);
         }
 
         let bounds = glyphs
@@ -593,6 +651,7 @@ impl<'a> TextRenderer<'a> {
             Canvas {
                 pixmap,
             },
+            base_x,
             base_y,
         )
     }
@@ -678,33 +737,7 @@ impl<'a> TextRenderer<'a> {
             let mut line_start: usize = glyphs.len();
 
             for c in line.chars() {
-                let primary_glyph_id = self.font.primary.font.glyph_id(c);
-                let (glyph_id, fallback) = if primary_glyph_id.0 != 0 {
-                    // Primary text font has it
-                    (primary_glyph_id, None)
-                } else if let Some(ref emoji_font) = self.font.emoji {
-                    let emoji_glyph_id = emoji_font.font.glyph_id(c);
-                    if emoji_glyph_id.0 != 0 {
-                        // Emoji font has it
-                        (emoji_glyph_id, Some(emoji_font.font.clone()))
-                    } else {
-                        // Try system font fallback
-                        if let Some(fb) = find_fallback_for_char(c) {
-                            let fb_id = fb.glyph_id(c);
-                            (fb_id, Some(fb))
-                        } else {
-                            (primary_glyph_id, None)
-                        }
-                    }
-                } else {
-                    // No emoji font loaded, try system font fallback
-                    if let Some(fb) = find_fallback_for_char(c) {
-                        let fb_id = fb.glyph_id(c);
-                        (fb_id, Some(fb))
-                    } else {
-                        (primary_glyph_id, None)
-                    }
-                };
+                let (glyph_id, fallback) = self.font.glyph_for(c);
 
                 // Only kern within the same (primary) font
                 if fallback.is_none()
@@ -831,3 +864,37 @@ fn scale_pixmap(src: &Pixmap, target_w: u32, target_h: u32) -> Pixmap {
 }
 
 const ZWSP: char = '\u{200b}';
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn char_advances_has_one_entry_per_boundary_and_is_monotonic() {
+        let font = Font::load_with_size(15.0);
+        let text = "hello world, AVj";
+        let advances = font.char_advances(text);
+        assert_eq!(advances.len(), text.chars().count() + 1);
+        assert_eq!(advances[0], 0.0);
+        assert!(advances.windows(2).all(|w| w[0] <= w[1]));
+        assert!(advances.last().unwrap() > &0.0);
+        assert!(font.char_advances("").as_slice() == [0.0]);
+    }
+
+    #[test]
+    fn char_advances_matches_layout_positions() {
+        let font = Font::load_with_size(15.0);
+        let text = "The quick AVAW fox";
+        let advances = font.char_advances(text);
+        let (placed, _) = font.render(text).layout();
+        let mut placed = placed.iter();
+        for (i, c) in text.chars().enumerate() {
+            if c == ' ' {
+                continue;
+            }
+            let glyph = placed.next().expect("every visible char is placed");
+            assert_eq!(glyph.glyph.position.x, advances[i], "char {i} ({c:?})");
+        }
+        assert!(placed.next().is_none());
+    }
+}

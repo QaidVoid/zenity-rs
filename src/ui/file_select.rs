@@ -318,7 +318,9 @@ impl FileSelectBuilder {
         let mut cancel_button = Button::new("Cancel", &font, scale);
 
         // Search input
-        let mut search_input = TextInput::new(search_width).with_placeholder("Search...");
+        let mut search_input = TextInput::new(search_width)
+            .with_scale(scale)
+            .with_placeholder("Search...");
 
         // Navigation history
         let mut history: Vec<PathBuf> = Vec::new();
@@ -542,7 +544,9 @@ impl FileSelectBuilder {
         let filename_y = button_y - filename_row_height as i32;
         let filename_label_h = (BASE_FILENAME_LABEL_HEIGHT as f32 * scale) as i32;
         let mut filename_input = if save_mode {
-            let mut input = TextInput::new(main_w).with_placeholder("Enter filename...");
+            let mut input = TextInput::new(main_w)
+                .with_scale(scale)
+                .with_placeholder("Enter filename...");
             if let Some(name) = &preselected_name {
                 input = input.with_default_text(name);
             }
