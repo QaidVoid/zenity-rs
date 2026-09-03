@@ -265,7 +265,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             Long("no-wrap") => no_wrap = true,
             Long("no-markup") => no_markup = true,
             Long("ellipsize") => ellipsize = true,
-            Long("icon-name") | Long("icon") => icon_name = Some(parser.value()?.string()?),
+            Long("icon-name") | Long("icon") | Long("window-icon") => icon_name = Some(parser.value()?.string()?),
             Long("switch") => switch_mode = true,
             Long("extra-button") => extra_buttons.push(parser.value()?.string()?),
             Long("ok-label") => ok_label = parser.value()?.string()?,
@@ -774,7 +774,7 @@ USAGE:
     --question            Display a question dialog (Yes/No)
       --timeout=N         Auto-close after N seconds (exit code 5)
       --no-wrap           Do not wrap text (width becomes minimum, content can expand)
-      --icon=ICON         Set the icon name (also accepts --icon-name for compatibility)
+      --icon=ICON         Set the icon name (also accepts --icon-name and --window-icon for compatibility)
       --switch            Only show extra buttons (suppress OK/Cancel)
       --extra-button=TEXT Add extra buttons
       --no-markup         Do not enable pango markup (for compatibility)
