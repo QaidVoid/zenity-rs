@@ -90,7 +90,6 @@ pub(crate) struct X11Window {
     window: xproto::Window,
     gc: xproto::Gcontext,
     lookup_table: LookupTable,
-    xkb_group: u8,
     cursor_text: xproto::Cursor,
     current_cursor: CursorShape,
     /// Reusable buffer for ARGB pixel uploads via `PutImage` (the non-SHM fallback).
@@ -419,7 +418,6 @@ impl X11Window {
             window,
             gc,
             lookup_table,
-            xkb_group: 0,
             cursor_text,
             current_cursor: CursorShape::Default,
             upload_buf: Vec::new(),
@@ -477,9 +475,7 @@ impl X11Window {
 
                 let modifiers = convert_modifiers(press.state);
                 let keycode = kbvm::Keycode::from_x11(press.detail.into());
-                let mods = convert_to_kbvm_mods(press.state);
-
-                let group = kbvm::GroupIndex(self.xkb_group as u32);
+                let (mods, group) = convert_to_kbvm_mods(press.state);
                 let lookup = self.lookup_table.lookup(group, mods, keycode);
 
                 let keysym = lookup.into_iter().next().map(|p| p.keysym().0).unwrap_or(0);
@@ -501,9 +497,7 @@ impl X11Window {
             Event::KeyRelease(release) if release.event == self.window => {
                 let modifiers = convert_modifiers(release.state);
                 let keycode = kbvm::Keycode::from_x11(release.detail.into());
-                let mods = convert_to_kbvm_mods(release.state);
-
-                let group = kbvm::GroupIndex(self.xkb_group as u32);
+                let (mods, group) = convert_to_kbvm_mods(release.state);
                 let keysym = self
                     .lookup_table
                     .lookup(group, mods, keycode)
@@ -572,24 +566,14 @@ fn convert_modifiers(state: KeyButMask) -> Modifiers {
     mods
 }
 
-fn convert_to_kbvm_mods(state: KeyButMask) -> kbvm::ModifierMask {
-    let mut mods = kbvm::ModifierMask::NONE;
-    if state.contains(KeyButMask::SHIFT) {
-        mods |= kbvm::ModifierMask::SHIFT;
-    }
-    if state.contains(KeyButMask::CONTROL) {
-        mods |= kbvm::ModifierMask::CONTROL;
-    }
-    if state.contains(KeyButMask::MOD1) {
-        mods |= kbvm::ModifierMask::MOD1;
-    }
-    if state.contains(KeyButMask::MOD4) {
-        mods |= kbvm::ModifierMask::MOD4;
-    }
-    if state.contains(KeyButMask::LOCK) {
-        mods |= kbvm::ModifierMask::LOCK;
-    }
-    mods
+/// The low byte of the core X11 key state holds the eight real modifiers in
+/// the same bit order kbvm uses; XKB stores the effective group in bits 13-14.
+fn convert_to_kbvm_mods(state: KeyButMask) -> (kbvm::ModifierMask, kbvm::GroupIndex) {
+    let state = u32::from(u16::from(state));
+    (
+        kbvm::ModifierMask(state & 0xff),
+        kbvm::GroupIndex((state >> 13) & 0x3),
+    )
 }
 
 impl Window for X11Window {
