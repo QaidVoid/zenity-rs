@@ -340,11 +340,11 @@ impl ProgressBuilder {
 
         // Event loop with timeout for animation
         let mut window_dragging = false;
+        let mut stdin_done = false;
         loop {
             let mut needs_redraw = false;
 
-            // Check for stdin messages
-            loop {
+            while !stdin_done {
                 match rx.try_recv() {
                     Ok(StdinMessage::Progress(p)) => {
                         progress_bar.set_percentage(p);
@@ -376,7 +376,7 @@ impl ProgressBuilder {
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        needs_redraw = true;
+                        stdin_done = true;
                         if auto_close {
                             return Ok(ProgressResult::Completed);
                         }
