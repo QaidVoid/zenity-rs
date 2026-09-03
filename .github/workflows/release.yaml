@@ -128,7 +128,7 @@ jobs:
             export CARGO_TARGET_${TENV}_LINKER="$RUNNER_TEMP/zigcc"
             # CARGO_TARGET_RUSTFLAGS (not RUSTFLAGS) so the flags do not leak
             # into proc macros built for the host
-            export CARGO_TARGET_RUSTFLAGS="-C target-feature=+crt-static -C link-self-contained=no"
+            export CARGO_TARGET_${TENV}_RUSTFLAGS="-C target-feature=+crt-static -C link-self-contained=no"
             export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-cache"
             export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-cache"
           fi
