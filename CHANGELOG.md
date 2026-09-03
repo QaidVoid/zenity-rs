@@ -1,4 +1,23 @@
 
+## [0.2.14](https://github.com/QaidVoid/zenity-rs/compare/v0.2.13...v0.2.14) - 2026-09-03
+
+### Fixed
+
+- *(backend)* Compile with only the wayland feature - ([db04b18](https://github.com/QaidVoid/zenity-rs/commit/db04b18e09c65d69ffb8af96f1fbcaf7d66119df))
+- *(calendar)* Clamp day to month and scale header hit-testing - ([efde950](https://github.com/QaidVoid/zenity-rs/commit/efde950048c836c8437b9dd43d75b4b4b59efd3f))
+- *(cli)* Keep default buttons and forms field order - ([806a64d](https://github.com/QaidVoid/zenity-rs/commit/806a64dc4b84ff0dd68ea29d67ac4c8156eba911))
+- *(file-select)* Fix OK on folders, multiple dirs and min size - ([ac4c604](https://github.com/QaidVoid/zenity-rs/commit/ac4c604c43284576022e33835334a893397ebc07))
+- *(progress)* Stop spinning after stdin closes - ([dff367a](https://github.com/QaidVoid/zenity-rs/commit/dff367a58a0f285912dd2f6e6393fa60e8652619))
+- *(render)* Remember which font serves each fallback char - ([6e7e989](https://github.com/QaidVoid/zenity-rs/commit/6e7e98925fae4eba2c370a2e636b38c9b3e0f787))
+- *(scale)* Reject --min-value above --max-value - ([ca9bb2c](https://github.com/QaidVoid/zenity-rs/commit/ca9bb2cf3eb46eb537b74d305a4a0b788ca0762d))
+- *(text-input)* Scroll with the caret and honor the scale - ([a940fee](https://github.com/QaidVoid/zenity-rs/commit/a940feeee3a8e125377d9bae7f24e0c66d514bb1))
+- *(x11)* Honor NumLock, AltGr and the active XKB layout - ([5fd4db3](https://github.com/QaidVoid/zenity-rs/commit/5fd4db30270ffe04b665d1c5973bc8eb813b99e5))
+
+### Other
+
+- *(text-info)* Wrap lines in log time and render lazily - ([aa3dbcf](https://github.com/QaidVoid/zenity-rs/commit/aa3dbcf3e5751ca2d00c22e6a774620c22521aee))
+- Add support for `riscv64`, `loongarch64`, `ppc64` and `ppc64le` ([#50](https://github.com/QaidVoid/zenity-rs/pull/50)) - ([5a91b70](https://github.com/QaidVoid/zenity-rs/commit/5a91b70a419f9b7c63a88af49c89b7bb6a1eb9df))
+
 ## [0.2.13](https://github.com/QaidVoid/zenity-rs/compare/v0.2.12...v0.2.13) - 2026-09-03
 
 ### Other
