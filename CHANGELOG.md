@@ -1,4 +1,10 @@
 
+## [0.2.13](https://github.com/QaidVoid/zenity-rs/compare/v0.2.12...v0.2.13) - 2026-09-03
+
+### Other
+
+- Add `--window-icon` as alias of `--icon` ([#48](https://github.com/QaidVoid/zenity-rs/pull/48)) - ([ff04a7a](https://github.com/QaidVoid/zenity-rs/commit/ff04a7a0ef280d3655d97003bf137f18e79e0b07))
+
 ## [0.2.12](https://github.com/QaidVoid/zenity-rs/compare/v0.2.11...v0.2.12) - 2026-08-24
 
 ### Added
