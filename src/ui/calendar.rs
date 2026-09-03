@@ -98,9 +98,9 @@ impl CalendarBuilder {
         self
     }
 
-    /// Set initial year.
+    /// Set initial year (at least 1).
     pub fn year(mut self, year: u32) -> Self {
-        self.year = Some(year);
+        self.year = Some(year.max(1));
         self
     }
 
@@ -190,7 +190,7 @@ impl CalendarBuilder {
         let now = current_date();
         let mut year = self.year.unwrap_or(now.0);
         let mut month = self.month.unwrap_or(now.1);
-        let mut selected_day = self.day.unwrap_or(now.2);
+        let mut selected_day = clamp_day(year, month, self.day.unwrap_or(now.2));
 
         // Create buttons at physical scale
         let mut ok_button = Button::new("OK", &font, scale);
@@ -328,50 +328,43 @@ impl CalendarBuilder {
                     }
                     // Check header clicks
                     else if mouse_y >= header_y && mouse_y < header_y + header_height as i32 {
-                        // Calculate actual positions based on text widths
-                        let month_name = month_name(month);
-                        let month_text_width = font.render(month_name).finish().width() as i32;
-                        let year_str = year.to_string();
-                        let year_text_width = font.render(&year_str).finish().width() as i32;
-
-                        let prev_arrow_end = calendar_x + 28;
-                        let month_x = calendar_x + 35;
-                        let month_end = month_x + month_text_width;
-                        let year_x = month_x + month_text_width + 8;
-                        let year_end = year_x + year_text_width;
-                        let today_x = calendar_x + grid_width as i32 - 70;
-                        let next_arrow_start = calendar_x + grid_width as i32 - 24;
+                        let month_text_width = font.render(month_name(month)).finish().width();
+                        let year_text_width = font.render(&year.to_string()).finish().width();
+                        let today_text_width = font.render("Today").finish().width();
+                        let layout = header_layout(
+                            calendar_x,
+                            grid_width,
+                            scale,
+                            month_text_width,
+                            year_text_width,
+                            today_text_width,
+                        );
 
                         // Check in order from left to right
-                        if mouse_x < prev_arrow_end {
+                        if mouse_x < layout.prev_arrow_end {
                             // Previous month
-                            if month == 1 {
-                                month = 12;
-                                year -= 1;
-                            } else {
-                                month -= 1;
-                            }
+                            (year, month) = prev_month(year, month);
                             selected_day = selected_day.min(days_in_month(year, month));
                             needs_redraw = true;
-                        } else if mouse_x >= month_x && mouse_x < month_end + 5 {
+                        } else if mouse_x >= layout.month_x && mouse_x < layout.month_end {
                             // Month click
                             dropdown = DropdownState::Month;
                             dropdown_hover = Some((month - 1) as usize);
                             needs_redraw = true;
-                        } else if mouse_x >= year_x && mouse_x < year_end + 5 {
+                        } else if mouse_x >= layout.year_x && mouse_x < layout.year_end {
                             // Year click
                             dropdown = DropdownState::Year;
                             dropdown_hover = Some(5); // Current year is at index 5
                             year_scroll_offset = 0;
                             needs_redraw = true;
-                        } else if mouse_x >= today_x && mouse_x < next_arrow_start {
+                        } else if mouse_x >= layout.today_x && mouse_x < layout.next_arrow_start {
                             // Today click
                             let today = current_date();
                             year = today.0;
                             month = today.1;
                             selected_day = today.2;
                             needs_redraw = true;
-                        } else if mouse_x >= next_arrow_start {
+                        } else if mouse_x >= layout.next_arrow_start {
                             // Next month
                             if month == 12 {
                                 month = 1;
@@ -471,12 +464,7 @@ impl CalendarBuilder {
                                 if selected_day > 1 {
                                     selected_day -= 1;
                                 } else {
-                                    if month == 1 {
-                                        month = 12;
-                                        year -= 1;
-                                    } else {
-                                        month -= 1;
-                                    }
+                                    (year, month) = prev_month(year, month);
                                     selected_day = days_in_month(year, month);
                                 }
                                 needs_redraw = true;
@@ -499,12 +487,7 @@ impl CalendarBuilder {
                                 if selected_day > 7 {
                                     selected_day -= 7;
                                 } else {
-                                    if month == 1 {
-                                        month = 12;
-                                        year -= 1;
-                                    } else {
-                                        month -= 1;
-                                    }
+                                    (year, month) = prev_month(year, month);
                                     let days_prev = days_in_month(year, month);
                                     selected_day = days_prev - (7 - selected_day);
                                 }
@@ -672,45 +655,33 @@ fn draw_calendar(
         header_bg,
     );
 
-    // Navigation arrows
     let nav_color = colors.text;
-
-    // Previous arrow
     let prev_arrow = font.render("<").with_color(nav_color).finish();
-    canvas.draw_canvas(
-        &prev_arrow,
-        calendar_x + (10.0 * scale) as i32,
-        header_y + (12.0 * scale) as i32,
-    );
-
-    // Next arrow
     let next_arrow = font.render(">").with_color(nav_color).finish();
-    canvas.draw_canvas(
-        &next_arrow,
-        calendar_x + grid_width as i32 - (18.0 * scale) as i32,
-        header_y + (12.0 * scale) as i32,
+    let month_text = font
+        .render(month_name(month))
+        .with_color(colors.text)
+        .finish();
+    let year_text = font
+        .render(&year.to_string())
+        .with_color(colors.text)
+        .finish();
+    let today_text = font.render("Today").with_color(rgb(80, 160, 100)).finish();
+
+    let layout = header_layout(
+        calendar_x,
+        grid_width,
+        scale,
+        month_text.width(),
+        year_text.width(),
+        today_text.width(),
     );
-
-    // Month name (clickable)
-    let month_name_str = month_name(month);
-    let month_text = font.render(month_name_str).with_color(colors.text).finish();
-    let month_x = calendar_x + (35.0 * scale) as i32;
-    canvas.draw_canvas(&month_text, month_x, header_y + (12.0 * scale) as i32);
-
-    // Year (clickable)
-    let year_str = year.to_string();
-    let year_text = font.render(&year_str).with_color(colors.text).finish();
-    let year_x = month_x + month_text.width() as i32 + (8.0 * scale) as i32;
-    canvas.draw_canvas(&year_text, year_x, header_y + (12.0 * scale) as i32);
-
-    // "Today" link (right side) - green color for action
-    let today_color = rgb(80, 160, 100);
-    let today_text = font.render("Today").with_color(today_color).finish();
-    let today_x = calendar_x + grid_width as i32
-        - (24.0 * scale) as i32
-        - today_text.width() as i32
-        - (8.0 * scale) as i32;
-    canvas.draw_canvas(&today_text, today_x, header_y + (12.0 * scale) as i32);
+    let header_text_y = header_y + (12.0 * scale) as i32;
+    canvas.draw_canvas(&prev_arrow, layout.prev_arrow_x, header_text_y);
+    canvas.draw_canvas(&next_arrow, layout.next_arrow_x, header_text_y);
+    canvas.draw_canvas(&month_text, layout.month_x, header_text_y);
+    canvas.draw_canvas(&year_text, layout.year_x, header_text_y);
+    canvas.draw_canvas(&today_text, layout.today_x, header_text_y);
 
     // Day headers
     let day_header_y = header_y + header_height as i32;
@@ -1069,6 +1040,61 @@ impl Default for CalendarBuilder {
     }
 }
 
+/// Horizontal positions of the header controls, shared by drawing and hit-testing.
+struct HeaderLayout {
+    prev_arrow_x: i32,
+    prev_arrow_end: i32,
+    month_x: i32,
+    month_end: i32,
+    year_x: i32,
+    year_end: i32,
+    today_x: i32,
+    next_arrow_start: i32,
+    next_arrow_x: i32,
+}
+
+fn header_layout(
+    calendar_x: i32,
+    grid_width: u32,
+    scale: f32,
+    month_width: u32,
+    year_width: u32,
+    today_width: u32,
+) -> HeaderLayout {
+    let px = |base: f32| (base * scale) as i32;
+    let right = calendar_x + grid_width as i32;
+    let month_x = calendar_x + px(35.0);
+    let year_x = month_x + month_width as i32 + px(8.0);
+    let next_arrow_start = right - px(24.0);
+    HeaderLayout {
+        prev_arrow_x: calendar_x + px(10.0),
+        prev_arrow_end: calendar_x + px(28.0),
+        month_x,
+        month_end: month_x + month_width as i32 + px(5.0),
+        year_x,
+        year_end: year_x + year_width as i32 + px(5.0),
+        today_x: next_arrow_start - today_width as i32 - px(8.0),
+        next_arrow_start,
+        next_arrow_x: right - px(18.0),
+    }
+}
+
+/// Steps back one month, staying at January of year 1 rather than going below it.
+fn prev_month(year: u32, month: u32) -> (u32, u32) {
+    if month > 1 {
+        (year, month - 1)
+    } else if year > 1 {
+        (year - 1, 12)
+    } else {
+        (year, month)
+    }
+}
+
+/// Clamps `day` into the valid range for the given month.
+fn clamp_day(year: u32, month: u32, day: u32) -> u32 {
+    day.clamp(1, days_in_month(year, month))
+}
+
 fn darken(color: Rgba, amount: f32) -> Rgba {
     rgb(
         (color.r as f32 * (1.0 - amount)) as u8,
@@ -1152,5 +1178,53 @@ fn month_name(month: u32) -> &'static str {
         11 => "November",
         12 => "December",
         _ => "Unknown",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn clamp_day_respects_month_length() {
+        assert_eq!(clamp_day(2026, 2, 31), 28);
+        assert_eq!(clamp_day(2024, 2, 31), 29);
+        assert_eq!(clamp_day(2026, 4, 31), 30);
+        assert_eq!(clamp_day(2026, 1, 31), 31);
+        assert_eq!(clamp_day(2026, 1, 0), 1);
+    }
+
+    #[test]
+    fn prev_month_never_goes_below_year_one() {
+        assert_eq!(prev_month(2026, 3), (2026, 2));
+        assert_eq!(prev_month(2026, 1), (2025, 12));
+        assert_eq!(prev_month(1, 1), (1, 1));
+        assert_eq!(prev_month(0, 1), (0, 1));
+    }
+
+    #[test]
+    fn header_layout_scales_with_hidpi() {
+        let one = header_layout(16, 252, 1.0, 60, 30, 38);
+        let two = header_layout(32, 504, 2.0, 120, 60, 76);
+        assert_eq!(one.prev_arrow_end, 16 + 28);
+        assert_eq!(one.month_x, 16 + 35);
+        assert_eq!(one.next_arrow_start, 16 + 252 - 24);
+        assert_eq!(one.today_x, 16 + 252 - 24 - 38 - 8);
+        assert_eq!(two.prev_arrow_end, 32 + 56);
+        assert_eq!(two.month_x, 32 + 70);
+        assert_eq!(two.year_x, 32 + 70 + 120 + 16);
+        assert_eq!(two.next_arrow_start, 32 + 504 - 48);
+        assert_eq!(two.today_x, 32 + 504 - 48 - 76 - 16);
+
+        for l in [one, two] {
+            assert!(l.prev_arrow_x < l.prev_arrow_end);
+            assert!(l.prev_arrow_end <= l.month_x);
+            assert!(l.month_x < l.month_end);
+            assert!(l.month_end <= l.year_x + 5);
+            assert!(l.year_x < l.year_end);
+            assert!(l.year_end <= l.today_x);
+            assert!(l.today_x < l.next_arrow_start);
+            assert!(l.next_arrow_start <= l.next_arrow_x);
+        }
     }
 }
