@@ -5,6 +5,9 @@ pub(crate) mod x11;
 
 use bitflags::bitflags;
 
+#[cfg(not(any(feature = "x11", feature = "wayland")))]
+compile_error!("At least one of 'x11' or 'wayland' features must be enabled");
+
 use crate::{error::Error, render::Canvas};
 
 /// Default scale factor for rendering
@@ -208,10 +211,13 @@ pub(crate) fn create_window(width: u16, height: u16) -> Result<AnyWindow, Error>
     }
 
     #[cfg(feature = "x11")]
-    return try_x11(width, height);
-
-    #[cfg(not(any(feature = "x11", feature = "wayland")))]
-    compile_error!("At least one of 'x11' or 'wayland' features must be enabled");
+    {
+        try_x11(width, height)
+    }
+    #[cfg(not(feature = "x11"))]
+    {
+        Err(Error::NoDisplay)
+    }
 }
 
 #[cfg(feature = "wayland")]

@@ -205,6 +205,7 @@ impl Canvas {
 
     /// Converts the whole canvas to premultiplied ARGB, reusing `out`'s capacity.
     /// Output byte order is B, G, R, A (little-endian ARGB u32), matching X11/Wayland.
+    #[cfg(feature = "x11")]
     pub fn argb_into(&self, out: &mut Vec<u8>) {
         out.clear();
         out.reserve(self.pixmap.data().len());
@@ -213,6 +214,7 @@ impl Canvas {
 
     /// Converts a sub-rectangle to premultiplied ARGB, reusing `out`'s capacity.
     /// Pixels are written row-major with no padding.
+    #[cfg(feature = "x11")]
     pub fn argb_rect_into(&self, x: u32, y: u32, w: u32, h: u32, out: &mut Vec<u8>) {
         let pw = self.pixmap.width();
         out.clear();
@@ -288,6 +290,7 @@ impl Canvas {
 /// Appends RGBA pixels (R,G,B,A byte order) as premultiplied ARGB
 /// (B,G,R,A byte order) to `out`. tiny-skia already stores premultiplied alpha,
 /// so no un-premultiplication is needed.
+#[cfg(feature = "x11")]
 fn swizzle_rgba_to_argb(rgba: &[u8], out: &mut Vec<u8>) {
     for c in rgba.as_chunks::<4>().0 {
         out.push(c[2]); // B
