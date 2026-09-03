@@ -1,6 +1,6 @@
 //! Text info dialog implementation for displaying text from files or stdin.
 
-use std::io::Read;
+use std::{collections::HashMap, io::Read};
 
 use crate::{
     backend::{Window, WindowEvent},
@@ -109,15 +109,14 @@ impl TextInfoBuilder {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Read content from file or stdin
-        let content = if let Some(ref filename) = self.filename {
-            std::fs::read_to_string(filename).map_err(Error::Io)?
+        let raw = if let Some(ref filename) = self.filename {
+            std::fs::read(filename).map_err(Error::Io)?
         } else {
-            let mut buf = String::new();
-            std::io::stdin()
-                .read_to_string(&mut buf)
-                .map_err(Error::Io)?;
+            let mut buf = Vec::new();
+            std::io::stdin().read_to_end(&mut buf).map_err(Error::Io)?;
             buf
         };
+        let content = String::from_utf8_lossy(&raw);
 
         let has_checkbox = self.checkbox_text.is_some();
 
@@ -180,42 +179,7 @@ impl TextInfoBuilder {
         let mut wrapped_lines: Vec<String> = Vec::new();
 
         for line in content.lines() {
-            if line.is_empty() {
-                wrapped_lines.push(String::new());
-            } else {
-                // Wrap long lines
-                let mut remaining = line;
-                while !remaining.is_empty() {
-                    let (line_w, _) = font.render(remaining).measure();
-                    if line_w as u32 <= max_text_width {
-                        wrapped_lines.push(remaining.to_string());
-                        break;
-                    }
-
-                    // Find break point
-                    let mut break_at = remaining.len();
-                    for (i, _) in remaining.char_indices().rev() {
-                        let test = &remaining[..i];
-                        let (w, _) = font.render(test).measure();
-                        if w as u32 <= max_text_width {
-                            // Try to break at word boundary
-                            if let Some(space_pos) = test.rfind(|c: char| c.is_whitespace()) {
-                                break_at = space_pos + 1;
-                            } else {
-                                break_at = i;
-                            }
-                            break;
-                        }
-                    }
-
-                    if break_at == 0 {
-                        break_at = 1; // Ensure progress
-                    }
-
-                    wrapped_lines.push(remaining[..break_at].trim_end().to_string());
-                    remaining = remaining[break_at..].trim_start();
-                }
-            }
+            wrap_line(&font, line, max_text_width, &mut wrapped_lines);
         }
 
         let total_lines = wrapped_lines.len();
@@ -278,26 +242,16 @@ impl TextInfoBuilder {
             colors.input_border,
             1.0,
         );
-        let line_canvases: Vec<Canvas> = wrapped_lines
-            .iter()
-            .map(|line| {
-                if line.is_empty() {
-                    return Canvas::new(1, 1);
-                }
-                let tc = font.render(line).with_color(colors.text).finish();
-                let mut lc = Canvas::new(tc.width().max(1), line_height);
-                lc.fill(colors.input_bg);
-                lc.draw_canvas(&tc, 0, 0);
-                lc
-            })
-            .collect();
+        // Lines are rasterized on demand and kept in a small cache so scrolling
+        // stays a raw blit without pre-rendering the whole document up front.
+        let mut line_cache: HashMap<usize, Canvas> = HashMap::new();
 
         // Draw function
         let draw = |canvas: &mut Canvas,
                     colors: &Colors,
                     font: &Font,
                     chrome: &Canvas,
-                    line_canvases: &[Canvas],
+                    line_cache: &mut HashMap<usize, Canvas>,
                     wrapped_lines: &[String],
                     scroll_offset: usize,
                     visible_lines: usize,
@@ -323,12 +277,16 @@ impl TextInfoBuilder {
             let ch = canvas.height();
             canvas.blit_region(chrome, 0, 0, cw, ch, 0, 0);
 
-            // Visible text lines (opaque, pre-rendered) - raw copy each.
+            // Visible text lines (opaque, cached) - raw copy each.
             let text_padding = (8.0 * scale) as i32;
-            for (i, line_idx) in
-                (scroll_offset..wrapped_lines.len().min(scroll_offset + visible_lines)).enumerate()
-            {
-                let lc = &line_canvases[line_idx];
+            let visible = scroll_offset..wrapped_lines.len().min(scroll_offset + visible_lines);
+            if line_cache.len() > visible_lines * 8 {
+                line_cache.retain(|idx, _| visible.contains(idx));
+            }
+            for (i, line_idx) in visible.enumerate() {
+                let lc = line_cache.entry(line_idx).or_insert_with(|| {
+                    render_line(font, &wrapped_lines[line_idx], colors, line_height)
+                });
                 if lc.width() > 1 {
                     let y = text_area_y + text_padding + (i as u32 * line_height) as i32;
                     canvas.blit_region(
@@ -464,7 +422,7 @@ impl TextInfoBuilder {
             colors,
             &font,
             &chrome_canvas,
-            &line_canvases,
+            &mut line_cache,
             &wrapped_lines,
             scroll_offset,
             visible_lines,
@@ -785,7 +743,7 @@ impl TextInfoBuilder {
                     colors,
                     &font,
                     &chrome_canvas,
-                    &line_canvases,
+                    &mut line_cache,
                     &wrapped_lines,
                     scroll_offset,
                     visible_lines,
@@ -817,10 +775,114 @@ impl Default for TextInfoBuilder {
     }
 }
 
+/// Rasterizes one wrapped line into an opaque canvas, or a 1x1 placeholder
+/// for an empty line.
+fn render_line(font: &Font, line: &str, colors: &Colors, line_height: u32) -> Canvas {
+    if line.is_empty() {
+        return Canvas::new(1, 1);
+    }
+    let tc = font.render(line).with_color(colors.text).finish();
+    let mut lc = Canvas::new(tc.width().max(1), line_height);
+    lc.fill(colors.input_bg);
+    lc.draw_canvas(&tc, 0, 0);
+    lc
+}
+
+/// Splits one logical line into pieces no wider than `max_width` pixels,
+/// breaking after the last whitespace that fits and hard-breaking otherwise.
+///
+/// Each piece is found with an exponential probe followed by a binary search
+/// over character counts, so the number of measurements per piece is
+/// logarithmic in its length rather than linear.
+fn wrap_line(font: &Font, line: &str, max_width: u32, out: &mut Vec<String>) {
+    if line.is_empty() {
+        out.push(String::new());
+        return;
+    }
+
+    let fits = |s: &str| font.render(s).measure().0 as u32 <= max_width;
+    let prefix_end =
+        |s: &str, chars: usize| s.char_indices().nth(chars).map_or(s.len(), |(i, _)| i);
+
+    let mut remaining = line;
+    while !remaining.is_empty() {
+        let mut lo = 0;
+        let mut hi = 1;
+        loop {
+            let end = prefix_end(remaining, hi);
+            if !fits(&remaining[..end]) {
+                break;
+            }
+            if end == remaining.len() {
+                out.push(remaining.to_string());
+                return;
+            }
+            lo = hi;
+            hi *= 2;
+        }
+        while hi - lo > 1 {
+            let mid = lo + (hi - lo) / 2;
+            if fits(&remaining[..prefix_end(remaining, mid)]) {
+                lo = mid;
+            } else {
+                hi = mid;
+            }
+        }
+
+        let fit_end = prefix_end(remaining, lo);
+        let mut break_at = remaining[..fit_end]
+            .char_indices()
+            .rev()
+            .find(|(_, c)| c.is_whitespace())
+            .map_or(fit_end, |(i, c)| i + c.len_utf8());
+        if break_at == 0 {
+            break_at = prefix_end(remaining, 1);
+        }
+
+        out.push(remaining[..break_at].trim_end().to_string());
+        remaining = remaining[break_at..].trim_start();
+    }
+}
+
 fn darken(color: crate::render::Rgba, amount: f32) -> crate::render::Rgba {
     rgb(
         (color.r as f32 * (1.0 - amount)) as u8,
         (color.g as f32 * (1.0 - amount)) as u8,
         (color.b as f32 * (1.0 - amount)) as u8,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::{Duration, Instant};
+
+    use super::*;
+
+    #[test]
+    fn wraps_long_single_line_quickly() {
+        let font = Font::load(1.0);
+        let max_width = 400;
+        let mut line = "lorem ipsum dolor ".repeat(300);
+        line.push_str(&"x".repeat(2_000));
+
+        let start = Instant::now();
+        let mut pieces = Vec::new();
+        wrap_line(&font, &line, max_width, &mut pieces);
+        let elapsed = start.elapsed();
+
+        assert!(pieces.len() > 20);
+        for piece in &pieces {
+            assert!(!piece.is_empty());
+            assert!(
+                font.render(piece).measure().0 as u32 <= max_width,
+                "{piece:?}"
+            );
+        }
+        let non_ws = |s: &str| s.chars().filter(|c| !c.is_whitespace()).collect::<String>();
+        assert_eq!(non_ws(&pieces.concat()), non_ws(&line));
+        assert!(
+            elapsed < Duration::from_secs(5),
+            "wrapping took {elapsed:?}"
+        );
+    }
 }
