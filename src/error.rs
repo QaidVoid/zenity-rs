@@ -8,6 +8,8 @@ pub enum Error {
     Wayland(WaylandError),
     NoDisplay,
     Io(std::io::Error),
+    /// A command line option had a value that cannot be used.
+    InvalidArgument(String),
 }
 
 #[cfg(feature = "x11")]
@@ -37,6 +39,7 @@ impl fmt::Display for Error {
             Error::Wayland(e) => write!(f, "Wayland error: {e}"),
             Error::NoDisplay => write!(f, "no display server available"),
             Error::Io(e) => write!(f, "IO error: {e}"),
+            Error::InvalidArgument(msg) => write!(f, "invalid argument: {msg}"),
         }
     }
 }

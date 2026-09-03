@@ -124,6 +124,13 @@ impl ScaleBuilder {
     }
 
     pub fn show(self) -> Result<ScaleResult, Error> {
+        if self.min_value > self.max_value {
+            return Err(Error::InvalidArgument(format!(
+                "--min-value ({}) must not exceed --max-value ({})",
+                self.min_value, self.max_value
+            )));
+        }
+
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Clamp initial value to range
@@ -222,9 +229,9 @@ impl ScaleBuilder {
 
         // Helper to calculate thumb position from value
         let value_to_thumb_x = |val: i32| -> i32 {
-            let range = (self.max_value - self.min_value) as f32;
+            let range = (self.max_value as i64 - self.min_value as i64) as f32;
             let ratio = if range > 0.0 {
-                (val - self.min_value) as f32 / range
+                (val as i64 - self.min_value as i64) as f32 / range
             } else {
                 0.0
             };
@@ -243,12 +250,7 @@ impl ScaleBuilder {
                 0.0
             };
 
-            let range = self.max_value - self.min_value;
-            let raw_value = self.min_value + (ratio * range as f32) as i32;
-
-            // Snap to step
-            let steps = (raw_value - self.min_value) / self.step;
-            (self.min_value + steps * self.step).clamp(self.min_value, self.max_value)
+            ratio_to_value(self.min_value, self.max_value, self.step, ratio)
         };
 
         // Draw function
@@ -473,14 +475,14 @@ impl ScaleBuilder {
                 WindowEvent::KeyPress(key_event) => {
                     match key_event.keysym {
                         KEY_LEFT => {
-                            let new_value = (value - self.step).max(self.min_value);
+                            let new_value = value.saturating_sub(self.step).max(self.min_value);
                             if new_value != value {
                                 value = new_value;
                                 needs_redraw = true;
                             }
                         }
                         KEY_RIGHT => {
-                            let new_value = (value + self.step).min(self.max_value);
+                            let new_value = value.saturating_add(self.step).min(self.max_value);
                             if new_value != value {
                                 value = new_value;
                                 needs_redraw = true;
@@ -575,5 +577,41 @@ impl ScaleBuilder {
 impl Default for ScaleBuilder {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+/// Maps a 0..=1 slider ratio onto `min..=max`, snapped to `step`.
+fn ratio_to_value(min: i32, max: i32, step: i32, ratio: f32) -> i32 {
+    let min = min as i64;
+    let max = max as i64;
+    let step = step.max(1) as i64;
+    let raw = min + (ratio.clamp(0.0, 1.0) * (max - min) as f32) as i64;
+    let steps = (raw - min) / step;
+    (min + steps * step).clamp(min, max) as i32
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ratio_to_value_endpoints() {
+        assert_eq!(ratio_to_value(0, 100, 1, 0.0), 0);
+        assert_eq!(ratio_to_value(0, 100, 1, 1.0), 100);
+        assert_eq!(ratio_to_value(0, 100, 1, 0.5), 50);
+    }
+
+    #[test]
+    fn ratio_to_value_snaps_to_step() {
+        assert_eq!(ratio_to_value(0, 100, 10, 0.27), 20);
+        assert_eq!(ratio_to_value(0, 100, 30, 1.0), 90);
+    }
+
+    #[test]
+    fn ratio_to_value_extreme_range_does_not_overflow() {
+        assert_eq!(ratio_to_value(i32::MIN, i32::MAX, 1, 0.0), i32::MIN);
+        assert_eq!(ratio_to_value(i32::MIN, i32::MAX, 1, 1.0), i32::MAX);
+        assert_eq!(ratio_to_value(i32::MIN, i32::MAX, 1, 0.5), 0);
+        assert_eq!(ratio_to_value(5, 5, 1, 0.5), 5);
     }
 }
