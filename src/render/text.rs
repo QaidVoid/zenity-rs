@@ -1,5 +1,5 @@
 use std::{
-    collections::HashSet,
+    collections::{HashMap, HashSet},
     path::{Path, PathBuf},
     sync::{Mutex, OnceLock},
 };
@@ -36,7 +36,14 @@ struct CachedFont {
     load_failed: bool,
 }
 
-static FALLBACK_CACHE: OnceLock<Mutex<Vec<CachedFont>>> = OnceLock::new();
+struct FallbackCache {
+    fonts: Vec<CachedFont>,
+    // Index into `fonts` per character, or None when no system font has it.
+    // Without this every miss re-reads every font file from disk.
+    by_char: HashMap<char, Option<usize>>,
+}
+
+static FALLBACK_CACHE: OnceLock<Mutex<FallbackCache>> = OnceLock::new();
 
 fn discover_system_fonts() -> Vec<SystemFontEntry> {
     let mut font_dirs: Vec<PathBuf> = vec![
@@ -248,7 +255,7 @@ fn font_priority(path: &Path) -> u8 {
 fn ensure_fallback_cache() {
     let fonts = SYSTEM_FONTS.get_or_init(discover_system_fonts);
     FALLBACK_CACHE.get_or_init(|| {
-        let cache: Vec<CachedFont> = fonts
+        let fonts = fonts
             .iter()
             .map(|_| {
                 CachedFont {
@@ -257,7 +264,10 @@ fn ensure_fallback_cache() {
                 }
             })
             .collect();
-        Mutex::new(cache)
+        Mutex::new(FallbackCache {
+            fonts,
+            by_char: HashMap::new(),
+        })
     });
 }
 
@@ -268,12 +278,26 @@ fn find_fallback_for_char(c: char) -> Option<FontArc> {
     let cache_mutex = FALLBACK_CACHE.get().unwrap();
     let mut cache = cache_mutex.lock().unwrap();
 
+    if let Some(&hit) = cache.by_char.get(&c) {
+        return hit.and_then(|i| cache.fonts[i].font.clone());
+    }
+
+    let found = find_font_index_for_char(&mut cache.fonts, fonts, c);
+    cache.by_char.insert(c, found);
+    found.and_then(|i| cache.fonts[i].font.clone())
+}
+
+fn find_font_index_for_char(
+    cache: &mut [CachedFont],
+    fonts: &[SystemFontEntry],
+    c: char,
+) -> Option<usize> {
     // Fast path: check active (matched) fonts already in memory
-    for entry in cache.iter() {
+    for (i, entry) in cache.iter().enumerate() {
         if let Some(ref font) = entry.font
             && font.glyph_id(c).0 != 0
         {
-            return Some(font.clone());
+            return Some(i);
         }
     }
 
@@ -290,11 +314,10 @@ fn find_fallback_for_char(c: char) -> Option<FontArc> {
         match loaded {
             Some(font) => {
                 if font.glyph_id(c).0 != 0 {
-                    let result = font.clone();
                     cache[i].font = Some(font);
-                    return Some(result);
+                    return Some(i);
                 }
-                // Doesn't have this glyph — drop font data, don't cache
+                // Doesn't have this glyph: drop font data, don't cache
             }
             None => {
                 cache[i].load_failed = true;
