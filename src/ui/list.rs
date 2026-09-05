@@ -5,14 +5,24 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_TITLE_FONT_SIZE, Colors,
-        KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT, KEY_SPACE,
-        KEY_UP, open_window,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB,
+        BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN,
+        KEY_RIGHT, KEY_RSHIFT, KEY_SPACE, KEY_UP, Thumb, darken, open_window,
         widgets::{Widget, button::Button},
     },
 };
 
 const BASE_PADDING: u32 = 16;
+
+/// Top edge and height of the vertical scrollbar track within the list canvas.
+fn v_track(list_h: u32, row_height: u32, show_header: bool) -> (f32, f32) {
+    let top = if show_header {
+        row_height as f32 + 1.0
+    } else {
+        0.0
+    };
+    (top, list_h as f32 - top)
+}
 const BASE_ROW_HEIGHT: u32 = 28;
 const BASE_CHECKBOX_SIZE: u32 = 16;
 const BASE_MIN_WIDTH: u32 = 350;
@@ -681,23 +691,15 @@ impl ListBuilder {
             }
 
             // Vertical Scrollbar
-            if rows.len() > data_visible {
+            let (sb_y, sb_h) = v_track(list_h, row_height, show_header);
+            if let Some(thumb) = Thumb::new(
+                sb_h,
+                data_visible as f32,
+                rows.len() as f32,
+                scroll_offset as f32,
+                BASE_MIN_THUMB * scale,
+            ) {
                 let sb_x = list_w as i32 - (8.0 * scale) as i32;
-                let sb_h = list_h as f32
-                    - if show_header {
-                        row_height as f32 + 1.0
-                    } else {
-                        0.0
-                    };
-                let sb_y = data_y_local as f32;
-                let thumb_h =
-                    ((data_visible as f32 / rows.len() as f32 * sb_h).max(20.0 * scale)).min(sb_h);
-                let max_thumb_y = sb_h - thumb_h;
-                let thumb_y = if rows.len() > data_visible {
-                    scroll_offset as f32 / (rows.len() - data_visible) as f32 * max_thumb_y
-                } else {
-                    0.0
-                };
 
                 let v_scrollbar_width = if v_scrollbar_hovered {
                     12.0 * scale
@@ -715,9 +717,9 @@ impl ListBuilder {
                 );
                 list_canvas.fill_rounded_rect(
                     sb_x as f32,
-                    sb_y + thumb_y,
+                    sb_y + thumb.offset,
                     v_scrollbar_width - 2.0 * scale,
-                    thumb_h,
+                    thumb.len,
                     3.0 * scale,
                     if v_scrollbar_hovered {
                         colors.input_border_focused
@@ -728,7 +730,14 @@ impl ListBuilder {
             }
 
             // Horizontal Scrollbar
-            if total_content_width > list_w {
+            let sb_w = list_w as f32;
+            if let Some(thumb) = Thumb::new(
+                sb_w,
+                list_w as f32,
+                total_content_width as f32,
+                h_scroll_offset as f32,
+                BASE_MIN_THUMB * scale,
+            ) {
                 let h_scrollbar_width = if h_scrollbar_hovered {
                     12.0 * scale
                 } else {
@@ -736,16 +745,6 @@ impl ListBuilder {
                 };
                 let sb_x = 0.0;
                 let sb_y = list_h as i32 - h_scrollbar_width as i32;
-                let sb_w = list_w as f32;
-                let max_scroll = total_content_width.saturating_sub(list_w);
-                let thumb_w = ((list_w as f32 / total_content_width as f32 * sb_w)
-                    .max(20.0 * scale))
-                .min(sb_w);
-                let thumb_x = if max_scroll > 0 {
-                    h_scroll_offset as f32 / max_scroll as f32 * (sb_w - thumb_w)
-                } else {
-                    0.0
-                };
 
                 list_canvas.fill_rounded_rect(
                     sb_x,
@@ -756,9 +755,9 @@ impl ListBuilder {
                     darken(colors.input_bg, 0.05),
                 );
                 list_canvas.fill_rounded_rect(
-                    sb_x + thumb_x,
+                    sb_x + thumb.offset,
                     sb_y as f32,
-                    thumb_w,
+                    thumb.len,
                     h_scrollbar_width - 2.0 * scale,
                     3.0 * scale,
                     if h_scrollbar_hovered {
@@ -864,65 +863,43 @@ impl ListBuilder {
                         let list_mx = mx - list_x;
                         let list_my = my - list_y;
 
-                        if v_thumb_drag && rows.len() > data_visible {
-                            let sb_h_f32 = list_h as f32
-                                - if show_header {
-                                    row_height as f32 + 1.0
-                                } else {
-                                    0.0
-                                };
-                            let sb_h = sb_h_f32 as i32;
-                            let sb_y = if show_header {
-                                (row_height + 1) as i32
-                            } else {
-                                0
-                            };
-                            let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
-                                * sb_h_f32)
-                                .max(20.0 * scale))
-                            .min(sb_h_f32);
-                            let thumb_h = thumb_h_f32 as i32;
-                            let max_thumb_y = sb_h - thumb_h;
-
-                            // Calculate new scroll offset from thumb position
-                            // Use the drag offset to maintain the relative position from where user clicked
-                            let offset = v_thumb_drag_offset.unwrap_or(thumb_h / 2);
-                            // list_my is relative to list canvas, need to adjust for scrollbar position
-                            let thumb_y = (list_my - sb_y - offset).clamp(0, max_thumb_y);
-                            let scroll_ratio = if max_thumb_y > 0 {
-                                thumb_y as f32 / max_thumb_y as f32
-                            } else {
-                                0.0
-                            };
-                            scroll_offset = ((scroll_ratio * (rows.len() - data_visible) as f32)
+                        let (sb_y, sb_h) = v_track(list_h, row_height, show_header);
+                        if v_thumb_drag
+                            && let Some(thumb) = Thumb::new(
+                                sb_h,
+                                data_visible as f32,
+                                rows.len() as f32,
+                                scroll_offset as f32,
+                                BASE_MIN_THUMB * scale,
+                            )
+                        {
+                            let max_scroll = rows.len() - data_visible;
+                            let grab =
+                                v_thumb_drag_offset.unwrap_or((thumb.len / 2.0) as i32) as f32;
+                            let pos = list_my as f32 - sb_y - grab;
+                            scroll_offset = (thumb.scroll_at(sb_h, pos, max_scroll as f32)
                                 as usize)
-                                .clamp(0, rows.len().saturating_sub(data_visible));
+                                .min(max_scroll);
                             needs_redraw = true;
                         }
 
-                        if h_thumb_drag && total_content_width > list_w {
-                            let sb_w_f32 = list_w as f32;
-                            let sb_w = list_w as i32;
-                            let max_scroll_u32 = total_content_width.saturating_sub(list_w);
-                            let max_scroll = (max_scroll_u32 as i32).max(1);
-                            let thumb_w_f32 = ((list_w as f32 / total_content_width as f32
-                                * sb_w_f32)
-                                .max(20.0 * scale))
-                            .min(sb_w_f32);
-                            let thumb_w = thumb_w_f32 as i32;
-                            let max_thumb_x = sb_w - thumb_w;
-
-                            // Calculate new horizontal scroll offset from thumb position
-                            // Use the drag offset to maintain the relative position from where user clicked
-                            let offset = h_thumb_drag_offset.unwrap_or(thumb_w / 2);
-                            let thumb_x = (list_mx - offset).clamp(0, max_thumb_x);
-                            let scroll_ratio = if max_scroll > 0 {
-                                thumb_x as f32 / max_thumb_x as f32
-                            } else {
-                                0.0
-                            };
-                            h_scroll_offset = ((scroll_ratio * max_scroll as f32) as u32)
-                                .clamp(0, max_scroll_u32);
+                        let sb_w = list_w as f32;
+                        if h_thumb_drag
+                            && let Some(thumb) = Thumb::new(
+                                sb_w,
+                                list_w as f32,
+                                total_content_width as f32,
+                                h_scroll_offset as f32,
+                                BASE_MIN_THUMB * scale,
+                            )
+                        {
+                            let max_scroll = total_content_width - list_w;
+                            let grab =
+                                h_thumb_drag_offset.unwrap_or((thumb.len / 2.0) as i32) as f32;
+                            let pos = list_mx as f32 - grab;
+                            h_scroll_offset = (thumb.scroll_at(sb_w, pos, max_scroll as f32)
+                                as u32)
+                                .min(max_scroll);
                             needs_redraw = true;
                         }
                     } else {
@@ -1009,37 +986,18 @@ impl ListBuilder {
                                 if list_mx >= sb_x {
                                     clicking_scrollbar = true;
 
-                                    let sb_h_f32 = list_h as f32
-                                        - if show_header {
-                                            row_height as f32 + 1.0
-                                        } else {
-                                            0.0
-                                        };
-                                    let sb_y = if show_header {
-                                        (row_height + 1) as i32
-                                    } else {
-                                        0
-                                    };
-                                    let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
-                                        * sb_h_f32)
-                                        .max(20.0 * scale))
-                                    .min(sb_h_f32);
-                                    let thumb_h = thumb_h_f32 as i32;
-                                    let max_thumb_y = (sb_h_f32 - thumb_h_f32) as i32;
-                                    let thumb_y = if rows.len() > data_visible {
-                                        (scroll_offset as f32 / (rows.len() - data_visible) as f32
-                                            * max_thumb_y as f32)
-                                            as i32
-                                    } else {
-                                        0
-                                    };
-
-                                    // Check if clicking specifically on the thumb for dragging
-                                    if list_my >= sb_y + thumb_y
-                                        && list_my < sb_y + thumb_y + thumb_h
+                                    let (sb_y, sb_h) = v_track(list_h, row_height, show_header);
+                                    if let Some(thumb) = Thumb::new(
+                                        sb_h,
+                                        data_visible as f32,
+                                        rows.len() as f32,
+                                        scroll_offset as f32,
+                                        BASE_MIN_THUMB * scale,
+                                    ) && thumb.contains(list_my as f32 - sb_y)
                                     {
                                         v_thumb_drag = true;
-                                        v_thumb_drag_offset = Some(list_my - (sb_y + thumb_y));
+                                        v_thumb_drag_offset =
+                                            Some(list_my - (sb_y + thumb.offset) as i32);
                                     }
                                 }
                             }
@@ -1058,28 +1016,17 @@ impl ListBuilder {
                                 if list_my >= sb_y {
                                     clicking_scrollbar = true;
 
-                                    let sb_w_f32 = list_w as f32;
-                                    let sb_w = list_w as i32;
-                                    let max_scroll_u32 = total_content_width.saturating_sub(list_w);
-                                    let max_scroll = (max_scroll_u32 as i32).max(1);
-                                    let thumb_w_f32 =
-                                        ((list_w as f32 / total_content_width as f32 * sb_w_f32)
-                                            .max(20.0 * scale))
-                                        .min(sb_w_f32);
-                                    let thumb_w = thumb_w_f32 as i32;
-                                    let max_thumb_x = sb_w - thumb_w;
-                                    let thumb_x = if max_scroll > 0 {
-                                        (h_scroll_offset as f32 / max_scroll as f32
-                                            * max_thumb_x as f32)
-                                            as i32
-                                    } else {
-                                        0
-                                    };
-
-                                    // Check if clicking specifically on the thumb for dragging
-                                    if list_mx >= thumb_x && list_mx < thumb_x + thumb_w {
+                                    if let Some(thumb) = Thumb::new(
+                                        list_w as f32,
+                                        list_w as f32,
+                                        total_content_width as f32,
+                                        h_scroll_offset as f32,
+                                        BASE_MIN_THUMB * scale,
+                                    ) && thumb.contains(list_mx as f32)
+                                    {
                                         h_thumb_drag = true;
-                                        h_thumb_drag_offset = Some(list_mx - thumb_x);
+                                        h_thumb_drag_offset =
+                                            Some(list_mx - thumb.offset as i32);
                                     }
                                 }
                             }
@@ -1314,70 +1261,47 @@ impl ListBuilder {
                     WindowEvent::ButtonPress(button, _modifiers)
                         if *button == MouseButton::Left =>
                     {
-                        if let Some((list_mx, list_my)) = last_cursor_pos {
-                            // Check vertical scrollbar thumb
-                            if rows.len() > data_visible {
-                                let sb_x = list_w as i32 - (8.0 * scale) as i32;
-                                let sb_h_f32 = list_h as f32
-                                    - if show_header {
-                                        row_height as f32 + 1.0
-                                    } else {
-                                        0.0
-                                    };
-                                let thumb_h_f32 = ((data_visible as f32 / rows.len() as f32
-                                    * sb_h_f32)
-                                    .max(20.0 * scale))
-                                .min(sb_h_f32);
-                                let thumb_h = thumb_h_f32 as i32;
-                                let max_thumb_y = (sb_h_f32 - thumb_h_f32) as i32;
-                                let thumb_y = if rows.len() > data_visible {
-                                    (scroll_offset as f32 / (rows.len() - data_visible) as f32
-                                        * max_thumb_y as f32)
-                                        as i32
-                                } else {
-                                    0
-                                };
+                        if let Some((mx, my)) = last_cursor_pos {
+                            let list_mx = mx - list_x;
+                            let list_my = my - list_y;
 
-                                if list_mx >= sb_x
-                                    && list_mx < sb_x + (8.0 * scale) as i32
-                                    && list_my >= thumb_y
-                                    && list_my < thumb_y + thumb_h
-                                {
-                                    v_thumb_drag = true;
-                                    v_thumb_drag_offset = Some(list_my - thumb_y);
-                                }
+                            let v_scrollbar_width = if v_scrollbar_hovered {
+                                12.0 * scale
+                            } else {
+                                8.0 * scale
+                            };
+                            let (sb_y, sb_h) = v_track(list_h, row_height, show_header);
+                            if list_mx >= list_w as i32 - v_scrollbar_width as i32
+                                && let Some(thumb) = Thumb::new(
+                                    sb_h,
+                                    data_visible as f32,
+                                    rows.len() as f32,
+                                    scroll_offset as f32,
+                                    BASE_MIN_THUMB * scale,
+                                )
+                                && thumb.contains(list_my as f32 - sb_y)
+                            {
+                                v_thumb_drag = true;
+                                v_thumb_drag_offset = Some(list_my - (sb_y + thumb.offset) as i32);
                             }
 
-                            // Check horizontal scrollbar thumb
-                            if total_content_width > list_w {
-                                let sb_h = (6.0 * scale) as i32;
-                                let sb_y = list_h as i32 - sb_h;
-                                let sb_w_f32 = list_w as f32;
-                                let sb_w = list_w as i32;
-                                let max_scroll_u32 = total_content_width.saturating_sub(list_w);
-                                let max_scroll = (max_scroll_u32 as i32).max(1);
-                                let thumb_w_f32 = ((list_w as f32 / total_content_width as f32
-                                    * sb_w_f32)
-                                    .max(20.0 * scale))
-                                .min(sb_w_f32);
-                                let thumb_w = thumb_w_f32 as i32;
-                                let max_thumb_x = sb_w - thumb_w;
-                                let thumb_x = if max_scroll > 0 {
-                                    (h_scroll_offset as f32 / max_scroll as f32
-                                        * max_thumb_x as f32)
-                                        as i32
-                                } else {
-                                    0
-                                };
-
-                                if list_my >= sb_y
-                                    && list_my < sb_y + sb_h
-                                    && list_mx >= thumb_x
-                                    && list_mx < thumb_x + thumb_w
-                                {
-                                    h_thumb_drag = true;
-                                    h_thumb_drag_offset = Some(list_mx - thumb_x);
-                                }
+                            let h_scrollbar_width = if h_scrollbar_hovered {
+                                12.0 * scale
+                            } else {
+                                8.0 * scale
+                            };
+                            if list_my >= list_h as i32 - h_scrollbar_width as i32
+                                && let Some(thumb) = Thumb::new(
+                                    list_w as f32,
+                                    list_w as f32,
+                                    total_content_width as f32,
+                                    h_scroll_offset as f32,
+                                    BASE_MIN_THUMB * scale,
+                                )
+                                && thumb.contains(list_mx as f32)
+                            {
+                                h_thumb_drag = true;
+                                h_thumb_drag_offset = Some(list_mx - thumb.offset as i32);
                             }
                         }
                     }
@@ -1566,14 +1490,6 @@ fn get_result(
     } else {
         ListResult::Selected(result)
     }
-}
-
-fn darken(color: crate::render::Rgba, amount: f32) -> crate::render::Rgba {
-    rgb(
-        (color.r as f32 * (1.0 - amount)) as u8,
-        (color.g as f32 * (1.0 - amount)) as u8,
-        (color.b as f32 * (1.0 - amount)) as u8,
-    )
 }
 
 fn draw_checkbox(

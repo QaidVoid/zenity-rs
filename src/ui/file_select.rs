@@ -12,8 +12,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_BACKSPACE,
-        KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP, icons, open_window,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB, Colors,
+        KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP, Thumb, icons, open_window,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -646,19 +646,19 @@ impl FileSelectBuilder {
                 }
             };
 
-        // Scrollbar thumb rect (x, y, w, h), shared by drawing, hover and drag.
-        // None when every entry already fits.
+        // Scrollbar thumb rect (x, y, w, h), shared by drawing, hover, hit-testing
+        // and drag. None when every entry already fits.
         let scrollbar_thumb = |total: usize, scroll: usize, hovered: bool| {
-            if total <= visible_items || visible_items == 0 {
-                return None;
-            }
-            let track_h = list_h as f32;
+            let thumb = Thumb::new(
+                list_h as f32,
+                visible_items as f32,
+                total as f32,
+                scroll as f32,
+                BASE_MIN_THUMB * scale,
+            )?;
             let w = if hovered { 8.0 * scale } else { 5.0 * scale };
-            let h = (visible_items as f32 / total as f32 * track_h).max(24.0 * scale);
-            let y = list_y as f32
-                + scroll as f32 / (total - visible_items) as f32 * (track_h - h).max(0.0);
             let x = main_x as f32 + main_w as f32 - scrollbar_gutter as f32 / 2.0 - w / 2.0;
-            Some((x, y, w, h))
+            Some((x, list_y as f32 + thumb.offset, w, thumb.len))
         };
 
         // Chrome layer: everything that only changes on navigation or hover.
@@ -2193,46 +2193,20 @@ impl FileSelectBuilder {
                     WindowEvent::ButtonPress(button, _modifiers)
                         if *button == MouseButton::Left =>
                     {
-                        if !filtered_entries.is_empty() {
-                            let scrollbar_x = main_x + main_w as i32 - (8.0 * scale) as i32;
-                            let scrollbar_y = list_y;
-
-                            if mouse_x >= main_x
-                                && mouse_x < main_x + main_w as i32
-                                && mouse_y >= list_y
-                                && mouse_y < list_y + list_h as i32
-                            {
-                                let visible_items = (list_h / item_height) as usize;
-                                let total_items = filtered_entries.len();
-
-                                if visible_items < total_items {
-                                    let scrollbar_h_f32 = list_h as f32 - 8.0 * scale;
-                                    let thumb_h_f32 = (visible_items as f32 / total_items as f32
-                                        * scrollbar_h_f32)
-                                        .max(20.0 * scale);
-                                    let thumb_h = thumb_h_f32 as i32;
-
-                                    let max_scroll = total_items - visible_items;
-                                    let max_thumb_y = scrollbar_h_f32 as i32 - thumb_h;
-                                    let thumb_y = if max_thumb_y > 0 {
-                                        ((scroll_offset as f32 / max_scroll as f32)
-                                            * max_thumb_y as f32)
-                                            as i32
-                                    } else {
-                                        0
-                                    };
-
-                                    let rel_y = mouse_y - scrollbar_y;
-                                    if mouse_x >= scrollbar_x
-                                        && mouse_x < scrollbar_x + (6.0 * scale) as i32
-                                        && rel_y >= thumb_y
-                                        && rel_y < thumb_y + thumb_h
-                                    {
-                                        thumb_drag = true;
-                                        thumb_drag_offset = Some(mouse_y - (scrollbar_y + thumb_y));
-                                    }
-                                }
-                            }
+                        if mouse_x >= main_x + main_w as i32 - scrollbar_gutter as i32
+                            && mouse_x < main_x + main_w as i32
+                            && mouse_y >= list_y
+                            && mouse_y < list_y + list_h as i32
+                            && let Some((_, thumb_y, _, thumb_h)) = scrollbar_thumb(
+                                filtered_entries.len(),
+                                scroll_offset,
+                                scrollbar_hovered,
+                            )
+                            && (mouse_y as f32) >= thumb_y
+                            && (mouse_y as f32) < thumb_y + thumb_h
+                        {
+                            thumb_drag = true;
+                            thumb_drag_offset = Some(mouse_y - thumb_y as i32);
                         }
                     }
                     WindowEvent::ButtonRelease(_, _) => {

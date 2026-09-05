@@ -4,7 +4,7 @@ use super::{Widget, point_in_rect};
 use crate::{
     backend::{MouseButton, WindowEvent},
     render::{Canvas, Font, Rgba},
-    ui::Colors,
+    ui::{BASE_BUTTON_HEIGHT, Colors},
 };
 
 /// A clickable button widget.
@@ -24,7 +24,6 @@ pub(crate) struct Button {
     label_canvas: std::cell::RefCell<Option<Canvas>>,
 }
 
-const BASE_BUTTON_HEIGHT: u32 = 32;
 const BASE_BUTTON_PADDING: u32 = 24;
 const BASE_BUTTON_RADIUS: f32 = 5.0;
 const BASE_MIN_BUTTON_WIDTH: u32 = 80;

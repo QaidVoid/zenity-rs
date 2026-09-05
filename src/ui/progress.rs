@@ -15,7 +15,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, open_window,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, open_window,
         widgets::{Widget, button::Button, progress_bar::ProgressBar},
     },
 };
@@ -23,7 +23,6 @@ use crate::{
 const BASE_PADDING: u32 = 20;
 const BASE_BAR_WIDTH: u32 = 300;
 const BASE_TEXT_HEIGHT: u32 = 20;
-const BASE_BUTTON_HEIGHT: u32 = 32;
 
 /// Progress dialog result.
 #[derive(Debug, Clone)]

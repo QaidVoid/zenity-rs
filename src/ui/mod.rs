@@ -69,6 +69,72 @@ pub(crate) const BASE_CORNER_RADIUS: f32 = 8.0;
 pub(crate) const BASE_BUTTON_HEIGHT: u32 = 32;
 pub(crate) const BASE_BUTTON_SPACING: u32 = 10;
 pub(crate) const BASE_TITLE_FONT_SIZE: f32 = 18.0 * 1.5;
+/// Shortest a scrollbar thumb may shrink to, however long the content is.
+pub(crate) const BASE_MIN_THUMB: f32 = 20.0;
+
+/// Scale each color channel toward black by `amount`, leaving alpha untouched.
+pub(crate) fn darken(color: Rgba, amount: f32) -> Rgba {
+    Rgba {
+        r: (color.r as f32 * (1.0 - amount)) as u8,
+        g: (color.g as f32 * (1.0 - amount)) as u8,
+        b: (color.b as f32 * (1.0 - amount)) as u8,
+        a: color.a,
+    }
+}
+
+/// Position and length of a scrollbar thumb along its track.
+///
+/// Both are measured along the scroll axis, so the same type serves vertical
+/// and horizontal bars, and `visible`/`total` may be counted in either items or
+/// pixels as long as they share a unit.
+pub(crate) struct Thumb {
+    /// Distance from the start of the track to the start of the thumb.
+    pub(crate) offset: f32,
+    /// Length of the thumb along the track.
+    pub(crate) len: f32,
+}
+
+impl Thumb {
+    /// Size a thumb showing `visible` of `total` units, scrolled to `scroll`.
+    ///
+    /// Returns `None` when the content already fits and no bar should be drawn.
+    /// Call this from drawing, hit-testing and dragging alike so the three can
+    /// never disagree about where the thumb is.
+    pub(crate) fn new(
+        track: f32,
+        visible: f32,
+        total: f32,
+        scroll: f32,
+        min_len: f32,
+    ) -> Option<Self> {
+        if track <= 0.0 || visible <= 0.0 || total <= visible {
+            return None;
+        }
+
+        let len = (visible / total * track).clamp(min_len.min(track), track);
+        let max_scroll = total - visible;
+        let offset = (scroll / max_scroll).clamp(0.0, 1.0) * (track - len);
+
+        Some(Self {
+            offset,
+            len,
+        })
+    }
+
+    /// Whether `pos`, measured from the start of the track, lands on the thumb.
+    pub(crate) fn contains(&self, pos: f32) -> bool {
+        pos >= self.offset && pos < self.offset + self.len
+    }
+
+    /// Scroll position matching a thumb dragged to `offset` along the track.
+    pub(crate) fn scroll_at(&self, track: f32, offset: f32, max_scroll: f32) -> f32 {
+        let travel = track - self.len;
+        if travel <= 0.0 {
+            return 0.0;
+        }
+        (offset.clamp(0.0, travel) / travel) * max_scroll
+    }
+}
 
 /// Color theme for dialogs.
 #[derive(Debug, Clone, Copy)]
@@ -280,5 +346,69 @@ impl DialogResult {
             DialogResult::Timeout => 5,
             DialogResult::Closed => 1,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn no_thumb_when_content_fits() {
+        assert!(Thumb::new(100.0, 10.0, 10.0, 0.0, 20.0).is_none());
+        assert!(Thumb::new(100.0, 10.0, 5.0, 0.0, 20.0).is_none());
+        assert!(Thumb::new(0.0, 1.0, 10.0, 0.0, 20.0).is_none());
+    }
+
+    #[test]
+    fn thumb_spans_the_visible_fraction() {
+        let thumb = Thumb::new(100.0, 25.0, 100.0, 0.0, 0.0).unwrap();
+        assert_eq!(thumb.len, 25.0);
+        assert_eq!(thumb.offset, 0.0);
+    }
+
+    #[test]
+    fn thumb_never_shrinks_below_the_minimum_or_grows_past_the_track() {
+        assert_eq!(
+            Thumb::new(100.0, 1.0, 1_000.0, 0.0, 20.0).unwrap().len,
+            20.0
+        );
+        assert_eq!(Thumb::new(10.0, 1.0, 1_000.0, 0.0, 20.0).unwrap().len, 10.0);
+    }
+
+    #[test]
+    fn thumb_reaches_the_end_of_the_track_at_max_scroll() {
+        let thumb = Thumb::new(100.0, 25.0, 100.0, 75.0, 0.0).unwrap();
+        assert_eq!(thumb.offset + thumb.len, 100.0);
+    }
+
+    #[test]
+    fn thumb_offset_is_clamped_to_the_track() {
+        let thumb = Thumb::new(100.0, 25.0, 100.0, 9_999.0, 0.0).unwrap();
+        assert_eq!(thumb.offset + thumb.len, 100.0);
+    }
+
+    #[test]
+    fn contains_covers_the_thumb_only() {
+        let thumb = Thumb::new(100.0, 25.0, 100.0, 25.0, 0.0).unwrap();
+        assert_eq!(thumb.offset, 25.0);
+        assert!(thumb.contains(25.0));
+        assert!(thumb.contains(49.9));
+        assert!(!thumb.contains(24.9));
+        assert!(!thumb.contains(50.0));
+    }
+
+    #[test]
+    fn scroll_at_round_trips_the_thumb_offset() {
+        let thumb = Thumb::new(100.0, 25.0, 100.0, 30.0, 0.0).unwrap();
+        assert_eq!(thumb.scroll_at(100.0, thumb.offset, 75.0), 30.0);
+        assert_eq!(thumb.scroll_at(100.0, -10.0, 75.0), 0.0);
+        assert_eq!(thumb.scroll_at(100.0, 9_999.0, 75.0), 75.0);
+    }
+
+    #[test]
+    fn darken_keeps_alpha() {
+        let out = darken(Rgba::new(200, 100, 50, 128), 0.5);
+        assert_eq!((out.r, out.g, out.b, out.a), (100, 50, 25, 128));
     }
 }

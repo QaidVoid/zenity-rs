@@ -3,10 +3,10 @@
 use crate::{
     backend::{MouseButton, Window, WindowEvent},
     error::Error,
-    render::{Canvas, Font, Rgba, rgb},
+    render::{Canvas, Font, rgb},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
-        KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP, open_window,
+        KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP, darken, open_window,
         widgets::{Widget, button::Button},
     },
 };
@@ -1093,14 +1093,6 @@ fn prev_month(year: u32, month: u32) -> (u32, u32) {
 /// Clamps `day` into the valid range for the given month.
 fn clamp_day(year: u32, month: u32, day: u32) -> u32 {
     day.clamp(1, days_in_month(year, month))
-}
-
-fn darken(color: Rgba, amount: f32) -> Rgba {
-    rgb(
-        (color.r as f32 * (1.0 - amount)) as u8,
-        (color.g as f32 * (1.0 - amount)) as u8,
-        (color.b as f32 * (1.0 - amount)) as u8,
-    )
 }
 
 /// Get current local date as (year, month, day).

@@ -5,16 +5,29 @@ use std::{collections::HashMap, io::Read};
 use crate::{
     backend::{Window, WindowEvent},
     error::Error,
-    render::{Canvas, Font, rgb},
+    render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_TITLE_FONT_SIZE, Colors,
-        KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN, KEY_UP,
-        open_window,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB,
+        BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN,
+        KEY_PAGE_UP, KEY_RETURN, KEY_UP, Thumb, darken, open_window,
         widgets::{Widget, button::Button},
     },
 };
 
 const BASE_PADDING: u32 = 16;
+const SCROLLBAR_INSET: f32 = 4.0;
+const SCROLLBAR_HIT_WIDTH: f32 = 12.0;
+
+/// Height of the scrollbar track inside a text area `area_h` tall.
+fn scrollbar_track_h(area_h: u32, scale: f32) -> f32 {
+    area_h as f32 - 2.0 * SCROLLBAR_INSET * scale
+}
+
+/// Left edge and width of the scrollbar hit target, relative to the text area.
+fn scrollbar_hit_x(area_w: u32, scale: f32) -> (f32, f32) {
+    let w = SCROLLBAR_HIT_WIDTH * scale;
+    (area_w as f32 - w, w)
+}
 const BASE_LINE_HEIGHT: u32 = 20;
 const BASE_CHECKBOX_SIZE: u32 = 16;
 const BASE_MIN_WIDTH: u32 = 400;
@@ -302,39 +315,36 @@ impl TextInfoBuilder {
             }
 
             // Scrollbar
-            if wrapped_lines.len() > visible_lines {
+            if let Some(thumb) = Thumb::new(
+                scrollbar_track_h(text_area_h, scale),
+                visible_lines as f32,
+                wrapped_lines.len() as f32,
+                scroll_offset as f32,
+                BASE_MIN_THUMB * scale,
+            ) {
                 let scrollbar_width = if scrollbar_hovered {
                     12.0 * scale
                 } else {
                     8.0 * scale
                 };
                 let sb_x = text_area_x + text_area_w as i32 - scrollbar_width as i32;
-                let sb_y = text_area_y as f32 + 4.0 * scale;
-                let sb_h = text_area_h as f32 - 8.0 * scale;
-                let thumb_h =
-                    (visible_lines as f32 / wrapped_lines.len() as f32 * sb_h).max(20.0 * scale);
-                let max_scroll = wrapped_lines.len().saturating_sub(visible_lines);
-                let thumb_y = if max_scroll > 0 {
-                    scroll_offset as f32 / max_scroll as f32 * (sb_h - thumb_h)
-                } else {
-                    0.0
-                };
+                let sb_y = text_area_y as f32 + SCROLLBAR_INSET * scale;
 
                 // Track
                 canvas.fill_rounded_rect(
                     sb_x as f32,
                     sb_y,
                     scrollbar_width - 2.0 * scale,
-                    sb_h,
+                    scrollbar_track_h(text_area_h, scale),
                     3.0 * scale,
                     darken(colors.input_bg, 0.05),
                 );
                 // Thumb
                 canvas.fill_rounded_rect(
                     sb_x as f32,
-                    sb_y + thumb_y,
+                    sb_y + thumb.offset,
                     scrollbar_width - 2.0 * scale,
-                    thumb_h,
+                    thumb.len,
                     3.0 * scale,
                     if scrollbar_hovered {
                         colors.input_border_focused
@@ -466,33 +476,22 @@ impl TextInfoBuilder {
                     last_cursor_pos = Some((mx, my));
 
                     // Handle scrollbar thumb dragging
-                    if thumb_drag && total_lines > visible_lines {
-                        let text_area_my = my - text_area_y;
-
-                        let sb_y_f32 = 4.0 * scale;
-                        let sb_y = sb_y_f32 as i32;
-                        let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
-                        let sb_h = sb_h_f32 as i32;
-
-                        let max_scroll = total_lines.saturating_sub(visible_lines);
-                        if max_scroll > 0 {
-                            let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
-                                * sb_h_f32)
-                                .max(20.0 * scale);
-                            let thumb_h = thumb_h_f32 as i32;
-                            let max_thumb_y = sb_h - thumb_h;
-
-                            let offset = thumb_drag_offset.unwrap_or(thumb_h / 2);
-                            let thumb_y = (text_area_my - sb_y - offset).clamp(0, max_thumb_y);
-                            let scroll_ratio = if max_thumb_y > 0 {
-                                thumb_y as f32 / max_thumb_y as f32
-                            } else {
-                                0.0
-                            };
-                            scroll_offset =
-                                ((scroll_ratio * max_scroll as f32) as usize).clamp(0, max_scroll);
-                            needs_redraw = true;
-                        }
+                    let track = scrollbar_track_h(text_area_h, scale);
+                    if thumb_drag
+                        && let Some(thumb) = Thumb::new(
+                            track,
+                            visible_lines as f32,
+                            total_lines as f32,
+                            scroll_offset as f32,
+                            BASE_MIN_THUMB * scale,
+                        )
+                    {
+                        let max_scroll = total_lines - visible_lines;
+                        let grab = thumb_drag_offset.unwrap_or((thumb.len / 2.0) as i32) as f32;
+                        let pos = (my - text_area_y) as f32 - SCROLLBAR_INSET * scale - grab;
+                        scroll_offset = (thumb.scroll_at(track, pos, max_scroll as f32) as usize)
+                            .min(max_scroll);
+                        needs_redraw = true;
                     } else {
                         // Update scrollbar hover state (always, not just when there's a checkbox)
                         let scrollbar_width = if scrollbar_hovered {
@@ -552,33 +551,22 @@ impl TextInfoBuilder {
                             let text_area_mx = mx - text_area_x;
                             let text_area_my = my - text_area_y;
 
-                            let sb_x = text_area_w as i32 - scrollbar_width as i32;
-                            let sb_y_f32 = 4.0 * scale;
-                            let sb_y = sb_y_f32 as i32;
-                            let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
-                            let sb_h = sb_h_f32 as i32;
+                            let (sb_x, sb_w) = scrollbar_hit_x(text_area_w, scale);
+                            let inset = SCROLLBAR_INSET * scale;
 
-                            let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
-                                * sb_h_f32)
-                                .max(20.0 * scale);
-                            let thumb_h = thumb_h_f32 as i32;
-
-                            let max_scroll = total_lines.saturating_sub(visible_lines);
-                            let thumb_y = if max_scroll > 0 {
-                                let max_thumb_y = sb_h - thumb_h;
-                                ((scroll_offset as f32 / max_scroll as f32) * max_thumb_y as f32)
-                                    as i32
-                            } else {
-                                0
-                            };
-
-                            if text_area_mx >= sb_x
-                                && text_area_mx < sb_x + scrollbar_width as i32
-                                && text_area_my >= sb_y + thumb_y
-                                && text_area_my < sb_y + thumb_y + thumb_h
+                            if let Some(thumb) = Thumb::new(
+                                scrollbar_track_h(text_area_h, scale),
+                                visible_lines as f32,
+                                total_lines as f32,
+                                scroll_offset as f32,
+                                BASE_MIN_THUMB * scale,
+                            ) && (text_area_mx as f32) >= sb_x
+                                && (text_area_mx as f32) < sb_x + sb_w
+                                && thumb.contains(text_area_my as f32 - inset)
                             {
                                 thumb_drag = true;
-                                thumb_drag_offset = Some(text_area_my - (sb_y + thumb_y));
+                                thumb_drag_offset =
+                                    Some(text_area_my - (inset + thumb.offset) as i32);
                             }
                         }
                     }
@@ -696,33 +684,24 @@ impl TextInfoBuilder {
                         if let Some((mx, my)) = last_cursor_pos
                             && total_lines > visible_lines
                         {
-                            let sb_x = text_area_w as i32 - (10.0 * scale) as i32;
-                            let sb_y_f32 = 4.0 * scale;
-                            let sb_y = sb_y_f32 as i32;
-                            let sb_h_f32 = text_area_h as f32 - 8.0 * scale;
-                            let sb_h = sb_h_f32 as i32;
+                            let (sb_x, sb_w) = scrollbar_hit_x(text_area_w, scale);
+                            let inset = SCROLLBAR_INSET * scale;
+                            let local_x = (mx - text_area_x) as f32;
+                            let local_y = (my - text_area_y) as f32;
 
-                            let thumb_h_f32 = (visible_lines as f32 / total_lines as f32
-                                * sb_h_f32)
-                                .max(20.0 * scale);
-                            let thumb_h = thumb_h_f32 as i32;
-
-                            let max_scroll = total_lines.saturating_sub(visible_lines);
-                            let max_thumb_y = sb_h - thumb_h;
-                            let thumb_y = if max_scroll > 0 {
-                                ((scroll_offset as f32 / max_scroll as f32) * max_thumb_y as f32)
-                                    as i32
-                            } else {
-                                0
-                            };
-
-                            if mx >= text_area_x + sb_x
-                                && mx < text_area_x + sb_x + (6.0 * scale) as i32
-                                && my >= text_area_y + sb_y + thumb_y
-                                && my < text_area_y + sb_y + thumb_y + thumb_h
+                            if let Some(thumb) = Thumb::new(
+                                scrollbar_track_h(text_area_h, scale),
+                                visible_lines as f32,
+                                total_lines as f32,
+                                scroll_offset as f32,
+                                BASE_MIN_THUMB * scale,
+                            ) && local_x >= sb_x
+                                && local_x < sb_x + sb_w
+                                && thumb.contains(local_y - inset)
                             {
                                 thumb_drag = true;
-                                thumb_drag_offset = Some(my - (text_area_y + sb_y + thumb_y));
+                                thumb_drag_offset =
+                                    Some(my - text_area_y - (inset + thumb.offset) as i32);
                             }
                         }
                     }
@@ -842,14 +821,6 @@ fn wrap_line(font: &Font, line: &str, max_width: u32, out: &mut Vec<String>) {
         out.push(remaining[..break_at].trim_end().to_string());
         remaining = remaining[break_at..].trim_start();
     }
-}
-
-fn darken(color: crate::render::Rgba, amount: f32) -> crate::render::Rgba {
-    rgb(
-        (color.r as f32 * (1.0 - amount)) as u8,
-        (color.g as f32 * (1.0 - amount)) as u8,
-        (color.b as f32 * (1.0 - amount)) as u8,
-    )
 }
 
 #[cfg(test)]
