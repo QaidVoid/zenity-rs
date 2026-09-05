@@ -10,7 +10,7 @@ use crate::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB,
         BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN,
         KEY_PAGE_UP, KEY_RETURN, KEY_UP, Thumb, darken, open_window,
-        widgets::{Widget, button::Button},
+        widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
 
@@ -525,7 +525,23 @@ impl TextInfoBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
-                    window_dragging = true;
+                    // Dragging the background moves the window; dragging the text area,
+                    // checkbox or a button belongs to the dialog
+                    let (cx, cy) = last_cursor_pos.unwrap_or((i32::MIN, i32::MIN));
+                    window_dragging =
+                        !point_in_rect(cx, cy, text_area_x, text_area_y, text_area_w, text_area_h)
+                            && !point_in_widget(cx, cy, &ok_button)
+                            && !point_in_widget(cx, cy, &cancel_button)
+                            && !(has_checkbox
+                                && point_in_rect(
+                                    cx,
+                                    cy,
+                                    text_area_x,
+                                    checkbox_y,
+                                    text_area_w,
+                                    checkbox_size,
+                                ));
+
                     clicking_scrollbar = false;
 
                     // Check if clicking anywhere in scrollbar area (thumb OR track)

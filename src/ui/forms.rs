@@ -7,7 +7,7 @@ use crate::{
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
         KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB, open_window,
-        widgets::{Widget, button::Button, text_input::TextInput},
+        widgets::{Widget, button::Button, point_in_widget, text_input::TextInput},
     },
 };
 
@@ -383,7 +383,8 @@ impl FormsBuilder {
                 WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
                     // Dragging the background moves the window; dragging inside a
                     // field selects text, so the two must not both claim the press
-                    window_dragging = true;
+                    window_dragging = !point_in_widget(cursor_x, cursor_y, &ok_button)
+                        && !point_in_widget(cursor_x, cursor_y, &cancel_button);
                     for (i, input) in inputs.iter().enumerate() {
                         let ix = input.x();
                         let iy = input.y();

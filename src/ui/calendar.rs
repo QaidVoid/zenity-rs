@@ -7,7 +7,7 @@ use crate::{
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
         KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP, darken, open_window,
-        widgets::{Widget, button::Button},
+        widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
 
@@ -303,7 +303,15 @@ impl CalendarBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
-                    window_dragging = true;
+                    // Dragging the background moves the window; dragging the grid or a
+                    // button belongs to the dialog
+                    let calendar_w = width.saturating_sub(padding * 2);
+                    let calendar_h = (button_y - calendar_y).max(0) as u32;
+                    window_dragging = !point_in_rect(
+                        mouse_x, mouse_y, calendar_x, calendar_y, calendar_w, calendar_h,
+                    ) && !point_in_widget(mouse_x, mouse_y, &ok_button)
+                        && !point_in_widget(mouse_x, mouse_y, &cancel_button);
+
                     let header_y = calendar_y;
 
                     // Handle dropdown selection

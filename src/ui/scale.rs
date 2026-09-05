@@ -7,7 +7,7 @@ use crate::{
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_END, KEY_ESCAPE,
         KEY_HOME, KEY_LEFT, KEY_RETURN, KEY_RIGHT, open_window,
-        widgets::{Widget, button::Button},
+        widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
 
@@ -437,7 +437,18 @@ impl ScaleBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
-                    window_dragging = true;
+                    // Dragging the background moves the window; dragging the slider or a
+                    // button belongs to the dialog
+                    window_dragging = !point_in_rect(
+                        cursor_x,
+                        cursor_y,
+                        slider_x,
+                        thumb_y,
+                        slider_width,
+                        thumb_size,
+                    ) && !point_in_widget(cursor_x, cursor_y, &ok_button)
+                        && !point_in_widget(cursor_x, cursor_y, &cancel_button);
+
                     let mx = cursor_x;
                     let my = cursor_y;
 

@@ -7,7 +7,7 @@ use crate::{
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
         open_window,
-        widgets::{Widget, button::Button, point_in_rect, text_input::TextInput},
+        widgets::{Widget, button::Button, point_in_rect, point_in_widget, text_input::TextInput},
     },
 };
 
@@ -318,7 +318,8 @@ impl EntryBuilder {
                         input.y(),
                         input.width(),
                         input.height(),
-                    );
+                    ) && !point_in_widget(cursor_x, cursor_y, &ok_button)
+                        && !point_in_widget(cursor_x, cursor_y, &cancel_button);
                 }
                 WindowEvent::ButtonRelease(crate::backend::MouseButton::Left, _) => {
                     window_dragging = false;

@@ -9,7 +9,7 @@ use crate::{
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, ButtonPreset, Colors,
         DialogResult, Icon, KEY_ESCAPE, KEY_RETURN, open_window,
-        widgets::{Widget, button::Button},
+        widgets::{Widget, button::Button, point_in_widget},
     },
 };
 
@@ -296,6 +296,8 @@ impl MessageBuilder {
 
         // Event loop
         let mut dragging = false;
+        let mut cursor_x = 0i32;
+        let mut cursor_y = 0i32;
         let deadline = self
             .timeout
             .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
@@ -349,7 +351,11 @@ impl MessageBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, _) => {
-                    dragging = true;
+                    // Dragging the background moves the window; dragging a button
+                    // belongs to the dialog
+                    dragging = !buttons
+                        .iter()
+                        .any(|b| point_in_widget(cursor_x, cursor_y, b));
                 }
                 WindowEvent::ButtonRelease(MouseButton::Left, _) if dragging => {
                     dragging = false;
@@ -369,9 +375,13 @@ impl MessageBuilder {
             }
 
             // Handle drag
-            if dragging && let WindowEvent::CursorMove(_) = &event {
-                let _ = window.start_drag();
-                dragging = false;
+            if let WindowEvent::CursorMove(pos) = &event {
+                cursor_x = pos.x as i32;
+                cursor_y = pos.y as i32;
+                if dragging {
+                    let _ = window.start_drag();
+                    dragging = false;
+                }
             }
 
             // Batch process pending events

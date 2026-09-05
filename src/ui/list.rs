@@ -8,7 +8,7 @@ use crate::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB,
         BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN,
         KEY_RIGHT, KEY_RSHIFT, KEY_SPACE, KEY_UP, Thumb, darken, open_window,
-        widgets::{Widget, button::Button},
+        widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
 
@@ -959,7 +959,13 @@ impl ListBuilder {
                     }
                 }
                 WindowEvent::ButtonPress(MouseButton::Left, mods) => {
-                    window_dragging = true;
+                    // Dragging the background moves the window; dragging the list or a
+                    // button belongs to the dialog, so the two must not both claim it
+                    let (cx, cy) = last_cursor_pos.unwrap_or((i32::MIN, i32::MIN));
+                    window_dragging = !point_in_rect(cx, cy, list_x, list_y, list_w, list_h)
+                        && !point_in_widget(cx, cy, &ok_button)
+                        && !point_in_widget(cx, cy, &cancel_button);
+
                     let mut clicking_scrollbar = false;
 
                     // Check if clicking anywhere in scrollbar area (thumb OR track)

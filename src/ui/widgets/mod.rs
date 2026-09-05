@@ -22,3 +22,15 @@ pub(crate) trait Widget {
 pub(crate) fn point_in_rect(px: i32, py: i32, x: i32, y: i32, w: u32, h: u32) -> bool {
     px >= x && px < x + w as i32 && py >= y && py < y + h as i32
 }
+
+/// Check if a point is within a widget's bounds.
+pub(crate) fn point_in_widget(px: i32, py: i32, widget: &impl Widget) -> bool {
+    point_in_rect(
+        px,
+        py,
+        widget.x(),
+        widget.y(),
+        widget.width(),
+        widget.height(),
+    )
+}

@@ -16,7 +16,7 @@ use crate::{
     render::{Canvas, Font},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, open_window,
-        widgets::{Widget, button::Button, progress_bar::ProgressBar},
+        widgets::{Widget, button::Button, point_in_widget, progress_bar::ProgressBar},
     },
 };
 
@@ -339,6 +339,8 @@ impl ProgressBuilder {
 
         // Event loop with timeout for animation
         let mut window_dragging = false;
+        let mut cursor_x = 0i32;
+        let mut cursor_y = 0i32;
         let mut stdin_done = false;
         loop {
             let mut needs_redraw = false;
@@ -423,14 +425,18 @@ impl ProgressBuilder {
                     WindowEvent::RedrawRequested => {
                         needs_redraw = true;
                     }
-                    WindowEvent::CursorMove(_) => {
+                    WindowEvent::CursorMove(pos) => {
+                        cursor_x = pos.x as i32;
+                        cursor_y = pos.y as i32;
                         if window_dragging {
                             let _ = window.start_drag();
                             window_dragging = false;
                         }
                     }
                     WindowEvent::ButtonPress(crate::backend::MouseButton::Left, _) => {
-                        window_dragging = true;
+                        window_dragging = !cancel_button
+                            .as_ref()
+                            .is_some_and(|b| point_in_widget(cursor_x, cursor_y, b));
                     }
                     WindowEvent::ButtonRelease(crate::backend::MouseButton::Left, _) => {
                         window_dragging = false;
