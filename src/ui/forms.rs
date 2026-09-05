@@ -5,8 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
-        KEY_ISO_LEFT_TAB, KEY_RETURN, KEY_TAB, open_window,
+        BASE_BUTTON_HEIGHT, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE, KEY_ISO_LEFT_TAB, KEY_RETURN,
+        KEY_TAB, button_row_y, ok_cancel_logical_width, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, point_in_widget, text_input::TextInput},
     },
 };
@@ -139,8 +139,6 @@ impl FormsBuilder {
 
         // First pass: calculate LOGICAL dimensions using scale 1.0
         let temp_font = Font::load(1.0);
-        let temp_ok = Button::new("OK", &temp_font, 1.0);
-        let temp_cancel = Button::new("Cancel", &temp_font, 1.0);
         let temp_prompt_height = if !self.text.is_empty() {
             temp_font
                 .render(&self.text)
@@ -151,7 +149,7 @@ impl FormsBuilder {
             0
         };
 
-        let logical_buttons_width = temp_ok.width() + temp_cancel.width() + BASE_BUTTON_SPACING;
+        let logical_buttons_width = ok_cancel_logical_width(&temp_font);
         let logical_content_width =
             (BASE_LABEL_WIDTH + BASE_INPUT_WIDTH + BASE_LABEL_GAP).max(logical_buttons_width);
         let calc_width = (logical_content_width + BASE_PADDING * 2).max(BASE_MIN_WIDTH);
@@ -170,8 +168,6 @@ impl FormsBuilder {
             + BASE_BUTTON_HEIGHT;
 
         drop(temp_font);
-        drop(temp_ok);
-        drop(temp_cancel);
 
         // Use custom dimensions if provided, otherwise use calculated defaults
         let logical_width = self.width.unwrap_or(calc_width) as u16;
@@ -248,13 +244,15 @@ impl FormsBuilder {
         }
 
         // Button positions (right-aligned)
-        let button_y =
-            physical_height as i32 - padding as i32 - (BASE_BUTTON_HEIGHT as f32 * scale) as i32;
-        let mut button_x = physical_width as i32 - padding as i32;
-        button_x -= cancel_button.width() as i32;
-        cancel_button.set_position(button_x, button_y);
-        button_x -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
-        ok_button.set_position(button_x, button_y);
+        let button_y = button_row_y(physical_height, padding, scale);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            physical_width,
+            padding,
+            button_y,
+            scale,
+        );
 
         // Track cursor position
         let mut cursor_x = 0i32;

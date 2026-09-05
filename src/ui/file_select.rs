@@ -12,8 +12,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, Rgba, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB, Colors,
-        KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP, Thumb, icons, open_window,
+        BASE_CORNER_RADIUS, BASE_MIN_THUMB, Colors, KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE,
+        KEY_RETURN, KEY_UP, Thumb, button_row_y, icons, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -532,13 +532,15 @@ impl FileSelectBuilder {
         };
 
         // Position buttons
-        let button_y =
-            (window_height - padding - (BASE_BUTTON_HEIGHT as f32 * scale) as u32) as i32;
-        let mut bx = window_width as i32 - padding as i32;
-        bx -= cancel_button.width() as i32;
-        cancel_button.set_position(bx, button_y);
-        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
-        ok_button.set_position(bx, button_y);
+        let button_y = button_row_y(window_height, padding, scale);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            window_width,
+            padding,
+            button_y,
+            scale,
+        );
 
         // Position filename area (label above, full-width input below, save mode only)
         let filename_y = button_y - filename_row_height as i32;

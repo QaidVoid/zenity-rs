@@ -7,9 +7,9 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB,
-        BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN,
-        KEY_PAGE_UP, KEY_RETURN, KEY_UP, Thumb, darken, open_window,
+        BASE_CORNER_RADIUS, BASE_MIN_THUMB, BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_END,
+        KEY_ESCAPE, KEY_HOME, KEY_PAGE_DOWN, KEY_PAGE_UP, KEY_RETURN, KEY_UP, Thumb, button_row_y,
+        darken, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
@@ -162,14 +162,13 @@ impl TextInfoBuilder {
         } else {
             line_height + (8.0 * scale) as u32
         };
-        let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
         let checkbox_row_height = if has_checkbox {
             checkbox_size + (8.0 * scale) as u32
         } else {
             0
         };
         let button_spacing = (24.0 * scale) as u32;
-        let button_y = (physical_height - padding - button_height) as i32;
+        let button_y = button_row_y(physical_height, padding, scale);
         let checkbox_y = if has_checkbox {
             button_y - checkbox_row_height as i32 - (8.0 * scale) as i32
         } else {
@@ -199,11 +198,14 @@ impl TextInfoBuilder {
         let visible_lines = (text_area_h / line_height) as usize;
 
         // Button positions (right-aligned)
-        let mut bx = physical_width as i32 - padding as i32;
-        bx -= cancel_button.width() as i32;
-        cancel_button.set_position(bx, button_y);
-        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
-        ok_button.set_position(bx, button_y);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            physical_width,
+            padding,
+            button_y,
+            scale,
+        );
 
         // State
         let mut scroll_offset = 0usize;

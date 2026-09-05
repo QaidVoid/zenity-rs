@@ -5,9 +5,9 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, BASE_MIN_THUMB,
-        BASE_TITLE_FONT_SIZE, Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN,
-        KEY_RIGHT, KEY_RSHIFT, KEY_SPACE, KEY_UP, Thumb, darken, open_window,
+        BASE_BUTTON_HEIGHT, BASE_CORNER_RADIUS, BASE_MIN_THUMB, BASE_TITLE_FONT_SIZE, Colors,
+        KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_LSHIFT, KEY_RETURN, KEY_RIGHT, KEY_RSHIFT, KEY_SPACE,
+        KEY_UP, Thumb, button_row_y, darken, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
@@ -422,8 +422,7 @@ impl ListBuilder {
             y += text_height as i32;
         }
 
-        let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
-        let button_y = physical_height.saturating_sub(padding + button_height) as i32;
+        let button_y = button_row_y(physical_height, padding, scale);
 
         // The list fills whatever space is left between the prompt and the buttons
         let list_x = padding as i32;
@@ -434,11 +433,14 @@ impl ListBuilder {
             .max(1);
         let visible_rows = (list_h / row_height) as usize;
 
-        let mut bx = physical_width as i32 - padding as i32;
-        bx -= cancel_button.width() as i32;
-        cancel_button.set_position(bx, button_y);
-        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
-        ok_button.set_position(bx, button_y);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            physical_width,
+            padding,
+            button_y,
+            scale,
+        );
 
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);

@@ -8,7 +8,7 @@ use crate::{
     render::{Canvas, Font, rgb},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, ButtonPreset, Colors,
-        DialogResult, Icon, KEY_ESCAPE, KEY_RETURN, open_window,
+        DialogResult, Icon, KEY_ESCAPE, KEY_RETURN, button_row_y, open_window,
         widgets::{Widget, button::Button, point_in_widget},
     },
 };
@@ -242,9 +242,7 @@ impl MessageBuilder {
         if use_vertical_layout {
             // Vertical layout: stack buttons vertically, full width
             for (idx, button) in buttons.iter_mut().enumerate() {
-                let button_y = physical_height as i32
-                    - padding as i32
-                    - button_height as i32
+                let button_y = button_row_y(physical_height, padding, scale)
                     - (idx as i32 * (button_height as i32 + button_spacing as i32));
 
                 // Full width with padding on sides
@@ -257,10 +255,10 @@ impl MessageBuilder {
             }
         } else {
             // Horizontal layout: right-aligned in a single row
+            let button_y = button_row_y(physical_height, padding, scale);
             let mut button_x = physical_width as i32 - padding as i32;
             for button in buttons.iter().rev() {
                 button_x -= button.width() as i32;
-                let button_y = physical_height as i32 - padding as i32 - button_height as i32;
                 button_positions.push((button_x, button_y));
                 button_x -= button_spacing as i32;
             }

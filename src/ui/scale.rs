@@ -5,8 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_END, KEY_ESCAPE,
-        KEY_HOME, KEY_LEFT, KEY_RETURN, KEY_RIGHT, open_window,
+        BASE_CORNER_RADIUS, Colors, KEY_END, KEY_ESCAPE, KEY_HOME, KEY_LEFT, KEY_RETURN, KEY_RIGHT,
+        button_row_y, ok_cancel_logical_width, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
@@ -138,15 +138,13 @@ impl ScaleBuilder {
 
         // First pass: calculate LOGICAL dimensions using scale 1.0
         let temp_font = Font::load(1.0);
-        let temp_ok = Button::new("OK", &temp_font, 1.0);
-        let temp_cancel = Button::new("Cancel", &temp_font, 1.0);
         let temp_prompt_height = if !self.text.is_empty() {
             temp_font.render(&self.text).finish().height()
         } else {
             0
         };
 
-        let logical_buttons_width = temp_ok.width() + temp_cancel.width() + 10;
+        let logical_buttons_width = ok_cancel_logical_width(&temp_font);
         let logical_content_width = BASE_SLIDER_WIDTH.max(logical_buttons_width);
         let calc_width = (logical_content_width + BASE_PADDING * 2).max(BASE_MIN_WIDTH);
 
@@ -160,8 +158,6 @@ impl ScaleBuilder {
             + 32 + 16; // Buttons
 
         drop(temp_font);
-        drop(temp_ok);
-        drop(temp_cancel);
 
         // Use custom dimensions if provided, otherwise use calculated defaults
         let logical_width = self.width.unwrap_or(calc_width) as u16;
@@ -210,13 +206,15 @@ impl ScaleBuilder {
         y += thumb_size as i32 + (16.0 * scale) as i32;
 
         // Button positions (right-aligned)
-        let button_y =
-            physical_height as i32 - padding as i32 - (BASE_BUTTON_HEIGHT as f32 * scale) as i32;
-        let mut button_x = physical_width as i32 - padding as i32;
-        button_x -= cancel_button.width() as i32;
-        cancel_button.set_position(button_x, button_y);
-        button_x -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
-        ok_button.set_position(button_x, button_y);
+        let button_y = button_row_y(physical_height, padding, scale);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            physical_width,
+            padding,
+            button_y,
+            scale,
+        );
 
         // State
         let mut dragging = false;

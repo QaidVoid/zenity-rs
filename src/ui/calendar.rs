@@ -5,8 +5,8 @@ use crate::{
     error::Error,
     render::{Canvas, Font, rgb},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE,
-        KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP, darken, open_window,
+        BASE_CORNER_RADIUS, Colors, KEY_DOWN, KEY_ESCAPE, KEY_LEFT, KEY_RETURN, KEY_RIGHT, KEY_UP,
+        button_row_y, darken, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, point_in_rect, point_in_widget},
     },
 };
@@ -206,12 +206,15 @@ impl CalendarBuilder {
         let calendar_x = padding as i32;
         let calendar_y = y;
 
-        let button_y = (height - padding - (BASE_BUTTON_HEIGHT as f32 * scale) as u32) as i32;
-        let mut bx = width as i32 - padding as i32;
-        bx -= cancel_button.width() as i32;
-        cancel_button.set_position(bx, button_y);
-        bx -= (BASE_BUTTON_SPACING as f32 * scale) as i32 + ok_button.width() as i32;
-        ok_button.set_position(bx, button_y);
+        let button_y = button_row_y(height, padding, scale);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            width,
+            padding,
+            button_y,
+            scale,
+        );
 
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(width, height);

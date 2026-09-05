@@ -6,7 +6,7 @@ use crate::{
     render::{Canvas, Font},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE,
-        open_window,
+        ok_cancel_logical_width, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, point_in_rect, point_in_widget, text_input::TextInput},
     },
 };
@@ -99,8 +99,6 @@ impl EntryBuilder {
 
         // First pass: calculate LOGICAL dimensions using scale 1.0
         let temp_font = Font::load(1.0);
-        let temp_ok = Button::new("OK", &temp_font, 1.0);
-        let temp_cancel = Button::new("Cancel", &temp_font, 1.0);
         let temp_prompt_height = if !self.text.is_empty() {
             temp_font
                 .render(&self.text)
@@ -112,7 +110,7 @@ impl EntryBuilder {
         };
         let temp_input = TextInput::new(BASE_INPUT_WIDTH);
 
-        let logical_buttons_width = temp_ok.width() + temp_cancel.width() + BASE_BUTTON_SPACING;
+        let logical_buttons_width = ok_cancel_logical_width(&temp_font);
         let logical_content_width = BASE_INPUT_WIDTH.max(logical_buttons_width);
         let calc_width = logical_content_width + BASE_PADDING * 2;
         let calc_height = BASE_PADDING * 3
@@ -127,8 +125,6 @@ impl EntryBuilder {
             + BASE_BUTTON_HEIGHT;
 
         drop(temp_font);
-        drop(temp_ok);
-        drop(temp_cancel);
         drop(temp_input);
 
         // Use custom dimensions if provided, otherwise use calculated defaults
@@ -148,7 +144,6 @@ impl EntryBuilder {
 
         // Scale dimensions for physical rendering
         let padding = (BASE_PADDING as f32 * scale) as u32;
-        let button_spacing = (BASE_BUTTON_SPACING as f32 * scale) as u32;
 
         // Input should fill available width
         let input_width = physical_width - (padding * 2);
@@ -189,11 +184,14 @@ impl EntryBuilder {
         y += input.height() as i32 + (BASE_BUTTON_SPACING as f32 * scale) as i32;
 
         // Button positions (right-aligned)
-        let mut button_x = physical_width as i32 - padding as i32;
-        button_x -= cancel_button.width() as i32;
-        cancel_button.set_position(button_x, y);
-        button_x -= button_spacing as i32 + ok_button.width() as i32;
-        ok_button.set_position(button_x, y);
+        place_ok_cancel(
+            &mut ok_button,
+            &mut cancel_button,
+            physical_width,
+            padding,
+            y,
+            scale,
+        );
 
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);

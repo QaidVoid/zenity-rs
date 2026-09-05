@@ -15,7 +15,8 @@ pub(crate) mod widgets;
 use crate::{
     backend::{AnyWindow, Window, create_window},
     error::Error,
-    render::{Rgba, rgb},
+    render::{Font, Rgba, rgb},
+    ui::widgets::{Widget, button::Button},
 };
 
 /// Create a dialog window sized in logical units, title it, and report the
@@ -71,6 +72,39 @@ pub(crate) const BASE_BUTTON_SPACING: u32 = 10;
 pub(crate) const BASE_TITLE_FONT_SIZE: f32 = 18.0 * 1.5;
 /// Shortest a scrollbar thumb may shrink to, however long the content is.
 pub(crate) const BASE_MIN_THUMB: f32 = 20.0;
+
+/// Y coordinate of the button row along the bottom edge of a dialog.
+pub(crate) fn button_row_y(physical_height: u32, padding: u32, scale: f32) -> i32 {
+    let button_height = (BASE_BUTTON_HEIGHT as f32 * scale) as u32;
+    physical_height.saturating_sub(padding + button_height) as i32
+}
+
+/// Right-align OK and Cancel on the button row, Cancel outermost.
+pub(crate) fn place_ok_cancel(
+    ok: &mut Button,
+    cancel: &mut Button,
+    physical_width: u32,
+    padding: u32,
+    y: i32,
+    scale: f32,
+) {
+    let spacing = (BASE_BUTTON_SPACING as f32 * scale) as i32;
+    let mut x = physical_width as i32 - padding as i32;
+    x -= cancel.width() as i32;
+    cancel.set_position(x, y);
+    x -= spacing + ok.width() as i32;
+    ok.set_position(x, y);
+}
+
+/// Width an OK and Cancel pair needs in logical units, gap included.
+///
+/// Dialogs size their window from logical measurements taken at scale 1.0
+/// before the real font exists, so `font` must be loaded at that scale.
+pub(crate) fn ok_cancel_logical_width(font: &Font) -> u32 {
+    Button::new("OK", font, 1.0).width()
+        + Button::new("Cancel", font, 1.0).width()
+        + BASE_BUTTON_SPACING
+}
 
 /// Scale each color channel toward black by `amount`, leaving alpha untouched.
 pub(crate) fn darken(color: Rgba, amount: f32) -> Rgba {
