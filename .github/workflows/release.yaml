@@ -64,10 +64,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - name: Set the release version
-        shell: bash
-        run: echo "RELEASE_VERSION=${GITHUB_REF:11}" >> $GITHUB_ENV
-
       - name: Install dependencies
         shell: bash
         run: |
@@ -103,12 +99,13 @@ jobs:
 
       - name: Build
         run: |
+          # the profile only asks for panic = "abort" so the crate still builds
+          # on stable; nightly upgrades it to immediate-abort here
+          export RUSTFLAGS="-Z unstable-options -C panic=immediate-abort"
           if [ -n "${{ matrix.build.ZIGTARGET }}" ]; then
             TENV=$(echo "${{ matrix.build.TARGET }}" | tr 'a-z-' 'A-Z_')
             export CARGO_TARGET_${TENV}_LINKER="$RUNNER_TEMP/zigcc"
-            # CARGO_TARGET_RUSTFLAGS (not RUSTFLAGS) so the flags do not leak
-            # into proc macros built for the host
-            export CARGO_TARGET_${TENV}_RUSTFLAGS="-C target-feature=+crt-static -C link-self-contained=no"
+            RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static -C link-self-contained=no"
             export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-cache"
             export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-cache"
           fi
@@ -130,6 +127,7 @@ jobs:
           b3sum zenity-rs-${{ matrix.build.NAME }}.tar.xz > zenity-rs-${{ matrix.build.NAME }}.tar.xz.b3sum
 
       - name: Upload to release
+        if: github.event_name == 'release'
         uses: svenstaro/upload-release-action@29e53e917877a24fad85510ded594ab3c9ca12de # v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
@@ -139,6 +137,7 @@ jobs:
           tag: ${{ github.ref }}
 
       - name: Attest Build Provenance
+        if: github.event_name == 'release'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-name: "zenity-rs-${{ matrix.build.NAME }}"
