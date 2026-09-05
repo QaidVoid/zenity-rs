@@ -1,4 +1,16 @@
 
+## [0.2.15](https://github.com/QaidVoid/zenity-rs/compare/v0.2.14...v0.2.15) - 2026-09-05
+
+### Fixed
+
+- *(ui)* Stop window drags from stealing widget presses - ([3e34e3b](https://github.com/QaidVoid/zenity-rs/commit/3e34e3bb7ca1bf9c97569fcdf3ae83cadce24aeb))
+
+### Other
+
+- *(ui)* Share the OK/Cancel button row layout - ([6fcfc60](https://github.com/QaidVoid/zenity-rs/commit/6fcfc609ad2cccb583bafcc456dcb37936e21517))
+- *(ui)* Share scrollbar thumb geometry - ([0f48c51](https://github.com/QaidVoid/zenity-rs/commit/0f48c510d2af64eae26d8af36e0783fb648639ec))
+- Allow stable builds, keep immediate-abort in CI - ([0bf66ca](https://github.com/QaidVoid/zenity-rs/commit/0bf66cac780f003537d3f3156474964597ca49a4))
+
 ## [0.2.14](https://github.com/QaidVoid/zenity-rs/compare/v0.2.13...v0.2.14) - 2026-09-03
 
 ### Fixed
