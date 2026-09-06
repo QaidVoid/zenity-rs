@@ -1,6 +1,10 @@
 //! Text info dialog implementation for displaying text from files or stdin.
 
-use std::{collections::HashMap, io::Read};
+use std::{
+    collections::HashMap,
+    io::Read,
+    time::{Duration, Instant},
+};
 
 use crate::{
     backend::{Window, WindowEvent},
@@ -44,11 +48,14 @@ pub enum TextInfoResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl TextInfoResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            TextInfoResult::Timeout => 5,
             TextInfoResult::Ok {
                 checkbox_checked,
             } => {
@@ -72,6 +79,8 @@ pub struct TextInfoBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    auto_scroll: bool,
+    timeout: Option<u32>,
 }
 
 impl TextInfoBuilder {
@@ -83,6 +92,8 @@ impl TextInfoBuilder {
             width: None,
             height: None,
             colors: None,
+            auto_scroll: false,
+            timeout: None,
         }
     }
 
@@ -97,9 +108,21 @@ impl TextInfoBuilder {
         self
     }
 
+    /// Open scrolled to the end rather than the start.
+    pub fn auto_scroll(mut self, auto_scroll: bool) -> Self {
+        self.auto_scroll = auto_scroll;
+        self
+    }
+
     /// Add a checkbox at the bottom (e.g., "I agree to the terms").
     pub fn checkbox(mut self, text: &str) -> Self {
         self.checkbox_text = Some(text.to_string());
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -208,7 +231,11 @@ impl TextInfoBuilder {
         );
 
         // State
-        let mut scroll_offset = 0usize;
+        let mut scroll_offset = if self.auto_scroll {
+            wrapped_lines.len().saturating_sub(visible_lines)
+        } else {
+            0
+        };
         let mut checkbox_checked = false;
         let mut checkbox_hovered = false;
         let mut scrollbar_hovered = false;
@@ -458,8 +485,28 @@ impl TextInfoBuilder {
         window.show()?;
 
         // Event loop
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(TextInfoResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
             let mut needs_redraw = false;
 
             match &event {

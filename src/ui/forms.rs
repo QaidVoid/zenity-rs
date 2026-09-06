@@ -1,5 +1,7 @@
 //! Forms dialog implementation for multiple input fields.
 
+use std::time::{Duration, Instant};
+
 use crate::{
     backend::{CursorShape, Window, WindowEvent},
     error::Error,
@@ -51,11 +53,14 @@ pub enum FormsResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl FormsResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            FormsResult::Timeout => 5,
             FormsResult::Values(_) => 0,
             FormsResult::Cancelled => 1,
             FormsResult::Closed => 1,
@@ -72,6 +77,7 @@ pub struct FormsBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
 }
 
 impl FormsBuilder {
@@ -84,6 +90,7 @@ impl FormsBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
         }
     }
 
@@ -112,6 +119,12 @@ impl FormsBuilder {
     /// Set the output separator (default: "|").
     pub fn separator(mut self, sep: &str) -> Self {
         self.separator = sep.to_string();
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -339,8 +352,28 @@ impl FormsBuilder {
 
         // Event loop
         let mut window_dragging = false;
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(FormsResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
             let mut needs_redraw = false;
 
             match &event {

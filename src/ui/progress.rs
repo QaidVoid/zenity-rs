@@ -8,7 +8,7 @@ use std::{
         mpsc::{self, TryRecvError},
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 #[cfg(unix)]
@@ -38,11 +38,14 @@ pub enum ProgressResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the dialog finished.
+    Timeout,
 }
 
 impl ProgressResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            ProgressResult::Timeout => 5,
             ProgressResult::Completed => 0,
             ProgressResult::Cancelled => 1,
             ProgressResult::Closed => 1,
@@ -211,6 +214,7 @@ pub struct ProgressBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
 }
 
 impl ProgressBuilder {
@@ -227,6 +231,7 @@ impl ProgressBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
         }
     }
 
@@ -257,6 +262,12 @@ impl ProgressBuilder {
 
     pub fn auto_kill(mut self, auto_kill: bool) -> Self {
         self.auto_kill = auto_kill;
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -565,9 +576,19 @@ impl ProgressBuilder {
         let mut cursor_x = 0i32;
         let mut cursor_y = 0i32;
         let mut input_done = false;
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
             if state.close_requested.load(Ordering::Acquire) {
                 return Ok(ProgressResult::Completed);
+            }
+
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(ProgressResult::Timeout);
             }
 
             let mut needs_redraw = false;

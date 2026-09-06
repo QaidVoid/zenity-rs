@@ -143,6 +143,16 @@ fn apply_message_options(
     builder
 }
 
+/// Exit code zenity uses for a usage problem: an unknown option, an option
+/// value it cannot parse, or no dialog type at all.
+const EXIT_USAGE: i32 = 255;
+
+/// The message zenity prints for any unusable option.
+fn usage_error() -> i32 {
+    eprintln!("This option is not available. Please see --help for all possible usages.");
+    EXIT_USAGE
+}
+
 fn main() -> ExitCode {
     match run() {
         Ok(code) => ExitCode::from(code as u8),
@@ -164,6 +174,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut text_explicit = false;
     let mut entry_text = String::new();
     let mut timeout: Option<u32> = None;
+    let mut hide_text = false;
+    let mut password_flag = false;
+    let mut auto_scroll = false;
     let mut width: Option<u32> = None;
     let mut height: Option<u32> = None;
     let mut no_wrap = false;
@@ -224,151 +237,172 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     // Dialog type
     let mut dialog_type: Option<DialogType> = None;
 
-    while let Some(arg) = parser.next()? {
-        match arg {
-            Long("help") | Short('h') => {
-                print_help();
-                return Ok(0);
-            }
-            Long("version") => {
-                println!("{VERSION}");
-                return Ok(0);
-            }
+    // zenity answers every unusable option the same way, so the whole parse
+    // runs in one place and any failure inside it lands on the same exit.
+    let parsed = (|| -> Result<Option<i32>, Box<dyn std::error::Error>> {
+        while let Some(arg) = parser.next()? {
+            match arg {
+                Long("help") | Short('h') => {
+                    print_help();
+                    return Ok(Some(0));
+                }
+                Long("version") => {
+                    println!("{VERSION}");
+                    return Ok(Some(0));
+                }
 
-            // Dialog types
-            Long("info") => dialog_type = Some(DialogType::Info),
-            Long("warning") => dialog_type = Some(DialogType::Warning),
-            Long("error") => dialog_type = Some(DialogType::Error),
-            Long("question") => dialog_type = Some(DialogType::Question),
-            Long("entry") => dialog_type = Some(DialogType::Entry),
-            Long("password") => dialog_type = Some(DialogType::Password),
-            Long("progress") => dialog_type = Some(DialogType::Progress),
-            Long("file-selection") => dialog_type = Some(DialogType::FileSelection),
-            Long("list") => dialog_type = Some(DialogType::List),
-            Long("calendar") => dialog_type = Some(DialogType::Calendar),
-            Long("text-info") => dialog_type = Some(DialogType::TextInfo),
-            Long("scale") => dialog_type = Some(DialogType::Scale),
-            Long("forms") => dialog_type = Some(DialogType::Forms),
-
-            // Common options
-            Long("title") => title = parser.value()?.string()?,
-            Long("text") => {
-                text = parser.value()?.string()?;
-                text_explicit = true;
-            }
-            Long("entry-text") => entry_text = parser.value()?.string()?,
-            Long("hide-text") => {
-                // If --hide-text is specified with --entry, treat as password mode
-                if dialog_type == Some(DialogType::Entry) {
+                // Dialog types
+                Long("info") => dialog_type = Some(DialogType::Info),
+                Long("warning") => dialog_type = Some(DialogType::Warning),
+                Long("error") => dialog_type = Some(DialogType::Error),
+                Long("question") => dialog_type = Some(DialogType::Question),
+                Long("entry") => dialog_type = Some(DialogType::Entry),
+                Long("password") => {
                     dialog_type = Some(DialogType::Password);
+                    password_flag = true;
                 }
-            }
-            Long("timeout") => timeout = Some(parser.value()?.string()?.parse()?),
-            Long("width") => width = Some(parser.value()?.string()?.parse()?),
-            Long("height") => height = Some(parser.value()?.string()?.parse()?),
-            Long("no-wrap") => no_wrap = true,
-            Long("no-markup") => no_markup = true,
-            Long("ellipsize") => ellipsize = true,
-            Long("icon-name") | Long("icon") | Long("window-icon") => {
-                icon_name = Some(parser.value()?.string()?)
-            }
-            Long("switch") => switch_mode = true,
-            Long("extra-button") => extra_buttons.push(parser.value()?.string()?),
-            Long("ok-label") => ok_label = parser.value()?.string()?,
-            Long("cancel-label") => cancel_label = parser.value()?.string()?,
-            Long("separator") => separator = parser.value()?.string()?,
+                Long("progress") => dialog_type = Some(DialogType::Progress),
+                Long("file-selection") => dialog_type = Some(DialogType::FileSelection),
+                Long("list") => dialog_type = Some(DialogType::List),
+                Long("calendar") => dialog_type = Some(DialogType::Calendar),
+                Long("text-info") => dialog_type = Some(DialogType::TextInfo),
+                Long("scale") => dialog_type = Some(DialogType::Scale),
+                Long("forms") => dialog_type = Some(DialogType::Forms),
 
-            // Progress options
-            Long("percentage") => percentage = parser.value()?.string()?.parse()?,
-            Long("pulsate") => pulsate = true,
-            Long("auto-close") => auto_close = true,
-            Long("auto-kill") => auto_kill = true,
-            Long("no-cancel") => no_cancel = true,
-            Long("time-remaining") => time_remaining = true,
-
-            // File selection options
-            Long("directory") => directory_mode = true,
-            Long("save") => save_mode = true,
-            Long("multiple") => {
-                multiple_mode = true;
-            }
-            Long("filename") => filename = parser.value()?.string()?,
-            Long("confirm-overwrite") => {
-                // Deprecated option, accepted for compatibility only
-            }
-            Long("file-filter") => {
-                let filter_spec = parser.value()?.string()?;
-                // Parse "Name | Pattern1 Pattern2 Pattern3" format
-                if let Some((name, patterns_str)) = filter_spec.split_once('|') {
-                    let name = name.trim().to_string();
-                    // Split patterns by whitespace and filter empty strings
-                    let patterns: Vec<String> = patterns_str
-                        .split_whitespace()
-                        .filter(|s| !s.is_empty())
-                        .map(|s| s.to_string())
-                        .collect();
-                    file_filters.push(zenity_rs::FileFilter {
-                        name,
-                        patterns,
-                    });
-                } else {
-                    // Just pattern provided, use it as both name and single pattern
-                    file_filters.push(zenity_rs::FileFilter {
-                        name: filter_spec.clone(),
-                        patterns: vec![filter_spec],
-                    });
-                }
-            }
-
-            // List options
-            Long("column") => columns.push(parser.value()?.string()?),
-            Long("checklist") => checklist = true,
-            Long("radiolist") => radiolist = true,
-            Long("hide-column") => hidden_columns.push(parser.value()?.string()?.parse()?),
-            Long("hide-header") => hide_header = true,
-
-            // Calendar options
-            Long("year") => cal_year = Some(parser.value()?.string()?.parse()?),
-            Long("month") => cal_month = Some(parser.value()?.string()?.parse()?),
-            Long("day") => cal_day = Some(parser.value()?.string()?.parse()?),
-
-            // Text info options
-            Long("checkbox") => checkbox_text = parser.value()?.string()?,
-
-            // Scale options
-            Long("value") => scale_value = parser.value()?.string()?.parse()?,
-            Long("min-value") => scale_min = parser.value()?.string()?.parse()?,
-            Long("max-value") => scale_max = parser.value()?.string()?.parse()?,
-            Long("step") => scale_step = parser.value()?.string()?.parse()?,
-            Long("hide-value") => hide_value = true,
-
-            // Forms options
-            Long("add-entry") => form_fields.push((false, parser.value()?.string()?)),
-            Long("add-password") => form_fields.push((true, parser.value()?.string()?)),
-
-            // Ignored options (for compatibility with zenity)
-            Long("modal") => { /* Ignored */ }
-
-            Value(val) => {
-                // Positional arguments - for list dialog these are row values
-                if dialog_type == Some(DialogType::List) {
-                    list_values.push(val.string()?);
-                } else if text.is_empty() {
-                    text = val.string()?;
+                // Common options
+                Long("title") => title = parser.value()?.string()?,
+                Long("text") => {
+                    text = parser.value()?.string()?;
                     text_explicit = true;
                 }
-            }
+                Long("entry-text") => entry_text = parser.value()?.string()?,
+                Long("hide-text") => hide_text = true,
+                Long("timeout") => timeout = Some(parser.value()?.string()?.parse()?),
+                Long("width") => width = Some(parser.value()?.string()?.parse()?),
+                Long("height") => height = Some(parser.value()?.string()?.parse()?),
+                Long("no-wrap") => no_wrap = true,
+                Long("no-markup") => no_markup = true,
+                Long("ellipsize") => ellipsize = true,
+                Long("icon-name") | Long("icon") | Long("window-icon") => {
+                    icon_name = Some(parser.value()?.string()?)
+                }
+                Long("switch") => switch_mode = true,
+                Long("extra-button") => extra_buttons.push(parser.value()?.string()?),
+                Long("ok-label") => ok_label = parser.value()?.string()?,
+                Long("cancel-label") => cancel_label = parser.value()?.string()?,
+                Long("separator") => separator = parser.value()?.string()?,
 
-            _ => return Err(arg.unexpected().into()),
+                // Progress options
+                Long("percentage") => percentage = parser.value()?.string()?.parse()?,
+                Long("pulsate") => pulsate = true,
+                Long("auto-close") => auto_close = true,
+                Long("auto-kill") => auto_kill = true,
+                Long("no-cancel") => no_cancel = true,
+                Long("time-remaining") => time_remaining = true,
+
+                // File selection options
+                Long("directory") => directory_mode = true,
+                Long("save") => save_mode = true,
+                Long("multiple") => {
+                    multiple_mode = true;
+                }
+                Long("filename") => filename = parser.value()?.string()?,
+                Long("confirm-overwrite") => {
+                    // Deprecated option, accepted for compatibility only
+                }
+                Long("file-filter") => {
+                    let filter_spec = parser.value()?.string()?;
+                    // Parse "Name | Pattern1 Pattern2 Pattern3" format
+                    if let Some((name, patterns_str)) = filter_spec.split_once('|') {
+                        let name = name.trim().to_string();
+                        // Split patterns by whitespace and filter empty strings
+                        let patterns: Vec<String> = patterns_str
+                            .split_whitespace()
+                            .filter(|s| !s.is_empty())
+                            .map(|s| s.to_string())
+                            .collect();
+                        file_filters.push(zenity_rs::FileFilter {
+                            name,
+                            patterns,
+                        });
+                    } else {
+                        // Just pattern provided, use it as both name and single pattern
+                        file_filters.push(zenity_rs::FileFilter {
+                            name: filter_spec.clone(),
+                            patterns: vec![filter_spec],
+                        });
+                    }
+                }
+
+                // List options
+                Long("column") => columns.push(parser.value()?.string()?),
+                Long("checklist") => checklist = true,
+                Long("radiolist") => radiolist = true,
+                Long("hide-column") => hidden_columns.push(parser.value()?.string()?.parse()?),
+                Long("hide-header") => hide_header = true,
+
+                // Calendar options
+                Long("year") => cal_year = Some(parser.value()?.string()?.parse()?),
+                Long("month") => cal_month = Some(parser.value()?.string()?.parse()?),
+                Long("day") => cal_day = Some(parser.value()?.string()?.parse()?),
+
+                // Text info options
+                Long("checkbox") => checkbox_text = parser.value()?.string()?,
+
+                // Scale options
+                Long("value") => scale_value = parser.value()?.string()?.parse()?,
+                Long("min-value") => scale_min = parser.value()?.string()?.parse()?,
+                Long("max-value") => scale_max = parser.value()?.string()?.parse()?,
+                Long("step") => scale_step = parser.value()?.string()?.parse()?,
+                Long("hide-value") => hide_value = true,
+
+                // Forms options
+                Long("add-entry") => form_fields.push((false, parser.value()?.string()?)),
+                Long("add-password") => form_fields.push((true, parser.value()?.string()?)),
+
+                Long("auto-scroll") => auto_scroll = true,
+
+                // Accepted for zenity compatibility but not yet honored. They
+                // are real zenity options, so rejecting them would fail scripts
+                // that pass them; their values are consumed and dropped.
+                Long("modal") => {}
+                Long("editable") | Long("print-partial") => {}
+                Long("print-column") | Long("date-format") | Long("forms-date-format") => {
+                    let _ = parser.value()?;
+                }
+
+                Value(val) => {
+                    // Positional arguments - for list dialog these are row values
+                    if dialog_type == Some(DialogType::List) {
+                        list_values.push(val.string()?);
+                    } else if text.is_empty() {
+                        text = val.string()?;
+                        text_explicit = true;
+                    }
+                }
+
+                _ => return Ok(Some(usage_error())),
+            }
         }
+        Ok(None)
+    })();
+
+    match parsed {
+        Ok(Some(code)) => return Ok(code),
+        Ok(None) => {}
+        Err(_) => return Ok(usage_error()),
     }
 
-    // Show help if no dialog type specified
+    // Resolved after parsing so the flag works on either side of --entry
+    if hide_text && dialog_type == Some(DialogType::Entry) {
+        dialog_type = Some(DialogType::Password);
+    }
+
     let dialog_type = match dialog_type {
         Some(dt) => dt,
         None => {
-            print_help();
-            return Ok(0);
+            eprintln!("You must specify a dialog type. See 'zenity-rs --help' for details");
+            return Ok(EXIT_USAGE);
         }
     };
 
@@ -430,6 +464,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .title(if title.is_empty() { "Entry" } else { &title })
                 .text(&text)
                 .entry_text(&entry_text);
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -443,6 +480,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             let mut builder = password()
                 .title(if title.is_empty() { "Password" } else { &title })
                 .text(&text);
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -450,6 +490,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
+            // zenity reports a timed-out --password as 1, but --entry
+            // --hide-text as 5; they are separate code paths upstream
+            if password_flag && matches!(result, EntryResult::Timeout) {
+                return Ok(1);
+            }
             Ok(handle_entry_result(result))
         }
         DialogType::Progress => {
@@ -462,6 +507,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .auto_kill(auto_kill)
                 .no_cancel(no_cancel)
                 .time_remaining(time_remaining);
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -487,6 +535,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             for filter in file_filters {
                 builder = builder.add_filter(filter);
             }
+            // zenity's file chooser runs its own loop and ignores --timeout, so
+            // the flag is accepted and dropped here rather than honored
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -547,6 +597,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 }
             }
 
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -573,6 +626,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if let Some(d) = cal_day {
                 builder = builder.day(d);
             }
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -593,6 +649,12 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             let has_checkbox = !checkbox_text.is_empty();
             if has_checkbox {
                 builder = builder.checkbox(&checkbox_text);
+            }
+            if auto_scroll {
+                builder = builder.auto_scroll(true);
+            }
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
             }
             if let Some(w) = width {
                 builder = builder.width(w);
@@ -617,6 +679,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 .max_value(scale_max)
                 .step(scale_step)
                 .hide_value(hide_value);
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -642,6 +707,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 };
             }
             builder = builder.separator(&separator);
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
@@ -675,6 +743,7 @@ fn handle_calendar_result(result: CalendarResult) -> i32 {
 
 fn handle_file_select_result(result: FileSelectResult, separator: &str) -> i32 {
     match &result {
+        FileSelectResult::Timeout => {}
         FileSelectResult::Selected(path) => println!("{}", path.display()),
         FileSelectResult::SelectedMultiple(paths) => {
             println!(
@@ -703,6 +772,7 @@ fn handle_entry_result(result: EntryResult) -> i32 {
 /// passed, which the dialog result alone does not record.
 fn handle_text_info_result(result: TextInfoResult, has_checkbox: bool) -> i32 {
     match result {
+        TextInfoResult::Timeout => 5,
         TextInfoResult::Ok {
             checkbox_checked,
         } => {
@@ -864,6 +934,7 @@ EXIT CODES:
     1   Cancel/No clicked, dialog closed (ESC or window close), or checkbox unchecked
     5   Timeout reached
     100 Error occurred
+    255 Unknown option, unparsable option value, or no dialog type given
 "#
     );
 }

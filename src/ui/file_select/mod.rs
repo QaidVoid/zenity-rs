@@ -6,7 +6,10 @@ mod fs;
 mod layout;
 mod render;
 
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    time::{Duration, Instant},
+};
 
 use breadcrumbs::breadcrumb_layout;
 use draw::{MAX_POPUP_ITEMS, SidebarGlyph, draw_completion_popup};
@@ -59,11 +62,14 @@ pub enum FileSelectResult {
     SelectedMultiple(Vec<PathBuf>),
     Cancelled,
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl FileSelectResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            FileSelectResult::Timeout => 5,
             FileSelectResult::Selected(_) | FileSelectResult::SelectedMultiple(_) => 0,
             FileSelectResult::Cancelled => 1,
             FileSelectResult::Closed => 1,
@@ -136,6 +142,7 @@ pub struct FileSelectBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
     filters: Vec<FileFilter>,
     multiple: bool,
     separator: String,
@@ -152,6 +159,7 @@ impl FileSelectBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
             filters: Vec::new(),
             multiple: false,
             separator: String::from(" "),
@@ -180,6 +188,12 @@ impl FileSelectBuilder {
 
     pub fn start_path(mut self, path: &Path) -> Self {
         self.start_path = Some(path.to_path_buf());
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -702,8 +716,28 @@ impl FileSelectBuilder {
         window.show()?;
 
         // Event loop
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(FileSelectResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
             let mut needs_redraw = false;
             let mut enter_pressed = false;
             let mut ok_pressed = false;

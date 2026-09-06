@@ -1,6 +1,9 @@
 //! List selection dialog implementation.
 
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{Duration, Instant},
+};
 
 use crate::{
     backend::{MouseButton, Window, WindowEvent},
@@ -44,11 +47,14 @@ pub enum ListResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl ListResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            ListResult::Timeout => 5,
             ListResult::Selected(_) => 0,
             ListResult::Cancelled => 1,
             ListResult::Closed => 1,
@@ -81,6 +87,7 @@ pub struct ListBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
 }
 
 impl ListBuilder {
@@ -96,6 +103,7 @@ impl ListBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
         }
     }
 
@@ -142,6 +150,12 @@ impl ListBuilder {
     /// Enable multiple mode (multi-select without checkboxes).
     pub fn multiple(mut self) -> Self {
         self.mode = ListMode::Multiple;
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -832,8 +846,28 @@ impl ListBuilder {
             visible_rows
         };
 
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(ListResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
             let mut needs_redraw = false;
             let mut buttons_dirty = false;
 

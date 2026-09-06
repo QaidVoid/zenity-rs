@@ -1,5 +1,7 @@
 //! Calendar date picker dialog implementation.
 
+use std::time::{Duration, Instant};
+
 use crate::{
     backend::{MouseButton, Window, WindowEvent},
     error::Error,
@@ -29,11 +31,14 @@ pub enum CalendarResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl CalendarResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            CalendarResult::Timeout => 5,
             CalendarResult::Selected {
                 ..
             } => 0,
@@ -72,6 +77,7 @@ pub struct CalendarBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
 }
 
 impl CalendarBuilder {
@@ -85,6 +91,7 @@ impl CalendarBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
         }
     }
 
@@ -113,6 +120,12 @@ impl CalendarBuilder {
     /// Set initial day (1-31).
     pub fn day(mut self, day: u32) -> Self {
         self.day = Some(day.clamp(1, 31));
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -252,8 +265,28 @@ impl CalendarBuilder {
         let grid_y = calendar_y + header_height as i32 + day_header_height as i32;
 
         let mut window_dragging = false;
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(CalendarResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
             let mut needs_redraw = false;
 
             match &event {

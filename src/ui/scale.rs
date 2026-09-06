@@ -1,5 +1,7 @@
 //! Scale dialog implementation for selecting a numeric value with a slider.
 
+use std::time::{Duration, Instant};
+
 use crate::{
     backend::{MouseButton, Window, WindowEvent},
     error::Error,
@@ -26,11 +28,14 @@ pub enum ScaleResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl ScaleResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            ScaleResult::Timeout => 5,
             ScaleResult::Value(_) => 0,
             ScaleResult::Cancelled => 1,
             ScaleResult::Closed => 1,
@@ -50,6 +55,7 @@ pub struct ScaleBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
 }
 
 impl ScaleBuilder {
@@ -65,6 +71,7 @@ impl ScaleBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
         }
     }
 
@@ -105,6 +112,12 @@ impl ScaleBuilder {
     /// Hide the value display.
     pub fn hide_value(mut self, hide: bool) -> Self {
         self.hide_value = hide;
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -397,8 +410,28 @@ impl ScaleBuilder {
 
         // Event loop
         let mut window_dragging = false;
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(ScaleResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
             let mut needs_redraw = false;
 
             match &event {

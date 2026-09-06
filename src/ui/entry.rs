@@ -1,5 +1,7 @@
 //! Entry dialog implementation for text input.
 
+use std::time::{Duration, Instant};
+
 use crate::{
     backend::{CursorShape, Window, WindowEvent},
     error::Error,
@@ -23,11 +25,14 @@ pub enum EntryResult {
     Cancelled,
     /// Dialog was closed.
     Closed,
+    /// The --timeout elapsed before the user answered.
+    Timeout,
 }
 
 impl EntryResult {
     pub fn exit_code(&self) -> i32 {
         match self {
+            EntryResult::Timeout => 5,
             EntryResult::Text(_) => 0,
             EntryResult::Cancelled => 1,
             EntryResult::Closed => 1,
@@ -44,6 +49,7 @@ pub struct EntryBuilder {
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
+    timeout: Option<u32>,
 }
 
 impl EntryBuilder {
@@ -56,6 +62,7 @@ impl EntryBuilder {
             width: None,
             height: None,
             colors: None,
+            timeout: None,
         }
     }
 
@@ -76,6 +83,12 @@ impl EntryBuilder {
 
     pub fn hide_text(mut self, hide: bool) -> Self {
         self.hide_text = hide;
+        self
+    }
+
+    /// Close the dialog on its own after `seconds`, reporting a timeout.
+    pub fn timeout(mut self, seconds: u32) -> Self {
+        self.timeout = Some(seconds);
         self
     }
 
@@ -253,8 +266,28 @@ impl EntryBuilder {
         let mut window_dragging = false;
         let mut cursor_x = 0i32;
         let mut cursor_y = 0i32;
+        let deadline = self
+            .timeout
+            .map(|secs| Instant::now() + Duration::from_secs(secs as u64));
+
         loop {
-            let event = window.wait_for_event()?;
+            if let Some(deadline) = deadline
+                && Instant::now() >= deadline
+            {
+                return Ok(EntryResult::Timeout);
+            }
+
+            let event = if deadline.is_some() {
+                match window.poll_for_event()? {
+                    Some(e) => e,
+                    None => {
+                        std::thread::sleep(Duration::from_millis(50));
+                        continue;
+                    }
+                }
+            } else {
+                window.wait_for_event()?
+            };
 
             match &event {
                 WindowEvent::CloseRequested => {
