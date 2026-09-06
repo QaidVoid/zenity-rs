@@ -2,8 +2,12 @@
 
 use std::{
     io::{BufRead, BufReader},
-    sync::mpsc::{self, TryRecvError},
-    thread,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+        mpsc::{self, TryRecvError},
+    },
+    thread::{self, JoinHandle},
     time::Duration,
 };
 
@@ -11,11 +15,12 @@ use std::{
 use libc::{SIGTERM, getppid, kill};
 
 use crate::{
-    backend::{Window, WindowEvent},
+    backend::{AnyWindow, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, open_window,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, ellipsize,
+        open_window,
         widgets::{Widget, button::Button, point_in_widget, progress_bar::ProgressBar},
     },
 };
@@ -45,12 +50,152 @@ impl ProgressResult {
     }
 }
 
-/// Message from stdin reader thread.
-enum StdinMessage {
+/// Update sent to a running progress dialog.
+enum ProgressMessage {
     Progress(u32),
     Text(String),
-    Pulsate,
+    Pulsate(bool),
     Done,
+}
+
+/// Reads the zenity progress protocol from stdin on a background thread.
+fn spawn_stdin_reader() -> mpsc::Receiver<ProgressMessage> {
+    let (tx, rx) = mpsc::channel();
+
+    thread::spawn(move || {
+        let stdin = std::io::stdin();
+        let reader = BufReader::new(stdin.lock());
+
+        for line in reader.lines() {
+            let line = match line {
+                Ok(l) => l,
+                Err(_) => break,
+            };
+
+            let trimmed = line.trim();
+
+            if let Some(text) = trimmed.strip_prefix('#') {
+                // Status text update
+                let text = text.trim().to_string();
+                if tx.send(ProgressMessage::Text(text)).is_err() {
+                    break;
+                }
+            } else if trimmed.eq_ignore_ascii_case("pulsate") {
+                if tx.send(ProgressMessage::Pulsate(true)).is_err() {
+                    break;
+                }
+            } else if let Ok(num) = trimmed.parse::<u32>()
+                && tx.send(ProgressMessage::Progress(num.min(100))).is_err()
+            {
+                break;
+            }
+        }
+
+        let _ = tx.send(ProgressMessage::Done);
+    });
+
+    rx
+}
+
+/// State shared between a running dialog and the objects driving it.
+///
+/// The close request is a flag rather than a [`ProgressMessage`] so that
+/// [`ProgressDialog`] does not have to hold a [`mpsc::Sender`]. Holding one
+/// would keep the channel alive and stop [`ProgressHandle::finish`] from ever
+/// closing an [`ProgressBuilder::auto_close`] dialog.
+#[derive(Default)]
+struct DialogState {
+    cancelled: AtomicBool,
+    close_requested: AtomicBool,
+}
+
+/// Handle for updating a progress dialog started with
+/// [`ProgressBuilder::spawn`].
+///
+/// Clones share one dialog, so work split across threads can report through
+/// its own handle. The handle is [`Send`] but not [`Sync`]: give each thread a
+/// clone rather than sharing one behind an [`Arc`].
+#[derive(Clone)]
+pub struct ProgressHandle {
+    tx: mpsc::Sender<ProgressMessage>,
+    state: Arc<DialogState>,
+}
+
+impl ProgressHandle {
+    /// Sets the progress bar to `percentage`, clamped to 100.
+    pub fn set_percentage(&self, percentage: u32) {
+        let _ = self.tx.send(ProgressMessage::Progress(percentage.min(100)));
+    }
+
+    /// Replaces the status text shown above the progress bar.
+    pub fn set_text(&self, text: &str) {
+        let _ = self.tx.send(ProgressMessage::Text(text.to_string()));
+    }
+
+    /// Switches the progress bar between its indeterminate animation and the
+    /// percentage set by [`ProgressHandle::set_percentage`].
+    ///
+    /// Pulsating suits phases whose length is unknown, such as scanning a file
+    /// before a transfer starts.
+    pub fn set_pulsating(&self, pulsating: bool) {
+        let _ = self.tx.send(ProgressMessage::Pulsate(pulsating));
+    }
+
+    /// Reports whether the dialog stopped before completing, either because the
+    /// user cancelled or closed it or because it failed.
+    ///
+    /// Long-running callers should poll this and abort their work when it turns
+    /// true.
+    pub fn is_cancelled(&self) -> bool {
+        self.state.cancelled.load(Ordering::Acquire)
+    }
+
+    /// Signals that this handle has no more updates.
+    ///
+    /// Once the last handle is gone, a dialog built with
+    /// [`ProgressBuilder::auto_close`] closes. Use [`ProgressHandle::close`]
+    /// to dismiss a dialog that does not close itself.
+    pub fn finish(self) {}
+
+    /// Dismisses the dialog, whether or not it auto-closes.
+    ///
+    /// [`ProgressDialog::join`] then reports [`ProgressResult::Completed`].
+    pub fn close(self) {
+        self.state.close_requested.store(true, Ordering::Release);
+    }
+}
+
+/// A progress dialog running on a background thread.
+///
+/// Dropping this dismisses the dialog and waits for its thread, so keep it
+/// alive for as long as the dialog should stay on screen.
+#[must_use = "dropping a ProgressDialog closes the dialog immediately"]
+pub struct ProgressDialog {
+    thread: Option<JoinHandle<Result<ProgressResult, Error>>>,
+    state: Arc<DialogState>,
+}
+
+impl ProgressDialog {
+    /// Waits for the dialog to close and returns its result.
+    pub fn join(mut self) -> Result<ProgressResult, Error> {
+        let thread = self
+            .thread
+            .take()
+            .expect("dialog thread is taken by join or drop, never both");
+        match thread.join() {
+            Ok(result) => result,
+            Err(panic) => std::panic::resume_unwind(panic),
+        }
+    }
+}
+
+impl Drop for ProgressDialog {
+    fn drop(&mut self) {
+        if let Some(thread) = self.thread.take() {
+            self.state.close_requested.store(true, Ordering::Release);
+            let _ = thread.join();
+        }
+    }
 }
 
 /// Progress dialog builder.
@@ -140,9 +285,9 @@ impl ProgressBuilder {
         self
     }
 
-    pub fn show(self) -> Result<ProgressResult, Error> {
-        let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
-
+    /// Creates the dialog window, returning it with its scale factor and
+    /// physical size.
+    fn open(&self) -> Result<(AnyWindow, f32, u32, u32), Error> {
         // First pass: calculate LOGICAL dimensions using scale 1.0
         let temp_font = Font::load(1.0);
         let temp_button = Button::new("Cancel", &temp_font, 1.0);
@@ -165,12 +310,122 @@ impl ProgressBuilder {
         let logical_height = self.height.unwrap_or(calc_height) as u16;
 
         // Create window with LOGICAL dimensions
-        let (mut window, scale, physical_width, physical_height) = open_window(
+        open_window(
             &self.title,
             "Progress",
             logical_width as u32,
             logical_height as u32,
-        )?;
+        )
+    }
+
+    /// Displays the dialog, reading progress updates from stdin.
+    ///
+    /// Blocks until the dialog closes. Use [`ProgressBuilder::spawn`] to drive
+    /// the dialog from your own code instead of from stdin.
+    pub fn show(self) -> Result<ProgressResult, Error> {
+        let (window, scale, physical_width, physical_height) = self.open()?;
+        self.run(
+            window,
+            scale,
+            physical_width,
+            physical_height,
+            spawn_stdin_reader(),
+            Arc::new(DialogState::default()),
+        )
+    }
+
+    /// Opens the dialog on a background thread and returns a handle for
+    /// updating it.
+    ///
+    /// Unlike [`ProgressBuilder::show`], this does not block and does not read
+    /// stdin. The caller drives the dialog through the returned
+    /// [`ProgressHandle`] and waits for it to close with
+    /// [`ProgressDialog::join`].
+    ///
+    /// # Example
+    ///
+    /// ```no_run
+    /// let (handle, dialog) = zenity_rs::progress()
+    ///     .title("Copying")
+    ///     .auto_close(true)
+    ///     .spawn()
+    ///     .unwrap();
+    ///
+    /// for percentage in 0..=100 {
+    ///     if handle.is_cancelled() {
+    ///         break;
+    ///     }
+    ///     handle.set_percentage(percentage);
+    /// }
+    ///
+    /// handle.finish();
+    /// dialog.join().unwrap();
+    /// ```
+    pub fn spawn(mut self) -> Result<(ProgressHandle, ProgressDialog), Error> {
+        // auto_kill signals the process feeding progress over stdin. Driven
+        // in-process there is no such process, and getppid() would be whatever
+        // launched the caller: their shell, terminal or supervisor.
+        self.auto_kill = false;
+
+        let (tx, rx) = mpsc::channel();
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let state = Arc::new(DialogState::default());
+
+        let thread_state = Arc::clone(&state);
+        let thread = thread::spawn(move || {
+            let (window, scale, physical_width, physical_height) = match self.open() {
+                Ok(opened) => {
+                    let _ = ready_tx.send(());
+                    opened
+                }
+                Err(e) => return Err(e),
+            };
+
+            let result = self.run(
+                window,
+                scale,
+                physical_width,
+                physical_height,
+                rx,
+                Arc::clone(&thread_state),
+            );
+            if !matches!(result, Ok(ProgressResult::Completed)) {
+                thread_state.cancelled.store(true, Ordering::Release);
+            }
+            result
+        });
+
+        // The window failed to open, so the thread already returned its error.
+        if ready_rx.recv().is_err() {
+            return match thread.join() {
+                Ok(Err(e)) => Err(e),
+                Ok(Ok(_)) => Err(Error::NoDisplay),
+                Err(panic) => std::panic::resume_unwind(panic),
+            };
+        }
+
+        Ok((
+            ProgressHandle {
+                tx,
+                state: Arc::clone(&state),
+            },
+            ProgressDialog {
+                thread: Some(thread),
+                state,
+            },
+        ))
+    }
+
+    fn run(
+        self,
+        mut window: AnyWindow,
+        scale: f32,
+        physical_width: u32,
+        physical_height: u32,
+        rx: mpsc::Receiver<ProgressMessage>,
+        state: Arc<DialogState>,
+    ) -> Result<ProgressResult, Error> {
+        let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Now create everything at PHYSICAL scale
         let font = Font::load(scale);
@@ -182,7 +437,7 @@ impl ProgressBuilder {
 
         // Scale dimensions for physical rendering
         let padding = (BASE_PADDING as f32 * scale) as u32;
-        let bar_width = (BASE_BAR_WIDTH as f32 * scale) as u32;
+        let bar_width = physical_width.saturating_sub(padding * 2);
         let text_height = (BASE_TEXT_HEIGHT as f32 * scale) as u32;
 
         // Create progress bar at physical scale
@@ -215,40 +470,6 @@ impl ProgressBuilder {
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(physical_width, physical_height);
 
-        // Start stdin reader thread
-        let (tx, rx) = mpsc::channel();
-        thread::spawn(move || {
-            let stdin = std::io::stdin();
-            let reader = BufReader::new(stdin.lock());
-
-            for line in reader.lines() {
-                let line = match line {
-                    Ok(l) => l,
-                    Err(_) => break,
-                };
-
-                let trimmed = line.trim();
-
-                if let Some(text) = trimmed.strip_prefix('#') {
-                    // Status text update
-                    let text = text.trim().to_string();
-                    if tx.send(StdinMessage::Text(text)).is_err() {
-                        break;
-                    }
-                } else if trimmed.eq_ignore_ascii_case("pulsate") {
-                    if tx.send(StdinMessage::Pulsate).is_err() {
-                        break;
-                    }
-                } else if let Ok(num) = trimmed.parse::<u32>()
-                    && tx.send(StdinMessage::Progress(num.min(100))).is_err()
-                {
-                    break;
-                }
-            }
-
-            let _ = tx.send(StdinMessage::Done);
-        });
-
         // Draw function
         let draw = |canvas: &mut Canvas,
                     colors: &Colors,
@@ -276,7 +497,9 @@ impl ProgressBuilder {
 
             // Draw status text
             if !status_text.is_empty() {
-                let text_canvas = font.render(status_text).with_color(colors.text).finish();
+                let max_w = width - (padding * 2) as f32;
+                let label = ellipsize(status_text, font, max_w);
+                let text_canvas = font.render(&label).with_color(colors.text).finish();
                 canvas.draw_canvas(&text_canvas, padding as i32, text_y);
             }
 
@@ -341,13 +564,17 @@ impl ProgressBuilder {
         let mut window_dragging = false;
         let mut cursor_x = 0i32;
         let mut cursor_y = 0i32;
-        let mut stdin_done = false;
+        let mut input_done = false;
         loop {
+            if state.close_requested.load(Ordering::Acquire) {
+                return Ok(ProgressResult::Completed);
+            }
+
             let mut needs_redraw = false;
 
-            while !stdin_done {
+            while !input_done {
                 match rx.try_recv() {
-                    Ok(StdinMessage::Progress(p)) => {
+                    Ok(ProgressMessage::Progress(p)) => {
                         progress_bar.set_percentage(p);
                         if self.show_time_remaining && !self.pulsate && p > 0 {
                             let elapsed = start_time.elapsed().as_secs_f64();
@@ -361,15 +588,15 @@ impl ProgressBuilder {
                             return Ok(ProgressResult::Completed);
                         }
                     }
-                    Ok(StdinMessage::Text(t)) => {
+                    Ok(ProgressMessage::Text(t)) => {
                         status_text = t;
                         needs_redraw = true;
                     }
-                    Ok(StdinMessage::Pulsate) => {
-                        progress_bar.set_pulsating(true);
+                    Ok(ProgressMessage::Pulsate(pulsating)) => {
+                        progress_bar.set_pulsating(pulsating);
                         needs_redraw = true;
                     }
-                    Ok(StdinMessage::Done) => {
+                    Ok(ProgressMessage::Done) => {
                         needs_redraw = true;
                         if auto_close {
                             return Ok(ProgressResult::Completed);
@@ -377,7 +604,7 @@ impl ProgressBuilder {
                     }
                     Err(TryRecvError::Empty) => break,
                     Err(TryRecvError::Disconnected) => {
-                        stdin_done = true;
+                        input_done = true;
                         if auto_close {
                             return Ok(ProgressResult::Completed);
                         }

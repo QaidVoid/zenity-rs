@@ -16,7 +16,7 @@ pub use ui::{
     forms::{FormsBuilder, FormsResult},
     list::{ListBuilder, ListMode, ListResult},
     message::MessageBuilder,
-    progress::{ProgressBuilder, ProgressResult},
+    progress::{ProgressBuilder, ProgressDialog, ProgressHandle, ProgressResult},
     scale::{ScaleBuilder, ScaleResult},
     text_info::{TextInfoBuilder, TextInfoResult},
 };

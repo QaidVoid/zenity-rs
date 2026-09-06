@@ -13,7 +13,7 @@ use crate::{
     render::{Canvas, Font, Rgba, rgb},
     ui::{
         BASE_CORNER_RADIUS, BASE_MIN_THUMB, Colors, KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE,
-        KEY_RETURN, KEY_UP, Thumb, button_row_y, icons, open_window, place_ok_cancel,
+        KEY_RETURN, KEY_UP, Thumb, button_row_y, ellipsize, icons, open_window, place_ok_cancel,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -1520,61 +1520,64 @@ impl FileSelectBuilder {
 
                         // File list click
                         if let Some(ei) = hovered_entry {
-                            if self.multiple {
+                            let reclicked = selected_indices.contains(&ei);
+                            // Clicking an already selected directory opens it.
+                            // Multi-selecting directories is only meaningful in
+                            // directory mode, where they stay toggleable and
+                            // only `..` still navigates.
+                            let open_dir = reclicked
+                                && all_entries[ei].is_dir
+                                && (!self.multiple
+                                    || !self.directory
+                                    || all_entries[ei].name == "..");
+
+                            if open_dir {
+                                let dest = all_entries[ei].path.clone();
+                                navigate_to_directory(
+                                    dest,
+                                    &mut current_dir,
+                                    &mut history,
+                                    &mut history_index,
+                                    &mut all_entries,
+                                    self.directory,
+                                    show_hidden,
+                                    &search_text,
+                                    &mut filtered_entries,
+                                    &mut selected_indices,
+                                    &mut scroll_offset,
+                                    &self.filters,
+                                );
+                            } else if self.multiple {
                                 // Toggle selection in multiple mode
-                                if selected_indices.contains(&ei) {
+                                if reclicked {
                                     selected_indices.remove(&ei);
                                 } else {
                                     selected_indices.insert(ei);
                                 }
-                            } else {
-                                // Single click - activate if already selected (double click behavior)
-                                if selected_indices.contains(&ei) {
-                                    let entry = &all_entries[ei];
-                                    if entry.is_dir {
-                                        navigate_to(
-                                            entry.path.clone(),
-                                            &mut current_dir,
-                                            &mut history,
-                                            &mut history_index,
-                                        );
-                                        load_directory(
-                                            &current_dir,
-                                            &mut all_entries,
-                                            self.directory,
-                                            show_hidden,
-                                        );
-                                        update_filtered(
-                                            &all_entries,
-                                            &search_text,
-                                            &mut filtered_entries,
-                                            &self.filters,
-                                        );
-                                        selected_indices.clear();
-                                        scroll_offset = 0;
-                                    } else if save_mode {
-                                        // In save mode, double-click on file populates filename
-                                        if let Some(ref mut fi) = filename_input {
-                                            fi.set_text(&entry.name);
-                                            completion_matches.clear();
-                                            completion_popup_index = 0;
-                                        }
-                                    } else if !self.directory {
-                                        return Ok(FileSelectResult::Selected(entry.path.clone()));
+                            } else if reclicked {
+                                let entry = &all_entries[ei];
+                                if save_mode {
+                                    // In save mode, double-click on file populates filename
+                                    if let Some(ref mut fi) = filename_input {
+                                        fi.set_text(&entry.name);
+                                        completion_matches.clear();
+                                        completion_popup_index = 0;
                                     }
-                                } else {
-                                    selected_indices.clear();
-                                    selected_indices.insert(ei);
-                                    // In save mode, single click on file populates filename input
-                                    if save_mode {
-                                        let entry = &all_entries[ei];
-                                        if !entry.is_dir
-                                            && let Some(ref mut fi) = filename_input
-                                        {
-                                            fi.set_text(&entry.name);
-                                            completion_matches.clear();
-                                            completion_popup_index = 0;
-                                        }
+                                } else if !self.directory {
+                                    return Ok(FileSelectResult::Selected(entry.path.clone()));
+                                }
+                            } else {
+                                selected_indices.clear();
+                                selected_indices.insert(ei);
+                                // In save mode, single click on file populates filename input
+                                if save_mode {
+                                    let entry = &all_entries[ei];
+                                    if !entry.is_dir
+                                        && let Some(ref mut fi) = filename_input
+                                    {
+                                        fi.set_text(&entry.name);
+                                        completion_matches.clear();
+                                        completion_popup_index = 0;
                                     }
                                 }
                             }
@@ -2774,21 +2777,6 @@ fn draw_completion_popup(
 }
 
 /// Shortens `text` with a trailing ellipsis until it fits `max_w` pixels.
-fn ellipsize(text: &str, font: &Font, max_w: f32) -> String {
-    if font.render(text).measure().0 <= max_w {
-        return text.to_string();
-    }
-    let mut chars: Vec<char> = text.chars().collect();
-    while !chars.is_empty() {
-        chars.pop();
-        let candidate: String = chars.iter().collect::<String>() + "\u{2026}";
-        if font.render(&candidate).measure().0 <= max_w {
-            return candidate;
-        }
-    }
-    String::new()
-}
-
 fn format_size(bytes: u64) -> String {
     if bytes < 1024 {
         format!("{} B", bytes)

@@ -19,6 +19,22 @@ use crate::{
     ui::widgets::{Widget, button::Button},
 };
 
+/// Shortens `text` with a trailing ellipsis until it fits within `max_w`.
+pub(crate) fn ellipsize(text: &str, font: &Font, max_w: f32) -> String {
+    if font.render(text).measure().0 <= max_w {
+        return text.to_string();
+    }
+    let mut chars: Vec<char> = text.chars().collect();
+    while !chars.is_empty() {
+        chars.pop();
+        let candidate: String = chars.iter().collect::<String>() + "\u{2026}";
+        if font.render(&candidate).measure().0 <= max_w {
+            return candidate;
+        }
+    }
+    String::new()
+}
+
 /// Create a dialog window sized in logical units, title it, and report the
 /// compositor scale factor together with the matching physical size.
 ///
