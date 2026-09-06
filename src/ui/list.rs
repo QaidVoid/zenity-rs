@@ -1,5 +1,7 @@
 //! List selection dialog implementation.
 
+use std::collections::HashMap;
+
 use crate::{
     backend::{MouseButton, Window, WindowEvent},
     error::Error,
@@ -172,7 +174,7 @@ impl ListBuilder {
         self
     }
 
-    pub fn show(self) -> Result<ListResult, Error> {
+    pub fn show(mut self) -> Result<ListResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Process rows - for checklist/radiolist, first column is TRUE/FALSE
@@ -181,17 +183,19 @@ impl ListBuilder {
                 let mut processed_rows = Vec::new();
                 let mut selections = Vec::new();
 
-                for row in &self.rows {
+                for mut row in std::mem::take(&mut self.rows) {
                     if !row.is_empty() {
-                        let is_selected = row[0].eq_ignore_ascii_case("true");
-                        selections.push(is_selected);
-                        processed_rows.push(row[1..].to_vec());
+                        selections.push(row[0].eq_ignore_ascii_case("true"));
+                        row.remove(0);
+                        processed_rows.push(row);
                     }
                 }
                 (processed_rows, selections)
             }
             ListMode::Single | ListMode::Multiple => {
-                (self.rows.clone(), vec![false; self.rows.len()])
+                let rows = std::mem::take(&mut self.rows);
+                let selected = vec![false; rows.len()];
+                (rows, selected)
             }
         };
 
@@ -245,17 +249,6 @@ impl ListBuilder {
         let columns: Vec<&str> = visible_col_indices
             .iter()
             .map(|&i| all_columns[i])
-            .collect();
-
-        // Create display rows with only visible columns (original rows kept for result)
-        let display_rows: Vec<Vec<String>> = rows
-            .iter()
-            .map(|row| {
-                visible_col_indices
-                    .iter()
-                    .filter_map(|&i| row.get(i).cloned())
-                    .collect()
-            })
             .collect();
 
         let num_cols = columns.len().max(1);
@@ -350,11 +343,11 @@ impl ListBuilder {
             let (w, _) = font.render(col).measure();
             col_widths[i] = col_widths[i].max(w as u32 + (20.0 * scale) as u32);
         }
-        for row in &display_rows {
-            for (i, cell) in row.iter().enumerate() {
-                if i < num_cols {
+        for row in &rows {
+            for (vi, &orig_i) in visible_col_indices.iter().enumerate() {
+                if let Some(cell) = row.get(orig_i) {
                     let (w, _) = font.render(cell).measure();
-                    col_widths[i] = col_widths[i].max(w as u32 + (20.0 * scale) as u32);
+                    col_widths[vi] = col_widths[vi].max(w as u32 + (20.0 * scale) as u32);
                 }
             }
         }
@@ -478,23 +471,10 @@ impl ListBuilder {
             .iter()
             .map(|c| font.render(c).with_color(header_text_color).finish())
             .collect();
-        // Pre-render every cell in both color variants; the scroll loop only blits.
-        let cell_normal: Vec<Vec<Canvas>> = display_rows
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| font.render(cell).with_color(normal_text_color).finish())
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        let cell_selected: Vec<Vec<Canvas>> = display_rows
-            .iter()
-            .map(|row| {
-                row.iter()
-                    .map(|cell| font.render(cell).with_color(selected_text_color).finish())
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        // Rows are rasterized on demand and kept in a small cache, so a list of a
+        // million rows costs a screenful of canvases rather than two per row.
+        // Keyed by row and selection state, since the two differ only in color.
+        let mut cell_cache: HashMap<(usize, bool), Vec<Canvas>> = HashMap::new();
 
         // ---- Chrome layer: dialog bg + title + prompt, rendered once and blitted ----
         let radius = BASE_CORNER_RADIUS * scale;
@@ -537,8 +517,9 @@ impl ListBuilder {
                          checkbox_header_canvas: &Option<Canvas>,
                          column_header_canvases: &[Canvas],
                          rows: &[Vec<String>],
-                         cell_normal: &[Vec<Canvas>],
-                         cell_selected: &[Vec<Canvas>],
+                         visible_col_indices: &[usize],
+                         cell_cache: &mut HashMap<(usize, bool), Vec<Canvas>>,
+                         font: &Font,
                          col_widths: &[u32],
                          selected: &[bool],
                          single_selected: Option<usize>,
@@ -609,9 +590,12 @@ impl ListBuilder {
             } else {
                 visible_rows
             };
-            for (vi, ri) in
-                (scroll_offset..rows.len().min(scroll_offset + data_visible)).enumerate()
-            {
+            let visible = scroll_offset..rows.len().min(scroll_offset + data_visible);
+            if cell_cache.len() > data_visible * 8 {
+                cell_cache.retain(|(ri, _), _| visible.contains(ri));
+            }
+
+            for (vi, ri) in visible.clone().enumerate() {
                 let ry = data_y_local + (vi as u32 * row_height) as i32;
 
                 // Background
@@ -664,12 +648,19 @@ impl ListBuilder {
                     }
                 }
 
-                // Cell values (pre-rendered; pick color variant by selection state)
-                let row_cells = if is_selected {
-                    &cell_selected[ri]
-                } else {
-                    &cell_normal[ri]
-                };
+                // Cell values, rasterized on first sight in this color variant
+                let row_cells = cell_cache.entry((ri, is_selected)).or_insert_with(|| {
+                    let color = if is_selected {
+                        selected_text_color
+                    } else {
+                        normal_text_color
+                    };
+                    visible_col_indices
+                        .iter()
+                        .filter_map(|&i| rows[ri].get(i))
+                        .map(|cell| font.render(cell).with_color(color).finish())
+                        .collect()
+                });
                 let mut cx = checkbox_col as i32 - h_scroll_offset as i32;
                 let column_gap = (16.0 * scale) as i32;
                 // Add gap after checkbox column if there are data columns
@@ -792,9 +783,10 @@ impl ListBuilder {
             &columns,
             &checkbox_header_canvas,
             &column_header_canvases,
-            &display_rows,
-            &cell_normal,
-            &cell_selected,
+            &rows,
+            &visible_col_indices,
+            &mut cell_cache,
+            &font,
             &col_widths,
             &selected,
             single_selected,
@@ -1338,9 +1330,10 @@ impl ListBuilder {
                         &columns,
                         &checkbox_header_canvas,
                         &column_header_canvases,
-                        &display_rows,
-                        &cell_normal,
-                        &cell_selected,
+                        &rows,
+                        &visible_col_indices,
+                        &mut cell_cache,
+                        &font,
                         &col_widths,
                         &selected,
                         single_selected,
@@ -1383,9 +1376,10 @@ impl ListBuilder {
                             &columns,
                             &checkbox_header_canvas,
                             &column_header_canvases,
-                            &display_rows,
-                            &cell_normal,
-                            &cell_selected,
+                            &rows,
+                            &visible_col_indices,
+                            &mut cell_cache,
+                            &font,
                             &col_widths,
                             &selected,
                             single_selected,

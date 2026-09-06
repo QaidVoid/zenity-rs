@@ -534,10 +534,16 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             if !std::io::stdin().is_terminal() {
                 use std::io::{self, BufRead};
                 let stdin = io::stdin();
-                let lines: Vec<String> = stdin.lock().lines().map_while(Result::ok).collect();
-                // Group lines by num_columns to form rows
-                for chunk in lines.chunks(num_columns) {
-                    builder = builder.row(chunk.to_vec());
+                let mut row = Vec::with_capacity(num_columns);
+                for line in stdin.lock().lines().map_while(Result::ok) {
+                    row.push(line);
+                    if row.len() == num_columns {
+                        builder = builder.row(std::mem::take(&mut row));
+                        row.reserve(num_columns);
+                    }
+                }
+                if !row.is_empty() {
+                    builder = builder.row(row);
                 }
             }
 
