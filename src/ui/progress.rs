@@ -634,38 +634,15 @@ impl ProgressBuilder {
                 }
             }
 
-            // Poll for window events (non-blocking if pulsating)
-            let event = if progress_bar.is_pulsating() {
-                // Use short timeout for animation
-                match window.poll_for_event()? {
-                    Some(e) => Some(e),
-                    None => {
-                        // Tick animation and redraw
-                        progress_bar.tick();
-                        draw(
-                            &mut canvas,
-                            colors,
-                            &font,
-                            &status_text,
-                            &time_remaining_text,
-                            &progress_bar,
-                            &cancel_button,
-                            padding,
-                            text_y,
-                            self.show_time_remaining,
-                            scale,
-                        );
-                        window.set_contents(&canvas)?;
-                        std::thread::sleep(Duration::from_millis(16));
-                        continue;
-                    }
-                }
-            } else {
-                // Poll with short sleep to check stdin
-                window.poll_for_event()?
-            };
+            // Drain every pending event. Handling one per iteration left the
+            // cursor position lagging far behind the pointer, because motion
+            // arrives faster than the loop sleeps, and a click is matched
+            // against that stale position: pressing Cancel read as a press on
+            // the background and started a window drag instead.
+            let mut saw_event = false;
+            while let Some(event) = window.poll_for_event()? {
+                saw_event = true;
 
-            if let Some(event) = event {
                 match &event {
                     WindowEvent::CloseRequested => {
                         return Ok(ProgressResult::Closed);
@@ -708,6 +685,11 @@ impl ProgressBuilder {
                 }
             }
 
+            if progress_bar.is_pulsating() {
+                progress_bar.tick();
+                needs_redraw = true;
+            }
+
             // Redraw if needed (this ensures progress updates even when not focused)
             if needs_redraw {
                 draw(
@@ -726,8 +708,10 @@ impl ProgressBuilder {
                 window.set_contents(&canvas)?;
             }
 
-            // Short sleep to prevent CPU spinning when idle
-            if !needs_redraw && !progress_bar.is_pulsating() {
+            // Pace the pulsate animation, and idle cheaply when nothing moved.
+            if progress_bar.is_pulsating() {
+                std::thread::sleep(Duration::from_millis(16));
+            } else if !needs_redraw && !saw_event {
                 std::thread::sleep(Duration::from_millis(50));
             }
         }
