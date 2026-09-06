@@ -20,7 +20,7 @@ use crate::{
     render::{Canvas, Font},
     ui::{
         BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, ellipsize,
-        open_window,
+        ellipsize_middle, open_window,
         widgets::{Widget, button::Button, point_in_widget, progress_bar::ProgressBar},
     },
 };
@@ -211,6 +211,7 @@ pub struct ProgressBuilder {
     auto_kill: bool,
     no_cancel: bool,
     show_time_remaining: bool,
+    ellipsize_middle: bool,
     width: Option<u32>,
     height: Option<u32>,
     colors: Option<&'static Colors>,
@@ -228,6 +229,7 @@ impl ProgressBuilder {
             auto_kill: false,
             no_cancel: false,
             show_time_remaining: false,
+            ellipsize_middle: false,
             width: None,
             height: None,
             colors: None,
@@ -288,6 +290,16 @@ impl ProgressBuilder {
 
     pub fn no_cancel(mut self, no_cancel: bool) -> Self {
         self.no_cancel = no_cancel;
+        self
+    }
+
+    /// Shortens over-long status text from the middle rather than the end.
+    ///
+    /// Suits text ending in something identifying, such as a file name
+    /// carrying a version and extension. Plain prose reads better with the
+    /// default, which drops the tail.
+    pub fn ellipsize_middle(mut self, ellipsize_middle: bool) -> Self {
+        self.ellipsize_middle = ellipsize_middle;
         self
     }
 
@@ -492,6 +504,7 @@ impl ProgressBuilder {
                     padding: u32,
                     text_y: i32,
                     show_time_remaining: bool,
+                    elide_middle: bool,
                     scale: f32| {
             let width = canvas.width() as f32;
             let height = canvas.height() as f32;
@@ -509,7 +522,11 @@ impl ProgressBuilder {
             // Draw status text
             if !status_text.is_empty() {
                 let max_w = width - (padding * 2) as f32;
-                let label = ellipsize(status_text, font, max_w);
+                let label = if elide_middle {
+                    ellipsize_middle(status_text, font, max_w)
+                } else {
+                    ellipsize(status_text, font, max_w)
+                };
                 let text_canvas = font.render(&label).with_color(colors.text).finish();
                 canvas.draw_canvas(&text_canvas, padding as i32, text_y);
             }
@@ -564,6 +581,7 @@ impl ProgressBuilder {
             padding,
             text_y,
             self.show_time_remaining,
+            self.ellipsize_middle,
             scale,
         );
         window.set_contents(&canvas)?;
@@ -703,6 +721,7 @@ impl ProgressBuilder {
                     padding,
                     text_y,
                     self.show_time_remaining,
+                    self.ellipsize_middle,
                     scale,
                 );
                 window.set_contents(&canvas)?;

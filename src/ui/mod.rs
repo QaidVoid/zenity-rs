@@ -35,6 +35,33 @@ pub(crate) fn ellipsize(text: &str, font: &Font, max_w: f32) -> String {
     String::new()
 }
 
+/// Shortens `text` from the middle with an ellipsis until it fits within
+/// `max_w`.
+///
+/// Keeps both ends, which matters for file names where the tail carries the
+/// version, architecture and extension that tell two builds apart.
+pub(crate) fn ellipsize_middle(text: &str, font: &Font, max_w: f32) -> String {
+    if font.render(text).measure().0 <= max_w {
+        return text.to_string();
+    }
+
+    let chars: Vec<char> = text.chars().collect();
+    let mut keep = chars.len();
+    while keep > 0 {
+        keep -= 1;
+        let head = keep.div_ceil(2);
+        let tail = keep - head;
+        let candidate: String = chars[..head].iter().collect::<String>()
+            + "\u{2026}"
+            + &chars[chars.len() - tail..].iter().collect::<String>();
+        if font.render(&candidate).measure().0 <= max_w {
+            return candidate;
+        }
+    }
+
+    String::new()
+}
+
 /// Create a dialog window sized in logical units, title it, and report the
 /// compositor scale factor together with the matching physical size.
 ///
