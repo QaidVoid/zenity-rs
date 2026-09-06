@@ -415,19 +415,6 @@ fn civil_from_days(days: i64) -> (i64, u32, u32) {
     (year, month, day)
 }
 
-#[cfg(test)]
-mod tests {
-    use super::civil_from_days;
-
-    #[test]
-    fn days_convert_to_civil_dates() {
-        assert_eq!(civil_from_days(0), (1970, 1, 1));
-        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
-        assert_eq!(civil_from_days(20_689), (2026, 8, 24));
-        assert_eq!(civil_from_days(-1), (1969, 12, 31));
-    }
-}
-
 /// The directory on screen, how the user got there, and what is selected in it.
 ///
 /// `show()` keeps one of these instead of threading the same seven values
@@ -538,5 +525,18 @@ impl Browser {
     /// Identifies the history position for the chrome cache signature.
     pub(super) fn history_step(&self) -> (usize, usize) {
         (self.history_index, self.history.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::civil_from_days;
+
+    #[test]
+    fn days_convert_to_civil_dates() {
+        assert_eq!(civil_from_days(0), (1970, 1, 1));
+        assert_eq!(civil_from_days(11_016), (2000, 2, 29));
+        assert_eq!(civil_from_days(20_689), (2026, 8, 24));
+        assert_eq!(civil_from_days(-1), (1969, 12, 31));
     }
 }
