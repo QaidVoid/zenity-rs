@@ -1,5 +1,13 @@
 //! Icon and popup drawing for the file selection dialog.
 
+/// Baseline for text of `height` pixels starting at `top`.
+///
+/// Rendered canvases are cropped to their glyph bounds, so centering each one
+/// individually would misalign rows that share a line.
+pub(super) fn baseline_in(top: i32, height: u32, font: &Font) -> i32 {
+    top + ((height as f32 - font.line_height()) / 2.0 + font.ascent()).round() as i32
+}
+
 use super::{
     POPUP_ITEM_HEIGHT,
     fs::{MountIcon, QuickAccessIcon},

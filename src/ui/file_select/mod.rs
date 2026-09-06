@@ -3,29 +3,27 @@
 mod breadcrumbs;
 mod draw;
 mod fs;
+mod layout;
+mod render;
 
-use std::{
-    collections::HashSet,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
-use breadcrumbs::{breadcrumb_layout, draw_breadcrumbs};
-use draw::{
-    MAX_POPUP_ITEMS, SidebarGlyph, draw_completion_popup, draw_mount_icon, draw_place_icon,
-    file_icon_color, folder_tint,
-};
+use breadcrumbs::breadcrumb_layout;
+use draw::{MAX_POPUP_ITEMS, SidebarGlyph, draw_completion_popup};
 use fs::{
     Browser, DirEntry, MountPoint, QuickAccess, build_quick_access, find_all_completions,
-    format_date, format_size, get_mount_icon, get_mounted_drives,
+    get_mounted_drives,
 };
+use layout::Layout;
+use render::{draw_chrome, draw_dynamic};
 
 use crate::{
     backend::{CursorShape, MouseButton, Window, WindowEvent},
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_CORNER_RADIUS, BASE_MIN_THUMB, Colors, KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE,
-        KEY_RETURN, KEY_UP, Thumb, button_row_y, ellipsize, icons, open_window, place_ok_cancel,
+        Colors, KEY_BACKSPACE, KEY_DOWN, KEY_ESCAPE, KEY_RETURN, KEY_UP, button_row_y, open_window,
+        place_ok_cancel,
         widgets::{Widget, button::Button, text_input::TextInput},
     },
 };
@@ -446,20 +444,6 @@ impl FileSelectBuilder {
             }
             rows
         };
-        let sidebar_row_at = |mx: i32, my: i32| -> Option<SidebarRow> {
-            if mx < sidebar_x || mx >= sidebar_x + sidebar_width as i32 {
-                return None;
-            }
-            sidebar_rows
-                .iter()
-                .find(|(row, y)| {
-                    !matches!(row, SidebarRow::Header(_))
-                        && my >= *y
-                        && my < *y + item_height as i32
-                })
-                .map(|(row, _)| *row)
-        };
-
         // Toolbar buttons, laid out once for both drawing and hit-testing
         let toolbar_button_size = (BASE_TOOLBAR_BUTTON as f32 * scale) as u32;
         let toolbar_buttons: Vec<ToolbarButton> = {
@@ -530,6 +514,37 @@ impl FileSelectBuilder {
         let search_y = padding as i32 + (toolbar_height as i32 - search_input.height() as i32) / 2;
         search_input.set_position(search_x, search_y);
 
+        let layout = Layout {
+            scale,
+            window_width,
+            padding,
+            sidebar_x,
+            sidebar_width,
+            main_x,
+            main_y,
+            main_w,
+            main_h,
+            toolbar_height,
+            path_bar_height,
+            section_header_height,
+            content_gap,
+            header_offset,
+            item_height,
+            visible_items,
+            list_y,
+            list_h,
+            size_col_x,
+            size_col_width,
+            date_col_x,
+            search_x,
+            search_y,
+            button_y,
+            filename_y,
+            scrollbar_gutter,
+            toolbar_buttons,
+            sidebar_rows,
+        };
+
         // Create canvas at PHYSICAL dimensions
         let mut canvas = Canvas::new(window_width, window_height);
 
@@ -557,12 +572,6 @@ impl FileSelectBuilder {
 
         let mut mouse_x = 0i32;
         let mut mouse_y = 0i32;
-
-        // Text sits on a common baseline: rendered canvases are cropped to their
-        // glyph bounds, so centering them individually would misalign rows.
-        let baseline_in = |top: i32, height: u32| -> i32 {
-            top + ((height as f32 - font.line_height()) / 2.0 + font.ascent()).round() as i32
-        };
 
         // Completion popup rects (x, y, w, h), shared by drawing and hit-testing.
         // The search popup drops below its field; the filename popup rises above it.
@@ -613,447 +622,10 @@ impl FileSelectBuilder {
                 }
             };
 
-        // Scrollbar thumb rect (x, y, w, h), shared by drawing, hover, hit-testing
-        // and drag. None when every entry already fits.
-        let scrollbar_thumb = |total: usize, scroll: usize, hovered: bool| {
-            let thumb = Thumb::new(
-                list_h as f32,
-                visible_items as f32,
-                total as f32,
-                scroll as f32,
-                BASE_MIN_THUMB * scale,
-            )?;
-            let w = if hovered { 8.0 * scale } else { 5.0 * scale };
-            let x = main_x as f32 + main_w as f32 - scrollbar_gutter as f32 / 2.0 - w / 2.0;
-            Some((x, list_y as f32 + thumb.offset, w, thumb.len))
-        };
-
         // Chrome layer: everything that only changes on navigation or hover.
-        let draw_chrome = |canvas: &mut Canvas,
-                           colors: &Colors,
-                           font: &Font,
-                           current_dir: &Path,
-                           quick_access: &[QuickAccess],
-                           mounted_drives: &[MountPoint],
-                           hovered_sidebar: Option<SidebarRow>,
-                           hovered_toolbar: Option<ToolbarAction>,
-                           can_go_back: bool,
-                           can_go_forward: bool,
-                           show_hidden: bool,
-                           search_input: &TextInput,
-                           scale: f32| {
-            let width = canvas.width() as f32;
-            let height = canvas.height() as f32;
-            let radius = BASE_CORNER_RADIUS * scale;
-            let pane_radius = 8.0 * scale;
-            let row_radius = BASE_ROW_RADIUS * scale;
-            let toolbar_icon = 17.0 * scale;
-            let sidebar_icon = 16.0 * scale;
-
-            canvas.fill_dialog_bg(
-                width,
-                height,
-                colors.window_bg,
-                colors.window_border,
-                colors.window_shadow,
-                radius,
-            );
-
-            // ===== TOOLBAR =====
-            for button in &toolbar_buttons {
-                let enabled = match button.action {
-                    ToolbarAction::Back => can_go_back,
-                    ToolbarAction::Forward => can_go_forward,
-                    ToolbarAction::Up => current_dir.parent().is_some(),
-                    ToolbarAction::Home | ToolbarAction::ToggleHidden => true,
-                };
-                let active = button.action == ToolbarAction::ToggleHidden && show_hidden;
-
-                if active {
-                    canvas.fill_rounded_rect(
-                        button.x as f32,
-                        button.y as f32,
-                        button.size as f32,
-                        button.size as f32,
-                        row_radius,
-                        colors.accent,
-                    );
-                } else if enabled && hovered_toolbar == Some(button.action) {
-                    canvas.fill_rounded_rect(
-                        button.x as f32,
-                        button.y as f32,
-                        button.size as f32,
-                        button.size as f32,
-                        row_radius,
-                        colors.row_hover,
-                    );
-                }
-
-                let tint = if active {
-                    colors.accent_text
-                } else if enabled {
-                    colors.text
-                } else {
-                    colors.text_muted.with_alpha(110)
-                };
-                let ix = button.x as f32 + (button.size as f32 - toolbar_icon) / 2.0;
-                let iy = button.y as f32 + (button.size as f32 - toolbar_icon) / 2.0;
-                match button.action {
-                    ToolbarAction::Back => icons::chevron_left(canvas, ix, iy, toolbar_icon, tint),
-                    ToolbarAction::Forward => {
-                        icons::chevron_right(canvas, ix, iy, toolbar_icon, tint)
-                    }
-                    ToolbarAction::Up => icons::arrow_up(canvas, ix, iy, toolbar_icon, tint),
-                    ToolbarAction::Home => icons::home(canvas, ix, iy, toolbar_icon, tint),
-                    ToolbarAction::ToggleHidden => {
-                        if show_hidden {
-                            icons::eye(canvas, ix, iy, toolbar_icon, tint)
-                        } else {
-                            icons::eye_off(canvas, ix, iy, toolbar_icon, tint)
-                        }
-                    }
-                }
-            }
-
-            search_input.draw_to(canvas, colors, font);
-            icons::search(
-                canvas,
-                (search_x + search_input.width() as i32) as f32 - 26.0 * scale,
-                search_y as f32 + (search_input.height() as f32 - 15.0 * scale) / 2.0,
-                15.0 * scale,
-                colors.text_muted,
-            );
-
-            canvas.fill_rect(
-                1.0,
-                (padding + toolbar_height) as f32 + content_gap as f32 / 2.0,
-                width - 2.0,
-                1.0,
-                colors.separator,
-            );
-
-            // ===== SIDEBAR =====
-            for (row, y) in &sidebar_rows {
-                let y = *y;
-                let (icon, label, is_current) = match row {
-                    SidebarRow::Header(label) => {
-                        let (text, base) = font
-                            .render(label)
-                            .with_color(colors.text_muted)
-                            .finish_with_baseline();
-                        canvas.draw_canvas(
-                            &text,
-                            sidebar_x + (8.0 * scale) as i32,
-                            baseline_in(y, section_header_height) - base,
-                        );
-                        continue;
-                    }
-                    SidebarRow::Place(i) => {
-                        let qa = &quick_access[*i];
-                        (
-                            SidebarGlyph::Place(qa.icon),
-                            qa.name.clone(),
-                            qa.path == current_dir,
-                        )
-                    }
-                    SidebarRow::Drive(i) => {
-                        let drive = &mounted_drives[*i];
-                        let label = drive.label.clone().unwrap_or_else(|| {
-                            drive
-                                .mount_point
-                                .file_name()
-                                .and_then(|n| n.to_str())
-                                .unwrap_or(&drive.device)
-                                .to_string()
-                        });
-                        (
-                            SidebarGlyph::Mount(get_mount_icon(&drive.device)),
-                            label,
-                            drive.mount_point == current_dir,
-                        )
-                    }
-                };
-
-                let fill = if is_current {
-                    Some(colors.row_selected)
-                } else if hovered_sidebar == Some(*row) {
-                    Some(colors.row_hover)
-                } else {
-                    None
-                };
-                if let Some(fill) = fill {
-                    canvas.fill_rounded_rect(
-                        sidebar_x as f32,
-                        y as f32,
-                        sidebar_width as f32,
-                        item_height as f32,
-                        row_radius,
-                        fill,
-                    );
-                }
-
-                let icon_tint = if is_current {
-                    colors.accent
-                } else {
-                    colors.text_muted
-                };
-                let icon_x = sidebar_x as f32 + 10.0 * scale;
-                let icon_y = y as f32 + (item_height as f32 - sidebar_icon) / 2.0;
-                match icon {
-                    SidebarGlyph::Place(kind) => {
-                        draw_place_icon(canvas, icon_x, icon_y, sidebar_icon, kind, icon_tint)
-                    }
-                    SidebarGlyph::Mount(kind) => {
-                        draw_mount_icon(canvas, icon_x, icon_y, sidebar_icon, kind, icon_tint)
-                    }
-                }
-
-                let text_x = sidebar_x + (34.0 * scale) as i32;
-                let avail =
-                    (sidebar_x + sidebar_width as i32 - text_x - (8.0 * scale) as i32).max(0);
-                let label = ellipsize(&label, font, avail as f32);
-                let (text, base) = font
-                    .render(&label)
-                    .with_color(colors.text)
-                    .finish_with_baseline();
-                canvas.draw_canvas(&text, text_x, baseline_in(y, item_height) - base);
-            }
-
-            // ===== FILE PANE =====
-            canvas.fill_rounded_rect(
-                main_x as f32,
-                main_y as f32,
-                main_w as f32,
-                main_h as f32,
-                pane_radius,
-                colors.surface_alt,
-            );
-
-            draw_breadcrumbs(
-                canvas,
-                main_x + (12.0 * scale) as i32,
-                baseline_in(main_y, path_bar_height),
-                main_w - (24.0 * scale) as u32,
-                current_dir,
-                colors,
-                font,
-                scale,
-            );
-
-            let header_y = main_y + path_bar_height as i32;
-            canvas.fill_rect(
-                main_x as f32,
-                header_y as f32,
-                main_w as f32,
-                1.0,
-                colors.separator,
-            );
-
-            let header_baseline = baseline_in(header_y, header_offset);
-            let mut header_label = |text: &str, x: i32, right_align: bool| {
-                let (text, base) = font
-                    .render(text)
-                    .with_color(colors.text_muted)
-                    .finish_with_baseline();
-                let x = if right_align {
-                    x - text.width() as i32
-                } else {
-                    x
-                };
-                canvas.draw_canvas(&text, x, header_baseline - base);
-            };
-            header_label("Name", main_x + (38.0 * scale) as i32, false);
-            if size_col_width > 0 {
-                header_label("Size", size_col_x + size_col_width as i32, true);
-            }
-            header_label("Modified", date_col_x, false);
-
-            canvas.fill_rect(
-                main_x as f32,
-                (header_y + header_offset as i32 - 1) as f32,
-                main_w as f32,
-                1.0,
-                colors.separator,
-            );
-        };
 
         // Dynamic layer: the scrollable file list + scrollbar + inputs + buttons.
         // Redrawn every frame on top of the cached chrome.
-        let draw_dynamic = |canvas: &mut Canvas,
-                            colors: &Colors,
-                            font: &Font,
-                            all_entries: &[DirEntry],
-                            filtered_entries: &[usize],
-                            selected_indices: &HashSet<usize>,
-                            scroll_offset: usize,
-                            hovered_entry: Option<usize>,
-                            scale: f32,
-                            scrollbar_hovered: bool,
-                            hovered_toolbar: Option<ToolbarAction>,
-                            show_hidden: bool,
-                            ok_button: &Button,
-                            cancel_button: &Button,
-                            filename_input: Option<&TextInput>| {
-            let row_radius = BASE_ROW_RADIUS * scale;
-            let icon_size = BASE_ICON_SIZE as f32 * scale;
-            let row_inset = (3.0 * scale).max(1.0);
-
-            for (vi, &ei) in filtered_entries
-                .iter()
-                .skip(scroll_offset)
-                .take(visible_items)
-                .enumerate()
-            {
-                let entry = &all_entries[ei];
-                let y = list_y + (vi as u32 * item_height) as i32;
-                let is_selected = selected_indices.contains(&ei);
-                let is_hovered = hovered_entry == Some(ei);
-
-                if is_selected || is_hovered {
-                    canvas.fill_rounded_rect(
-                        main_x as f32 + row_inset,
-                        y as f32,
-                        main_w as f32 - row_inset * 2.0,
-                        item_height as f32,
-                        row_radius,
-                        if is_selected {
-                            colors.row_selected
-                        } else {
-                            colors.row_hover
-                        },
-                    );
-                }
-
-                let icon_x = main_x as f32 + 10.0 * scale;
-                let icon_y = y as f32 + (item_height as f32 - icon_size) / 2.0;
-                if entry.is_dir {
-                    icons::folder(canvas, icon_x, icon_y, icon_size, folder_tint(colors));
-                } else {
-                    icons::document(
-                        canvas,
-                        icon_x,
-                        icon_y,
-                        icon_size,
-                        file_icon_color(&entry.name, colors),
-                    );
-                }
-
-                let name_x = main_x + (38.0 * scale) as i32;
-                let name_w = (size_col_x - name_x - (12.0 * scale) as i32).max(0) as f32;
-                let baseline = baseline_in(y, item_height);
-                let name = ellipsize(&entry.name, font, name_w);
-                let (name_canvas, base) = font
-                    .render(&name)
-                    .with_color(colors.text)
-                    .finish_with_baseline();
-                canvas.draw_canvas(&name_canvas, name_x, baseline - base);
-
-                if !entry.is_dir {
-                    let (size_canvas, base) = font
-                        .render(&format_size(entry.size))
-                        .with_color(colors.text_muted)
-                        .finish_with_baseline();
-                    canvas.draw_canvas(
-                        &size_canvas,
-                        size_col_x + size_col_width as i32 - size_canvas.width() as i32,
-                        baseline - base,
-                    );
-                }
-
-                let (date_canvas, base) = font
-                    .render(&format_date(entry.modified))
-                    .with_color(colors.text_muted)
-                    .finish_with_baseline();
-                canvas.draw_canvas(&date_canvas, date_col_x, baseline - base);
-            }
-
-            // Scrollbar
-            if let Some((x, y, w, h)) =
-                scrollbar_thumb(filtered_entries.len(), scroll_offset, scrollbar_hovered)
-            {
-                canvas.fill_rounded_rect(
-                    x,
-                    y,
-                    w,
-                    h,
-                    w / 2.0,
-                    if scrollbar_hovered {
-                        colors.accent
-                    } else {
-                        colors.text_muted.with_alpha(130)
-                    },
-                );
-            }
-
-            canvas.stroke_rounded_rect(
-                main_x as f32,
-                main_y as f32,
-                main_w as f32,
-                main_h as f32,
-                8.0 * scale,
-                colors.separator,
-                1.0,
-            );
-
-            // Filename input (save mode): label above, input below
-            if let Some(fi) = filename_input {
-                let label_canvas = font.render(title).with_color(colors.text_muted).finish();
-                canvas.draw_canvas(&label_canvas, main_x, filename_y + (2.0 * scale) as i32);
-                fi.draw_to(canvas, colors, font);
-            }
-
-            ok_button.draw_to(canvas, colors, font);
-            cancel_button.draw_to(canvas, colors, font);
-
-            let status = format!(
-                "{} item{}",
-                filtered_entries.len(),
-                if filtered_entries.len() == 1 { "" } else { "s" }
-            );
-            let (status_canvas, base) = font
-                .render(&status)
-                .with_color(colors.text_muted)
-                .finish_with_baseline();
-            canvas.draw_canvas(
-                &status_canvas,
-                padding as i32,
-                baseline_in(button_y, ok_button.height()) - base,
-            );
-
-            // Tooltip for the hovered toolbar button
-            if let Some(button) = hovered_toolbar
-                .and_then(|action| toolbar_buttons.iter().find(|b| b.action == action))
-            {
-                let (label, base) = font
-                    .render(button.action.tooltip(show_hidden))
-                    .with_color(colors.text)
-                    .finish_with_baseline();
-                let pad_x = (8.0 * scale) as i32;
-                let tip_h = (24.0 * scale) as u32;
-                let tip_w = label.width() as i32 + pad_x * 2;
-                let tip_x = (button.x + button.size as i32 / 2 - tip_w / 2)
-                    .clamp(padding as i32, window_width as i32 - padding as i32 - tip_w);
-                let tip_y = button.y + button.size as i32 + (6.0 * scale) as i32;
-                canvas.fill_rounded_rect(
-                    tip_x as f32,
-                    tip_y as f32,
-                    tip_w as f32,
-                    tip_h as f32,
-                    BASE_ROW_RADIUS * scale,
-                    colors.surface,
-                );
-                canvas.stroke_rounded_rect(
-                    tip_x as f32,
-                    tip_y as f32,
-                    tip_w as f32,
-                    tip_h as f32,
-                    BASE_ROW_RADIUS * scale,
-                    colors.separator,
-                    1.0,
-                );
-                canvas.draw_canvas(&label, tip_x + pad_x, baseline_in(tip_y, tip_h) - base);
-            }
-        };
 
         // Initial draw
         let sig = ChromeSig {
@@ -1077,16 +649,13 @@ impl FileSelectBuilder {
                 &mut chrome_canvas,
                 colors,
                 &font,
-                &browser.current_dir,
+                &layout,
+                &browser,
                 &quick_access,
                 &mounted_drives,
                 hovered_sidebar,
                 hovered_toolbar,
-                browser.can_go_back(),
-                browser.can_go_forward(),
-                browser.show_hidden,
                 &search_input,
-                scale,
             );
             chrome_sig = Some(sig);
         }
@@ -1095,15 +664,12 @@ impl FileSelectBuilder {
             &mut canvas,
             colors,
             &font,
-            &browser.all_entries,
-            &browser.filtered_entries,
-            &browser.selected_indices,
-            browser.scroll_offset,
+            &layout,
+            &browser,
+            title,
             hovered_entry,
-            scale,
             scrollbar_hovered,
             hovered_toolbar,
-            browser.show_hidden,
             &ok_button,
             &cancel_button,
             filename_input.as_ref(),
@@ -1156,7 +722,7 @@ impl FileSelectBuilder {
 
                     // Handle scrollbar thumb dragging
                     if thumb_drag
-                        && let Some((_, _, _, thumb_h)) = scrollbar_thumb(
+                        && let Some((_, _, _, thumb_h)) = layout.scrollbar_thumb(
                             browser.filtered_entries.len(),
                             browser.scroll_offset,
                             true,
@@ -1219,9 +785,10 @@ impl FileSelectBuilder {
                         let old_entry = hovered_entry;
                         let old_toolbar = hovered_toolbar;
 
-                        hovered_sidebar = sidebar_row_at(mouse_x, mouse_y);
+                        hovered_sidebar = layout.sidebar_row_at(mouse_x, mouse_y);
                         hovered_entry = None;
-                        hovered_toolbar = toolbar_buttons
+                        hovered_toolbar = layout
+                            .toolbar_buttons
                             .iter()
                             .find(|b| b.contains(mouse_x, mouse_y))
                             .map(|b| b.action);
@@ -1282,7 +849,10 @@ impl FileSelectBuilder {
                         || filename_input
                             .as_ref()
                             .is_some_and(|fi| in_widget(fi.x(), fi.y(), fi.width(), fi.height()))
-                        || toolbar_buttons.iter().any(|b| b.contains(mouse_x, mouse_y))
+                        || layout
+                            .toolbar_buttons
+                            .iter()
+                            .any(|b| b.contains(mouse_x, mouse_y))
                         || in_widget(
                             ok_button.x(),
                             ok_button.y(),
@@ -1316,7 +886,7 @@ impl FileSelectBuilder {
                         && mouse_y < list_y + list_h as i32
                     {
                         clicking_scrollbar = true;
-                        if let Some((_, thumb_y, _, thumb_h)) = scrollbar_thumb(
+                        if let Some((_, thumb_y, _, thumb_h)) = layout.scrollbar_thumb(
                             browser.filtered_entries.len(),
                             browser.scroll_offset,
                             scrollbar_hovered,
@@ -1329,7 +899,8 @@ impl FileSelectBuilder {
                     }
 
                     // Toolbar buttons
-                    if let Some(action) = toolbar_buttons
+                    if let Some(action) = layout
+                        .toolbar_buttons
                         .iter()
                         .find(|b| b.contains(mouse_x, mouse_y))
                         .map(|b| b.action)
@@ -2032,7 +1603,7 @@ impl FileSelectBuilder {
                             && mouse_x < main_x + main_w as i32
                             && mouse_y >= list_y
                             && mouse_y < list_y + list_h as i32
-                            && let Some((_, thumb_y, _, thumb_h)) = scrollbar_thumb(
+                            && let Some((_, thumb_y, _, thumb_h)) = layout.scrollbar_thumb(
                                 browser.filtered_entries.len(),
                                 browser.scroll_offset,
                                 scrollbar_hovered,
@@ -2077,16 +1648,13 @@ impl FileSelectBuilder {
                         &mut chrome_canvas,
                         colors,
                         &font,
-                        &browser.current_dir,
+                        &layout,
+                        &browser,
                         &quick_access,
                         &mounted_drives,
                         hovered_sidebar,
                         hovered_toolbar,
-                        browser.can_go_back(),
-                        browser.can_go_forward(),
-                        browser.show_hidden,
                         &search_input,
-                        scale,
                     );
                     chrome_sig = Some(sig);
                 }
@@ -2095,15 +1663,12 @@ impl FileSelectBuilder {
                     &mut canvas,
                     colors,
                     &font,
-                    &browser.all_entries,
-                    &browser.filtered_entries,
-                    &browser.selected_indices,
-                    browser.scroll_offset,
+                    &layout,
+                    &browser,
+                    title,
                     hovered_entry,
-                    scale,
                     scrollbar_hovered,
                     hovered_toolbar,
-                    browser.show_hidden,
                     &ok_button,
                     &cancel_button,
                     filename_input.as_ref(),
