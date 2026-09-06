@@ -108,7 +108,7 @@ fn spawn_stdin_reader() -> mpsc::Receiver<ProgressMessage> {
 /// closing an [`ProgressBuilder::auto_close`] dialog.
 #[derive(Default)]
 struct DialogState {
-    cancelled: AtomicBool,
+    cancelled: Arc<AtomicBool>,
     close_requested: AtomicBool,
 }
 
@@ -151,6 +151,14 @@ impl ProgressHandle {
     /// true.
     pub fn is_cancelled(&self) -> bool {
         self.state.cancelled.load(Ordering::Acquire)
+    }
+
+    /// Returns the same flag [`ProgressHandle::is_cancelled`] reads.
+    ///
+    /// Hand this to worker code that polls a flag of its own, so a long
+    /// operation can stop without a thread bridging the two.
+    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.state.cancelled)
     }
 
     /// Signals that this handle has no more updates.
