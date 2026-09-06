@@ -15,9 +15,8 @@ use draw::{
     file_icon_color, folder_tint,
 };
 use fs::{
-    DirEntry, MountPoint, QuickAccess, build_quick_access, find_all_completions, format_date,
-    format_size, get_mount_icon, get_mounted_drives, load_directory, navigate_to_directory,
-    reload_directory, update_filtered,
+    Browser, DirEntry, MountPoint, QuickAccess, build_quick_access, find_all_completions,
+    format_date, format_size, get_mount_icon, get_mounted_drives,
 };
 
 use crate::{
@@ -216,7 +215,7 @@ impl FileSelectBuilder {
         self
     }
 
-    pub fn show(self) -> Result<FileSelectResult, Error> {
+    pub fn show(mut self) -> Result<FileSelectResult, Error> {
         let colors = self.colors.unwrap_or_else(|| crate::ui::detect_theme());
 
         // Save mode flag
@@ -298,15 +297,11 @@ impl FileSelectBuilder {
             .with_scale(scale)
             .with_placeholder("Search...");
 
-        // Navigation history
-        let mut history: Vec<PathBuf> = Vec::new();
-        let mut history_index: usize = 0;
-
         // Current state
         // Resolve the initial directory (and optional preselected file name) from
         // --filename / start_path. A directory opens in place; a file path opens
         // its parent and yields the file name for preselection (zenity semantics).
-        let (mut current_dir, preselected_name) = match &self.start_path {
+        let (current_dir, preselected_name) = match &self.start_path {
             Some(p) => (p.clone(), None),
             None if self.filename.is_empty() => {
                 (dirs::home_dir().unwrap_or_else(|| PathBuf::from("/")), None)
@@ -330,17 +325,16 @@ impl FileSelectBuilder {
                 }
             }
         };
-        history.push(current_dir.clone());
-
         // Build quick access locations
         let quick_access = build_quick_access(&current_dir);
 
-        let mut all_entries: Vec<DirEntry> = Vec::new();
-        let mut filtered_entries: Vec<usize> = Vec::new(); // Indices into all_entries
-        let mut selected_indices: HashSet<usize> = HashSet::new();
-        let mut scroll_offset: usize = 0;
-        let mut show_hidden = false;
         let mut search_text = String::new();
+        let mut browser = Browser::new(
+            current_dir,
+            self.directory,
+            std::mem::take(&mut self.filters),
+            &search_text,
+        );
         let mut hovered_sidebar: Option<SidebarRow> = None;
         let mut hovered_entry: Option<usize> = None;
         let mut hovered_toolbar: Option<ToolbarAction> = None;
@@ -359,15 +353,6 @@ impl FileSelectBuilder {
         let mut thumb_drag = false;
         let mut thumb_drag_offset: Option<i32> = None;
         let mut scrollbar_hovered = false;
-
-        // Load initial directory
-        load_directory(&current_dir, &mut all_entries, self.directory, show_hidden);
-        update_filtered(
-            &all_entries,
-            &search_text,
-            &mut filtered_entries,
-            &self.filters,
-        );
 
         // Calculate layout in physical coordinates
         let filename_row_height = if save_mode {
@@ -417,21 +402,25 @@ impl FileSelectBuilder {
             .then_some(())
             .and(preselected_name.as_deref())
             .and_then(|name| {
-                filtered_entries.iter().enumerate().find_map(|(pos, &i)| {
-                    all_entries[i]
-                        .name
-                        .eq_ignore_ascii_case(name)
-                        .then_some((i, pos))
-                })
+                browser
+                    .filtered_entries
+                    .iter()
+                    .enumerate()
+                    .find_map(|(pos, &i)| {
+                        browser.all_entries[i]
+                            .name
+                            .eq_ignore_ascii_case(name)
+                            .then_some((i, pos))
+                    })
             })
         {
-            selected_indices.insert(idx);
-            scroll_offset = if pos < scroll_offset {
+            browser.selected_indices.insert(idx);
+            browser.scroll_offset = if pos < browser.scroll_offset {
                 pos
-            } else if pos >= scroll_offset + visible_items {
+            } else if pos >= browser.scroll_offset + visible_items {
                 pos + 1 - visible_items
             } else {
-                scroll_offset
+                browser.scroll_offset
             };
         }
 
@@ -648,8 +637,8 @@ impl FileSelectBuilder {
                            mounted_drives: &[MountPoint],
                            hovered_sidebar: Option<SidebarRow>,
                            hovered_toolbar: Option<ToolbarAction>,
-                           history: &[PathBuf],
-                           history_index: usize,
+                           can_go_back: bool,
+                           can_go_forward: bool,
                            show_hidden: bool,
                            search_input: &TextInput,
                            scale: f32| {
@@ -673,8 +662,8 @@ impl FileSelectBuilder {
             // ===== TOOLBAR =====
             for button in &toolbar_buttons {
                 let enabled = match button.action {
-                    ToolbarAction::Back => history_index > 0,
-                    ToolbarAction::Forward => history_index + 1 < history.len(),
+                    ToolbarAction::Back => can_go_back,
+                    ToolbarAction::Forward => can_go_forward,
                     ToolbarAction::Up => current_dir.parent().is_some(),
                     ToolbarAction::Home | ToolbarAction::ToggleHidden => true,
                 };
@@ -1068,12 +1057,12 @@ impl FileSelectBuilder {
 
         // Initial draw
         let sig = ChromeSig {
-            dir: current_dir.to_path_buf(),
-            show_hidden,
+            dir: browser.current_dir.to_path_buf(),
+            show_hidden: browser.show_hidden,
             hovered_sidebar,
             hovered_toolbar,
-            history_index,
-            history_len: history.len(),
+            history_index: browser.history_step().0,
+            history_len: browser.history_step().1,
             search: search_input.text().to_owned(),
             search_focused: search_input.has_focus(),
             search_caret: search_input.caret(),
@@ -1088,14 +1077,14 @@ impl FileSelectBuilder {
                 &mut chrome_canvas,
                 colors,
                 &font,
-                &current_dir,
+                &browser.current_dir,
                 &quick_access,
                 &mounted_drives,
                 hovered_sidebar,
                 hovered_toolbar,
-                &history,
-                history_index,
-                show_hidden,
+                browser.can_go_back(),
+                browser.can_go_forward(),
+                browser.show_hidden,
                 &search_input,
                 scale,
             );
@@ -1106,15 +1095,15 @@ impl FileSelectBuilder {
             &mut canvas,
             colors,
             &font,
-            &all_entries,
-            &filtered_entries,
-            &selected_indices,
-            scroll_offset,
+            &browser.all_entries,
+            &browser.filtered_entries,
+            &browser.selected_indices,
+            browser.scroll_offset,
             hovered_entry,
             scale,
             scrollbar_hovered,
             hovered_toolbar,
-            show_hidden,
+            browser.show_hidden,
             &ok_button,
             &cancel_button,
             filename_input.as_ref(),
@@ -1167,10 +1156,13 @@ impl FileSelectBuilder {
 
                     // Handle scrollbar thumb dragging
                     if thumb_drag
-                        && let Some((_, _, _, thumb_h)) =
-                            scrollbar_thumb(filtered_entries.len(), scroll_offset, true)
+                        && let Some((_, _, _, thumb_h)) = scrollbar_thumb(
+                            browser.filtered_entries.len(),
+                            browser.scroll_offset,
+                            true,
+                        )
                     {
-                        let max_scroll = filtered_entries.len() - visible_items;
+                        let max_scroll = browser.filtered_entries.len() - visible_items;
                         let travel = list_h as f32 - thumb_h;
                         let offset = thumb_drag_offset.unwrap_or(thumb_h as i32 / 2);
                         let thumb_y = (mouse_y - list_y - offset).clamp(0, travel.max(0.0) as i32);
@@ -1180,8 +1172,8 @@ impl FileSelectBuilder {
                             0.0
                         };
                         let target = (ratio * max_scroll as f32).round() as usize;
-                        if target != scroll_offset {
-                            scroll_offset = target.min(max_scroll);
+                        if target != browser.scroll_offset {
+                            browser.scroll_offset = target.min(max_scroll);
                             needs_redraw = true;
                         }
                     }
@@ -1245,7 +1237,7 @@ impl FileSelectBuilder {
                             && mouse_x < main_x + main_w as i32
                             && mouse_y >= list_y
                             && mouse_y < list_y + list_h as i32
-                            && !filtered_entries.is_empty();
+                            && !browser.filtered_entries.is_empty();
 
                         if popup_hover.is_none()
                             && mouse_x >= main_x
@@ -1254,9 +1246,9 @@ impl FileSelectBuilder {
                             && mouse_y < list_y + list_h as i32
                         {
                             let rel_y = (mouse_y - list_y) as usize;
-                            let idx = scroll_offset + rel_y / item_height as usize;
-                            if idx < filtered_entries.len() {
-                                hovered_entry = Some(filtered_entries[idx]);
+                            let idx = browser.scroll_offset + rel_y / item_height as usize;
+                            if idx < browser.filtered_entries.len() {
+                                hovered_entry = Some(browser.filtered_entries[idx]);
                             }
                         }
 
@@ -1317,7 +1309,7 @@ impl FileSelectBuilder {
 
                     // The scrollbar gutter swallows clicks so they never select a row
                     if !clicked_popup
-                        && !filtered_entries.is_empty()
+                        && !browser.filtered_entries.is_empty()
                         && mouse_x >= main_x + main_w as i32 - scrollbar_gutter as i32
                         && mouse_x < main_x + main_w as i32
                         && mouse_y >= list_y
@@ -1325,8 +1317,8 @@ impl FileSelectBuilder {
                     {
                         clicking_scrollbar = true;
                         if let Some((_, thumb_y, _, thumb_h)) = scrollbar_thumb(
-                            filtered_entries.len(),
-                            scroll_offset,
+                            browser.filtered_entries.len(),
+                            browser.scroll_offset,
                             scrollbar_hovered,
                         ) && (mouse_y as f32) >= thumb_y
                             && (mouse_y as f32) < thumb_y + thumb_h
@@ -1343,89 +1335,29 @@ impl FileSelectBuilder {
                         .map(|b| b.action)
                     {
                         match action {
-                            ToolbarAction::Back if history_index > 0 => {
-                                history_index -= 1;
-                                current_dir = history[history_index].clone();
-                                reload_directory(
-                                    &current_dir,
-                                    &mut all_entries,
-                                    self.directory,
-                                    show_hidden,
-                                    &search_text,
-                                    &mut filtered_entries,
-                                    &self.filters,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
-                                );
+                            ToolbarAction::Back if browser.can_go_back() => {
+                                browser.go_back(&search_text);
                                 needs_redraw = true;
                             }
-                            ToolbarAction::Forward if history_index + 1 < history.len() => {
-                                history_index += 1;
-                                current_dir = history[history_index].clone();
-                                reload_directory(
-                                    &current_dir,
-                                    &mut all_entries,
-                                    self.directory,
-                                    show_hidden,
-                                    &search_text,
-                                    &mut filtered_entries,
-                                    &self.filters,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
-                                );
+                            ToolbarAction::Forward if browser.can_go_forward() => {
+                                browser.go_forward(&search_text);
                                 needs_redraw = true;
                             }
                             ToolbarAction::Up => {
-                                if let Some(parent) = current_dir.parent() {
-                                    navigate_to_directory(
-                                        parent.to_path_buf(),
-                                        &mut current_dir,
-                                        &mut history,
-                                        &mut history_index,
-                                        &mut all_entries,
-                                        self.directory,
-                                        show_hidden,
-                                        &search_text,
-                                        &mut filtered_entries,
-                                        &mut selected_indices,
-                                        &mut scroll_offset,
-                                        &self.filters,
-                                    );
+                                if let Some(parent) = browser.current_dir.parent() {
+                                    browser.navigate_to(parent.to_path_buf(), &search_text);
                                     needs_redraw = true;
                                 }
                             }
                             ToolbarAction::Home => {
                                 if let Some(home) = dirs::home_dir() {
-                                    navigate_to_directory(
-                                        home,
-                                        &mut current_dir,
-                                        &mut history,
-                                        &mut history_index,
-                                        &mut all_entries,
-                                        self.directory,
-                                        show_hidden,
-                                        &search_text,
-                                        &mut filtered_entries,
-                                        &mut selected_indices,
-                                        &mut scroll_offset,
-                                        &self.filters,
-                                    );
+                                    browser.navigate_to(home, &search_text);
                                     needs_redraw = true;
                                 }
                             }
                             ToolbarAction::ToggleHidden => {
-                                show_hidden = !show_hidden;
-                                reload_directory(
-                                    &current_dir,
-                                    &mut all_entries,
-                                    self.directory,
-                                    show_hidden,
-                                    &search_text,
-                                    &mut filtered_entries,
-                                    &self.filters,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
-                                );
+                                browser.show_hidden = !browser.show_hidden;
+                                browser.reload(&search_text);
                                 needs_redraw = true;
                             }
                             ToolbarAction::Back | ToolbarAction::Forward => {}
@@ -1439,7 +1371,7 @@ impl FileSelectBuilder {
                         && mouse_x < main_x + main_w as i32
                     {
                         let crumbs = breadcrumb_layout(
-                            &current_dir,
+                            &browser.current_dir,
                             main_x + (8.0 * scale) as i32,
                             main_w as i32 - (16.0 * scale) as i32,
                             &font,
@@ -1447,20 +1379,7 @@ impl FileSelectBuilder {
                         // The last segment is the current dir; skip it to avoid a no-op reload.
                         for c in crumbs.iter().take(crumbs.len().saturating_sub(1)) {
                             if mouse_x >= c.x && mouse_x < c.x + c.w {
-                                navigate_to_directory(
-                                    c.path.clone(),
-                                    &mut current_dir,
-                                    &mut history,
-                                    &mut history_index,
-                                    &mut all_entries,
-                                    self.directory,
-                                    show_hidden,
-                                    &search_text,
-                                    &mut filtered_entries,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
-                                    &self.filters,
-                                );
+                                browser.navigate_to(c.path.clone(), &search_text);
                                 needs_redraw = true;
                                 break;
                             }
@@ -1477,61 +1396,35 @@ impl FileSelectBuilder {
                             _ => None,
                         };
                         if let Some(path) = target {
-                            navigate_to_directory(
-                                path,
-                                &mut current_dir,
-                                &mut history,
-                                &mut history_index,
-                                &mut all_entries,
-                                self.directory,
-                                show_hidden,
-                                &search_text,
-                                &mut filtered_entries,
-                                &mut selected_indices,
-                                &mut scroll_offset,
-                                &self.filters,
-                            );
+                            browser.navigate_to(path, &search_text);
                             needs_redraw = true;
                         }
 
                         // File list click
                         if let Some(ei) = hovered_entry {
-                            let reclicked = selected_indices.contains(&ei);
+                            let reclicked = browser.selected_indices.contains(&ei);
                             // Clicking an already selected directory opens it.
                             // Multi-selecting directories is only meaningful in
                             // directory mode, where they stay toggleable and
                             // only `..` still navigates.
                             let open_dir = reclicked
-                                && all_entries[ei].is_dir
+                                && browser.all_entries[ei].is_dir
                                 && (!self.multiple
                                     || !self.directory
-                                    || all_entries[ei].name == "..");
+                                    || browser.all_entries[ei].name == "..");
 
                             if open_dir {
-                                let dest = all_entries[ei].path.clone();
-                                navigate_to_directory(
-                                    dest,
-                                    &mut current_dir,
-                                    &mut history,
-                                    &mut history_index,
-                                    &mut all_entries,
-                                    self.directory,
-                                    show_hidden,
-                                    &search_text,
-                                    &mut filtered_entries,
-                                    &mut selected_indices,
-                                    &mut scroll_offset,
-                                    &self.filters,
-                                );
+                                let dest = browser.all_entries[ei].path.clone();
+                                browser.navigate_to(dest, &search_text);
                             } else if self.multiple {
                                 // Toggle selection in multiple mode
                                 if reclicked {
-                                    selected_indices.remove(&ei);
+                                    browser.selected_indices.remove(&ei);
                                 } else {
-                                    selected_indices.insert(ei);
+                                    browser.selected_indices.insert(ei);
                                 }
                             } else if reclicked {
-                                let entry = &all_entries[ei];
+                                let entry = &browser.all_entries[ei];
                                 if save_mode {
                                     // In save mode, double-click on file populates filename
                                     if let Some(ref mut fi) = filename_input {
@@ -1543,11 +1436,11 @@ impl FileSelectBuilder {
                                     return Ok(FileSelectResult::Selected(entry.path.clone()));
                                 }
                             } else {
-                                selected_indices.clear();
-                                selected_indices.insert(ei);
+                                browser.selected_indices.clear();
+                                browser.selected_indices.insert(ei);
                                 // In save mode, single click on file populates filename input
                                 if save_mode {
-                                    let entry = &all_entries[ei];
+                                    let entry = &browser.all_entries[ei];
                                     if !entry.is_dir
                                         && let Some(ref mut fi) = filename_input
                                     {
@@ -1615,16 +1508,17 @@ impl FileSelectBuilder {
                 WindowEvent::Scroll(direction) => {
                     match direction {
                         crate::backend::ScrollDirection::Up => {
-                            if scroll_offset > 0 {
-                                scroll_offset = scroll_offset.saturating_sub(3);
+                            if browser.scroll_offset > 0 {
+                                browser.scroll_offset = browser.scroll_offset.saturating_sub(3);
                                 needs_redraw = true;
                             }
                         }
                         crate::backend::ScrollDirection::Down
-                            if scroll_offset + visible_items < filtered_entries.len() =>
+                            if browser.scroll_offset + visible_items
+                                < browser.filtered_entries.len() =>
                         {
-                            scroll_offset = (scroll_offset + 3)
-                                .min(filtered_entries.len().saturating_sub(visible_items));
+                            browser.scroll_offset = (browser.scroll_offset + 3)
+                                .min(browser.filtered_entries.len().saturating_sub(visible_items));
                             needs_redraw = true;
                         }
                         _ => {}
@@ -1670,83 +1564,86 @@ impl FileSelectBuilder {
                     if !search_input.has_focus() && !filename_has_focus {
                         match key_event.keysym {
                             KEY_UP => {
-                                if !filtered_entries.is_empty() {
-                                    let new_index =
-                                        if let Some(&sel) = selected_indices.iter().next() {
-                                            if let Some(pos) =
-                                                filtered_entries.iter().position(|&e| e == sel)
-                                            {
-                                                if pos > 0 {
-                                                    Some(filtered_entries[pos - 1])
-                                                } else {
-                                                    Some(sel)
-                                                }
+                                if !browser.filtered_entries.is_empty() {
+                                    let new_index = if let Some(&sel) =
+                                        browser.selected_indices.iter().next()
+                                    {
+                                        if let Some(pos) =
+                                            browser.filtered_entries.iter().position(|&e| e == sel)
+                                        {
+                                            if pos > 0 {
+                                                Some(browser.filtered_entries[pos - 1])
                                             } else {
-                                                Some(filtered_entries[0])
+                                                Some(sel)
                                             }
                                         } else {
-                                            Some(filtered_entries[0])
-                                        };
+                                            Some(browser.filtered_entries[0])
+                                        }
+                                    } else {
+                                        Some(browser.filtered_entries[0])
+                                    };
 
                                     if let Some(idx) = new_index {
                                         if self.multiple {
-                                            if selected_indices.contains(&idx) {
-                                                selected_indices.remove(&idx);
+                                            if browser.selected_indices.contains(&idx) {
+                                                browser.selected_indices.remove(&idx);
                                             } else {
-                                                selected_indices.insert(idx);
+                                                browser.selected_indices.insert(idx);
                                             }
                                         } else {
-                                            selected_indices.clear();
-                                            selected_indices.insert(idx);
+                                            browser.selected_indices.clear();
+                                            browser.selected_indices.insert(idx);
                                         }
 
                                         if let Some(pos) =
-                                            filtered_entries.iter().position(|&e| e == idx)
-                                            && pos < scroll_offset
+                                            browser.filtered_entries.iter().position(|&e| e == idx)
+                                            && pos < browser.scroll_offset
                                         {
-                                            scroll_offset = pos;
+                                            browser.scroll_offset = pos;
                                         }
                                         needs_redraw = true;
                                     }
                                 }
                             }
                             KEY_DOWN => {
-                                if !filtered_entries.is_empty() {
-                                    let new_index =
-                                        if let Some(&sel) = selected_indices.iter().next() {
-                                            if let Some(pos) =
-                                                filtered_entries.iter().position(|&e| e == sel)
-                                            {
-                                                if pos + 1 < filtered_entries.len() {
-                                                    Some(filtered_entries[pos + 1])
-                                                } else {
-                                                    Some(sel)
-                                                }
+                                if !browser.filtered_entries.is_empty() {
+                                    let new_index = if let Some(&sel) =
+                                        browser.selected_indices.iter().next()
+                                    {
+                                        if let Some(pos) =
+                                            browser.filtered_entries.iter().position(|&e| e == sel)
+                                        {
+                                            if pos + 1 < browser.filtered_entries.len() {
+                                                Some(browser.filtered_entries[pos + 1])
                                             } else {
-                                                Some(filtered_entries[0])
+                                                Some(sel)
                                             }
                                         } else {
-                                            Some(filtered_entries[0])
-                                        };
+                                            Some(browser.filtered_entries[0])
+                                        }
+                                    } else {
+                                        Some(browser.filtered_entries[0])
+                                    };
 
                                     if let Some(idx) = new_index {
                                         if self.multiple {
-                                            if selected_indices.contains(&idx) {
-                                                selected_indices.remove(&idx);
+                                            if browser.selected_indices.contains(&idx) {
+                                                browser.selected_indices.remove(&idx);
                                             } else {
-                                                selected_indices.insert(idx);
+                                                browser.selected_indices.insert(idx);
                                             }
                                         } else {
-                                            selected_indices.clear();
-                                            selected_indices.insert(idx);
+                                            browser.selected_indices.clear();
+                                            browser.selected_indices.insert(idx);
                                         }
 
                                         if let Some(pos) =
-                                            filtered_entries.iter().position(|&e| e == idx)
-                                            && pos >= scroll_offset + visible_items
+                                            browser.filtered_entries.iter().position(|&e| e == idx)
+                                            && pos >= browser.scroll_offset + visible_items
                                         {
-                                            scroll_offset = (pos + 1 - visible_items).min(
-                                                filtered_entries
+                                            browser.scroll_offset = (pos + 1 - visible_items).min(
+                                                browser
+                                                    .filtered_entries
                                                     .len()
                                                     .saturating_sub(visible_items),
                                             );
@@ -1757,21 +1654,8 @@ impl FileSelectBuilder {
                             }
                             KEY_RETURN => enter_pressed = true,
                             KEY_BACKSPACE => {
-                                if let Some(parent) = current_dir.parent() {
-                                    navigate_to_directory(
-                                        parent.to_path_buf(),
-                                        &mut current_dir,
-                                        &mut history,
-                                        &mut history_index,
-                                        &mut all_entries,
-                                        self.directory,
-                                        show_hidden,
-                                        &search_text,
-                                        &mut filtered_entries,
-                                        &mut selected_indices,
-                                        &mut scroll_offset,
-                                        &self.filters,
-                                    );
+                                if let Some(parent) = browser.current_dir.parent() {
+                                    browser.navigate_to(parent.to_path_buf(), &search_text);
                                     needs_redraw = true;
                                 }
                             }
@@ -1841,14 +1725,9 @@ impl FileSelectBuilder {
                         let new_search = search_input.text().to_lowercase();
                         if new_search != search_text {
                             search_text = new_search;
-                            update_filtered(
-                                &all_entries,
-                                &search_text,
-                                &mut filtered_entries,
-                                &self.filters,
-                            );
-                            selected_indices.clear();
-                            scroll_offset = 0;
+                            browser.refilter(&search_text);
+                            browser.selected_indices.clear();
+                            browser.scroll_offset = 0;
                         }
                         needs_redraw = true;
                         search_popup_handled = true;
@@ -1863,21 +1742,16 @@ impl FileSelectBuilder {
                     let new_search = search_input.text().to_lowercase();
                     if new_search != search_text {
                         search_text = new_search;
-                        update_filtered(
-                            &all_entries,
-                            &search_text,
-                            &mut filtered_entries,
-                            &self.filters,
-                        );
-                        selected_indices.clear();
-                        scroll_offset = 0;
+                        browser.refilter(&search_text);
+                        browser.selected_indices.clear();
+                        browser.scroll_offset = 0;
                     }
                     // Detect text change → recompute search completions
                     if search_input.text() != search_text_before {
                         search_popup_index = 0;
                         let text = search_input.text().to_string();
                         search_matches = find_all_completions(
-                            &all_entries,
+                            &browser.all_entries,
                             &text,
                             MAX_POPUP_ITEMS,
                             false,
@@ -1901,7 +1775,7 @@ impl FileSelectBuilder {
                         let text = search_input.text().to_string();
                         if !text.is_empty() {
                             search_matches = find_all_completions(
-                                &all_entries,
+                                &browser.all_entries,
                                 &text,
                                 MAX_POPUP_ITEMS,
                                 false,
@@ -1925,14 +1799,9 @@ impl FileSelectBuilder {
                         let new_search = search_input.text().to_lowercase();
                         if new_search != search_text {
                             search_text = new_search;
-                            update_filtered(
-                                &all_entries,
-                                &search_text,
-                                &mut filtered_entries,
-                                &self.filters,
-                            );
-                            selected_indices.clear();
-                            scroll_offset = 0;
+                            browser.refilter(&search_text);
+                            browser.selected_indices.clear();
+                            browser.scroll_offset = 0;
                         }
                         needs_redraw = true;
                     }
@@ -1944,14 +1813,9 @@ impl FileSelectBuilder {
                         let new_search = search_input.text().to_lowercase();
                         if new_search != search_text {
                             search_text = new_search;
-                            update_filtered(
-                                &all_entries,
-                                &search_text,
-                                &mut filtered_entries,
-                                &self.filters,
-                            );
-                            selected_indices.clear();
-                            scroll_offset = 0;
+                            browser.refilter(&search_text);
+                            browser.selected_indices.clear();
+                            browser.scroll_offset = 0;
                         }
                         needs_redraw = true;
                     }
@@ -2031,7 +1895,7 @@ impl FileSelectBuilder {
                         completion_popup_index = 0;
                         let prefix = fi.text().to_string();
                         completion_matches = find_all_completions(
-                            &all_entries,
+                            &browser.all_entries,
                             &prefix,
                             MAX_POPUP_ITEMS,
                             true,
@@ -2052,7 +1916,7 @@ impl FileSelectBuilder {
                         if !prefix.is_empty() {
                             // Recompute matches from new text (Tab may have accepted a suffix)
                             completion_matches = find_all_completions(
-                                &all_entries,
+                                &browser.all_entries,
                                 &prefix,
                                 MAX_POPUP_ITEMS,
                                 true,
@@ -2080,7 +1944,9 @@ impl FileSelectBuilder {
                         } else {
                             let name = fi.text().trim().to_string();
                             if !name.is_empty() {
-                                return Ok(FileSelectResult::Selected(current_dir.join(&name)));
+                                return Ok(FileSelectResult::Selected(
+                                    browser.current_dir.join(&name),
+                                ));
                             }
                         }
                     }
@@ -2097,7 +1963,7 @@ impl FileSelectBuilder {
                     if let Some(ref fi) = filename_input {
                         let name = fi.text().trim().to_string();
                         if !name.is_empty() {
-                            return Ok(FileSelectResult::Selected(current_dir.join(&name)));
+                            return Ok(FileSelectResult::Selected(browser.current_dir.join(&name)));
                         }
                     }
                 } else {
@@ -2109,9 +1975,10 @@ impl FileSelectBuilder {
             // entered rather than returned, except that OK in directory mode
             // returns it; `..` is never a result.
             if enter_pressed || ok_pressed {
-                let selected: Vec<&DirEntry> = selected_indices
+                let selected: Vec<&DirEntry> = browser
+                    .selected_indices
                     .iter()
-                    .map(|&ei| &all_entries[ei])
+                    .map(|&ei| &browser.all_entries[ei])
                     .collect();
                 if self.multiple {
                     let paths: Vec<PathBuf> = selected
@@ -2133,27 +2000,14 @@ impl FileSelectBuilder {
                     _ => None,
                 };
                 if let Some(dest) = enter_dir {
-                    navigate_to_directory(
-                        dest,
-                        &mut current_dir,
-                        &mut history,
-                        &mut history_index,
-                        &mut all_entries,
-                        self.directory,
-                        show_hidden,
-                        &search_text,
-                        &mut filtered_entries,
-                        &mut selected_indices,
-                        &mut scroll_offset,
-                        &self.filters,
-                    );
+                    browser.navigate_to(dest, &search_text);
                     needs_redraw = true;
                 } else if !self.multiple
                     && let Some(entry) = selected.first()
                 {
                     return Ok(FileSelectResult::Selected(entry.path.clone()));
                 } else if ok_pressed && self.directory && selected.is_empty() {
-                    return Ok(FileSelectResult::Selected(current_dir.clone()));
+                    return Ok(FileSelectResult::Selected(browser.current_dir.clone()));
                 }
             }
 
@@ -2179,8 +2033,8 @@ impl FileSelectBuilder {
                             && mouse_y >= list_y
                             && mouse_y < list_y + list_h as i32
                             && let Some((_, thumb_y, _, thumb_h)) = scrollbar_thumb(
-                                filtered_entries.len(),
-                                scroll_offset,
+                                browser.filtered_entries.len(),
+                                browser.scroll_offset,
                                 scrollbar_hovered,
                             )
                             && (mouse_y as f32) >= thumb_y
@@ -2203,12 +2057,12 @@ impl FileSelectBuilder {
 
             if needs_redraw {
                 let sig = ChromeSig {
-                    dir: current_dir.to_path_buf(),
-                    show_hidden,
+                    dir: browser.current_dir.to_path_buf(),
+                    show_hidden: browser.show_hidden,
                     hovered_sidebar,
                     hovered_toolbar,
-                    history_index,
-                    history_len: history.len(),
+                    history_index: browser.history_step().0,
+                    history_len: browser.history_step().1,
                     search: search_input.text().to_owned(),
                     search_focused: search_input.has_focus(),
                     search_caret: search_input.caret(),
@@ -2223,14 +2077,14 @@ impl FileSelectBuilder {
                         &mut chrome_canvas,
                         colors,
                         &font,
-                        &current_dir,
+                        &browser.current_dir,
                         &quick_access,
                         &mounted_drives,
                         hovered_sidebar,
                         hovered_toolbar,
-                        &history,
-                        history_index,
-                        show_hidden,
+                        browser.can_go_back(),
+                        browser.can_go_forward(),
+                        browser.show_hidden,
                         &search_input,
                         scale,
                     );
@@ -2241,15 +2095,15 @@ impl FileSelectBuilder {
                     &mut canvas,
                     colors,
                     &font,
-                    &all_entries,
-                    &filtered_entries,
-                    &selected_indices,
-                    scroll_offset,
+                    &browser.all_entries,
+                    &browser.filtered_entries,
+                    &browser.selected_indices,
+                    browser.scroll_offset,
                     hovered_entry,
                     scale,
                     scrollbar_hovered,
                     hovered_toolbar,
-                    show_hidden,
+                    browser.show_hidden,
                     &ok_button,
                     &cancel_button,
                     filename_input.as_ref(),

@@ -207,12 +207,7 @@ pub(super) fn get_mount_icon(device: &str) -> MountIcon {
     MountIcon::Generic
 }
 
-pub(super) fn load_directory(
-    path: &Path,
-    entries: &mut Vec<DirEntry>,
-    dirs_only: bool,
-    show_hidden: bool,
-) {
+fn load_directory(path: &Path, entries: &mut Vec<DirEntry>, dirs_only: bool, show_hidden: bool) {
     entries.clear();
 
     if let Some(parent) = path.parent() {
@@ -269,7 +264,7 @@ pub(super) fn load_directory(
     entries.extend(files);
 }
 
-pub(super) fn update_filtered(
+fn update_filtered(
     all: &[DirEntry],
     search: &str,
     filtered: &mut Vec<usize>,
@@ -320,73 +315,6 @@ fn matches_pattern(name: &str, pattern: &str) -> bool {
     } else {
         name == pattern_lower
     }
-}
-
-fn navigate_to(
-    dest: PathBuf,
-    current: &mut PathBuf,
-    history: &mut Vec<PathBuf>,
-    index: &mut usize,
-) {
-    // Re-entering the current directory is not a navigation step
-    if dest == *current {
-        return;
-    }
-    // Truncate forward history
-    history.truncate(*index + 1);
-    history.push(dest.clone());
-    *index = history.len() - 1;
-    *current = dest;
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(super) fn navigate_to_directory(
-    dest: PathBuf,
-    current_dir: &mut PathBuf,
-    history: &mut Vec<PathBuf>,
-    history_index: &mut usize,
-    all_entries: &mut Vec<DirEntry>,
-    directory_mode: bool,
-    show_hidden: bool,
-    search_text: &str,
-    filtered_entries: &mut Vec<usize>,
-    selected_indices: &mut HashSet<usize>,
-    scroll_offset: &mut usize,
-    filters: &[FileFilter],
-) {
-    if dest.exists() && dest != *current_dir {
-        navigate_to(dest, current_dir, history, history_index);
-        reload_directory(
-            current_dir,
-            all_entries,
-            directory_mode,
-            show_hidden,
-            search_text,
-            filtered_entries,
-            filters,
-            selected_indices,
-            scroll_offset,
-        );
-    }
-}
-
-/// Re-reads the current directory and resets the list state around it.
-#[allow(clippy::too_many_arguments)]
-pub(super) fn reload_directory(
-    dir: &Path,
-    all_entries: &mut Vec<DirEntry>,
-    directory_mode: bool,
-    show_hidden: bool,
-    search_text: &str,
-    filtered_entries: &mut Vec<usize>,
-    filters: &[FileFilter],
-    selected_indices: &mut HashSet<usize>,
-    scroll_offset: &mut usize,
-) {
-    load_directory(dir, all_entries, directory_mode, show_hidden);
-    update_filtered(all_entries, search_text, filtered_entries, filters);
-    selected_indices.clear();
-    *scroll_offset = 0;
 }
 
 /// Returns all file entry names matching `prefix` (case-insensitive), up to `max` items.
@@ -497,5 +425,118 @@ mod tests {
         assert_eq!(civil_from_days(11_016), (2000, 2, 29));
         assert_eq!(civil_from_days(20_689), (2026, 8, 24));
         assert_eq!(civil_from_days(-1), (1969, 12, 31));
+    }
+}
+
+/// The directory on screen, how the user got there, and what is selected in it.
+///
+/// `show()` keeps one of these instead of threading the same seven values
+/// through every navigation helper by hand.
+pub(super) struct Browser {
+    pub(super) current_dir: PathBuf,
+    pub(super) all_entries: Vec<DirEntry>,
+    /// Indices into `all_entries` surviving the search text and the filters.
+    pub(super) filtered_entries: Vec<usize>,
+    /// Indices into `all_entries`, not into `filtered_entries`.
+    pub(super) selected_indices: HashSet<usize>,
+    pub(super) scroll_offset: usize,
+    pub(super) show_hidden: bool,
+    history: Vec<PathBuf>,
+    history_index: usize,
+    directory_mode: bool,
+    filters: Vec<FileFilter>,
+}
+
+impl Browser {
+    /// Opens `start`, reading its contents immediately.
+    pub(super) fn new(
+        start: PathBuf,
+        directory_mode: bool,
+        filters: Vec<FileFilter>,
+        search: &str,
+    ) -> Self {
+        let mut browser = Self {
+            history: vec![start.clone()],
+            history_index: 0,
+            current_dir: start,
+            all_entries: Vec::new(),
+            filtered_entries: Vec::new(),
+            selected_indices: HashSet::new(),
+            scroll_offset: 0,
+            show_hidden: false,
+            directory_mode,
+            filters,
+        };
+        browser.reload(search);
+        browser
+    }
+
+    /// Rereads the current directory, clearing the selection and the scroll.
+    pub(super) fn reload(&mut self, search: &str) {
+        load_directory(
+            &self.current_dir,
+            &mut self.all_entries,
+            self.directory_mode,
+            self.show_hidden,
+        );
+        self.refilter(search);
+        self.selected_indices.clear();
+        self.scroll_offset = 0;
+    }
+
+    /// Reapplies `search` and the filters without touching the disk.
+    pub(super) fn refilter(&mut self, search: &str) {
+        update_filtered(
+            &self.all_entries,
+            search,
+            &mut self.filtered_entries,
+            &self.filters,
+        );
+    }
+
+    /// Moves to `dest` and records the step in history.
+    ///
+    /// Re-entering the current directory, or one that no longer exists, does
+    /// nothing.
+    pub(super) fn navigate_to(&mut self, dest: PathBuf, search: &str) {
+        if dest == self.current_dir || !dest.exists() {
+            return;
+        }
+        self.history.truncate(self.history_index + 1);
+        self.history.push(dest.clone());
+        self.history_index = self.history.len() - 1;
+        self.current_dir = dest;
+        self.reload(search);
+    }
+
+    /// Steps back through history, if there is anywhere to go.
+    pub(super) fn go_back(&mut self, search: &str) {
+        if self.can_go_back() {
+            self.history_index -= 1;
+            self.current_dir = self.history[self.history_index].clone();
+            self.reload(search);
+        }
+    }
+
+    /// Steps forward through history, if there is anywhere to go.
+    pub(super) fn go_forward(&mut self, search: &str) {
+        if self.can_go_forward() {
+            self.history_index += 1;
+            self.current_dir = self.history[self.history_index].clone();
+            self.reload(search);
+        }
+    }
+
+    pub(super) fn can_go_back(&self) -> bool {
+        self.history_index > 0
+    }
+
+    pub(super) fn can_go_forward(&self) -> bool {
+        self.history_index + 1 < self.history.len()
+    }
+
+    /// Identifies the history position for the chrome cache signature.
+    pub(super) fn history_step(&self) -> (usize, usize) {
+        (self.history_index, self.history.len())
     }
 }
