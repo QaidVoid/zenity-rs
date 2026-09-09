@@ -1,4 +1,28 @@
 
+## [0.3.0](https://github.com/QaidVoid/zenity-rs/compare/v0.2.15...v0.3.0) - 2026-09-09
+
+### Added
+
+- *(progress)* Expose the cancel flag to worker code - ([8e07be8](https://github.com/QaidVoid/zenity-rs/commit/8e07be8cd243fd26885142ccaa223c62b580f1bc))
+- *(progress)* Add spawn() to drive dialogs in-process - ([ab0b746](https://github.com/QaidVoid/zenity-rs/commit/ab0b7464e2664a851c9cfd379ee6b48f50535493))
+
+### Fixed
+
+- *(cli)* Honor --timeout in the file dialog - ([b0dd376](https://github.com/QaidVoid/zenity-rs/commit/b0dd37647f85413cbd56a19ad1f9b1782d4f805c))
+- *(cli)* Use one error code and show help when bare - ([cfe6119](https://github.com/QaidVoid/zenity-rs/commit/cfe6119ef3e35e43f34b99d0dc1b504a48b61ac7))
+- *(cli)* Match zenity on usage errors and --timeout - ([1f720dc](https://github.com/QaidVoid/zenity-rs/commit/1f720dc05d1effbc54b1eab891b62cbf2b3e3760))
+- *(progress)* Elide over-long status text instead of clipping - ([9f23eae](https://github.com/QaidVoid/zenity-rs/commit/9f23eae1b1e91d18d40b7b150c7492dc1add237c))
+- *(progress)* Drain pending events so Cancel is clickable - ([d9aa7aa](https://github.com/QaidVoid/zenity-rs/commit/d9aa7aa64b89741657ff50bbfa4a7d7769653d03))
+
+### Other
+
+- *(file-select)* Move the fs test module to the end - ([05f2dfb](https://github.com/QaidVoid/zenity-rs/commit/05f2dfb39dcad85ec2bca599723c4c826bf968da))
+- *(file-select)* Lift the drawing out of show() - ([ef8c5e8](https://github.com/QaidVoid/zenity-rs/commit/ef8c5e8f6ee9683c8523cd7b27ca745ae0e64d26))
+- *(file-select)* Fold browser state into one struct - ([fc25a3d](https://github.com/QaidVoid/zenity-rs/commit/fc25a3d232a264812ec1a7bff8c3c76a24a55aca))
+- *(file-select)* Split helpers out of the dialog module - ([f07c65b](https://github.com/QaidVoid/zenity-rs/commit/f07c65b701ae844ab11712952932d8d2f7abebba))
+- *(list)* Stop holding a canvas for every cell - ([0bfd933](https://github.com/QaidVoid/zenity-rs/commit/0bfd933cf5a2b2f8c79372c5b32ab74b46d1a57f))
+- Fix build commands that never worked on stable - ([9bc978f](https://github.com/QaidVoid/zenity-rs/commit/9bc978fa364178a394be7c190de24291c6e919f1))
+
 ## [0.2.15](https://github.com/QaidVoid/zenity-rs/compare/v0.2.14...v0.2.15) - 2026-09-05
 
 ### Fixed
