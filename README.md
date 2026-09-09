@@ -213,28 +213,41 @@ zenity-rs --forms --add-entry="First" --add-entry="Last" --separator=","
 
 ## Building
 
+Builds on stable Rust.
+
 ### Default (X11 + Wayland)
 
 ```bash
-cargo build --release -Z build-std=std,panic_abort
+cargo build --release
 ```
 
 ### X11 only
 
 ```bash
-cargo build --release --no-default-features --features x11 -Z build-std=std,panic_abort
+cargo build --release --no-default-features --features x11
 ```
 
 ### Wayland only
 
 ```bash
-cargo build --release --no-default-features --features wayland -Z build-std=std,panic_abort
+cargo build --release --no-default-features --features wayland
 ```
 
 ### Static binary (musl)
 
 ```bash
-cargo build --release --target x86_64-unknown-linux-musl -Z build-std=std,panic_abort
+cargo build --release --target x86_64-unknown-linux-musl
+```
+
+### Smallest binary (nightly)
+
+Release binaries rebuild the standard library so panics abort immediately,
+dropping the formatting and unwinding machinery. This needs a nightly
+toolchain and takes noticeably longer:
+
+```bash
+./scripts/build-min.sh                              # host
+./scripts/build-min.sh aarch64-unknown-linux-musl   # any target
 ```
 
 ## License
