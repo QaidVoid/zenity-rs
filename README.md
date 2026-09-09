@@ -209,7 +209,7 @@ zenity-rs --forms --add-entry="First" --add-entry="Last" --separator=","
 | 0 | OK/Yes clicked, or selection made |
 | 1 | Cancel/No clicked, or dialog closed (ESC/window close) |
 | 5 | Timeout reached |
-| 100 | Error occurred |
+| 255 | Error occurred, including an unknown option or an unusable value |
 
 ## Building
 

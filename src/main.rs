@@ -143,14 +143,14 @@ fn apply_message_options(
     builder
 }
 
-/// Exit code zenity uses for a usage problem: an unknown option, an option
-/// value it cannot parse, or no dialog type at all.
-const EXIT_USAGE: i32 = 255;
+/// Exit code for anything that went wrong, whether the arguments were unusable
+/// or the dialog could not run.
+const EXIT_ERROR: i32 = 255;
 
 /// The message zenity prints for any unusable option.
 fn usage_error() -> i32 {
     eprintln!("This option is not available. Please see --help for all possible usages.");
-    EXIT_USAGE
+    EXIT_ERROR
 }
 
 fn main() -> ExitCode {
@@ -158,7 +158,7 @@ fn main() -> ExitCode {
         Ok(code) => ExitCode::from(code as u8),
         Err(e) => {
             eprintln!("zenity-rs: {e}");
-            ExitCode::from(100)
+            ExitCode::from(EXIT_ERROR as u8)
         }
     }
 }
@@ -175,7 +175,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut entry_text = String::new();
     let mut timeout: Option<u32> = None;
     let mut hide_text = false;
-    let mut password_flag = false;
     let mut auto_scroll = false;
     let mut width: Option<u32> = None;
     let mut height: Option<u32> = None;
@@ -257,10 +256,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 Long("error") => dialog_type = Some(DialogType::Error),
                 Long("question") => dialog_type = Some(DialogType::Question),
                 Long("entry") => dialog_type = Some(DialogType::Entry),
-                Long("password") => {
-                    dialog_type = Some(DialogType::Password);
-                    password_flag = true;
-                }
+                Long("password") => dialog_type = Some(DialogType::Password),
                 Long("progress") => dialog_type = Some(DialogType::Progress),
                 Long("file-selection") => dialog_type = Some(DialogType::FileSelection),
                 Long("list") => dialog_type = Some(DialogType::List),
@@ -401,8 +397,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let dialog_type = match dialog_type {
         Some(dt) => dt,
         None => {
-            eprintln!("You must specify a dialog type. See 'zenity-rs --help' for details");
-            return Ok(EXIT_USAGE);
+            print_help();
+            return Ok(0);
         }
     };
 
@@ -490,11 +486,6 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 builder = builder.height(h);
             }
             let result = builder.show()?;
-            // zenity reports a timed-out --password as 1, but --entry
-            // --hide-text as 5; they are separate code paths upstream
-            if password_flag && matches!(result, EntryResult::Timeout) {
-                return Ok(1);
-            }
             Ok(handle_entry_result(result))
         }
         DialogType::Progress => {
@@ -933,8 +924,7 @@ EXIT CODES:
     0   OK/Yes clicked, or value selected
     1   Cancel/No clicked, dialog closed (ESC or window close), or checkbox unchecked
     5   Timeout reached
-    100 Error occurred
-    255 Unknown option, unparsable option value, or no dialog type given
+    255 Error occurred, including an unknown option or an unusable value
 "#
     );
 }
