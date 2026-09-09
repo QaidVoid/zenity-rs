@@ -526,8 +526,9 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
             for filter in file_filters {
                 builder = builder.add_filter(filter);
             }
-            // zenity's file chooser runs its own loop and ignores --timeout, so
-            // the flag is accepted and dropped here rather than honored
+            if let Some(t) = timeout {
+                builder = builder.timeout(t);
+            }
             if let Some(w) = width {
                 builder = builder.width(w);
             }
