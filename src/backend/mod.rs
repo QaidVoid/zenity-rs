@@ -220,19 +220,21 @@ pub(crate) fn create_window(width: u16, height: u16) -> Result<AnyWindow, Error>
     }
 }
 
+/// Connects only when the environment names a compositor. Probing
+/// `XDG_RUNTIME_DIR` for sockets would pick up compositors from other sessions
+/// of the same user, such as a Wayland session on another VT. An empty value
+/// counts as unset, so `WAYLAND_DISPLAY= zenity-rs ...` forces X11.
 #[cfg(feature = "wayland")]
 fn try_wayland(width: u16, height: u16) -> Option<AnyWindow> {
-    let socket_name = find_wayland_socket()?;
-
-    let _guard = SocketGuard::new(&socket_name);
+    let is_set = |name| std::env::var_os(name).is_some_and(|v| !v.is_empty());
+    if !is_set("WAYLAND_DISPLAY") && !is_set("WAYLAND_SOCKET") {
+        return None;
+    }
 
     match wayland::Connection::connect() {
         Ok(conn) => {
             match conn.create_window(width, height) {
-                Ok(w) => {
-                    std::mem::forget(conn);
-                    return Some(AnyWindow::Wayland(Box::new(w)));
-                }
+                Ok(w) => return Some(AnyWindow::Wayland(Box::new(w))),
                 Err(e) => eprintln!("Wayland window creation failed: {e}"),
             }
         }
@@ -242,82 +244,9 @@ fn try_wayland(width: u16, height: u16) -> Option<AnyWindow> {
     None
 }
 
-#[cfg(feature = "wayland")]
-fn find_wayland_socket() -> Option<String> {
-    if let Ok(socket) = std::env::var("WAYLAND_SOCKET") {
-        return Some(socket);
-    }
-
-    if let Ok(display) = std::env::var("WAYLAND_DISPLAY") {
-        return Some(display);
-    }
-
-    let xdg_runtime = std::env::var_os("XDG_RUNTIME_DIR")?;
-    let xdg_path = std::path::PathBuf::from(&xdg_runtime);
-
-    let rd = std::fs::read_dir(&xdg_path).ok()?;
-
-    let mut chosen: Option<String> = None;
-    let mut candidate_count: usize = 0;
-
-    for entry in rd.flatten() {
-        let fname = entry.file_name();
-        if let Some(s) = fname.to_str()
-            && let Some(suffix) = s.strip_prefix("wayland-")
-        {
-            if suffix.is_empty() || !suffix.chars().all(|c| c.is_ascii_digit()) {
-                continue;
-            }
-
-            candidate_count += 1;
-
-            if s == "wayland-0" {
-                chosen = Some(s.to_string());
-                break;
-            }
-
-            if chosen.is_none() {
-                chosen = Some(s.to_string());
-            }
-        }
-    }
-
-    if candidate_count > 1 {
-        eprintln!("zenity-rs: multiple wayland socket candidates found, using first");
-    }
-
-    chosen
-}
-
 #[cfg(feature = "x11")]
 fn try_x11(width: u16, height: u16) -> Result<AnyWindow, Error> {
     let conn = x11::Connection::connect()?;
     let w = conn.create_window(width, height)?;
     Ok(AnyWindow::X11(Box::new(w)))
-}
-
-#[cfg(feature = "wayland")]
-struct SocketGuard {
-    old_value: Option<std::ffi::OsString>,
-}
-
-#[cfg(feature = "wayland")]
-impl SocketGuard {
-    fn new(path: &str) -> Self {
-        let old_value = std::env::var_os("WAYLAND_DISPLAY");
-        unsafe { std::env::set_var("WAYLAND_DISPLAY", path) };
-        Self {
-            old_value,
-        }
-    }
-}
-
-#[cfg(feature = "wayland")]
-impl Drop for SocketGuard {
-    fn drop(&mut self) {
-        match &self.old_value {
-            Some(old) => unsafe { std::env::set_var("WAYLAND_DISPLAY", old) },
-            None => unsafe { std::env::remove_var("WAYLAND_DISPLAY") },
-        }
-    }
 }
