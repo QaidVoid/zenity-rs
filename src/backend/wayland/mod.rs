@@ -830,15 +830,6 @@ impl Dispatch<WlKeyboard, ()> for WaylandState {
                 let keycode = kbvm::Keycode::from_evdev(key);
                 let modifiers = convert_wayland_modifiers(state.modifier_mask);
 
-                // KEY_ESC = 1 in evdev codes
-                if key == 1
-                    && key_state == WEnum::Value(wl_keyboard::KeyState::Pressed)
-                    && state.modifier_mask == kbvm::ModifierMask::NONE
-                {
-                    state.pending_events.push_back(WindowEvent::CloseRequested);
-                    return;
-                }
-
                 if let Some(ref lookup_table) = state.lookup_table {
                     let group = kbvm::GroupIndex(state.keyboard_group);
                     let lookup = lookup_table.lookup(group, state.modifier_mask, keycode);

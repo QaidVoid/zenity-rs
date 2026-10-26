@@ -77,7 +77,6 @@ impl DisplayConnection for Connection {
 }
 
 const MOVERESIZE_MOVE: u32 = 8;
-const KEYCODE_ESC: u8 = 9;
 const WM_CLASS: &[u8] = b"zenity\0Zenity\0";
 
 // X11 cursor font character constants
@@ -464,15 +463,6 @@ impl X11Window {
                 WindowEvent::CloseRequested
             }
             Event::KeyPress(press) if press.event == self.window => {
-                // ESC without modifiers closes the dialog
-                if press.detail == KEYCODE_ESC
-                    && !press
-                        .state
-                        .intersects(KeyButMask::CONTROL | KeyButMask::SHIFT | KeyButMask::MOD1)
-                {
-                    return Some(WindowEvent::CloseRequested);
-                }
-
                 let modifiers = convert_modifiers(press.state);
                 let keycode = kbvm::Keycode::from_x11(press.detail.into());
                 let (mods, group) = convert_to_kbvm_mods(press.state);

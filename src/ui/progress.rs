@@ -19,7 +19,7 @@ use crate::{
     error::Error,
     render::{Canvas, Font},
     ui::{
-        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, ellipsize,
+        BASE_BUTTON_HEIGHT, BASE_BUTTON_SPACING, BASE_CORNER_RADIUS, Colors, KEY_ESCAPE, ellipsize,
         ellipsize_middle, open_window,
         widgets::{Widget, button::Button, point_in_widget, progress_bar::ProgressBar},
     },
@@ -671,6 +671,9 @@ impl ProgressBuilder {
 
                 match &event {
                     WindowEvent::CloseRequested => {
+                        return Ok(ProgressResult::Closed);
+                    }
+                    WindowEvent::KeyPress(key_event) if key_event.keysym == KEY_ESCAPE => {
                         return Ok(ProgressResult::Closed);
                     }
                     WindowEvent::RedrawRequested => {
