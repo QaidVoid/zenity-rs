@@ -1,4 +1,16 @@
 
+## [0.3.1](https://github.com/QaidVoid/zenity-rs/compare/v0.3.0...v0.3.1) - 2026-11-14
+
+### Fixed
+
+- *(backend)* Let dialogs handle Escape themselves - ([f87d031](https://github.com/QaidVoid/zenity-rs/commit/f87d031b9afb5a261342f8a8bf6949e4e6d9afde))
+- *(backend)* Only use Wayland when the env names a compositor - ([6838132](https://github.com/QaidVoid/zenity-rs/commit/6838132a3358d10644e048e540fc416374377f05))
+- *(x11)* Fall back to layout names when the keymap fails to load ([#57](https://github.com/QaidVoid/zenity-rs/pull/57)) - ([ed4ce92](https://github.com/QaidVoid/zenity-rs/commit/ed4ce926a1915519812302fb15ee9a8d6d3e1235))
+
+### Other
+
+- *(deps)* Upgrade to latest and raise MSRV to 1.95 - ([c88e103](https://github.com/QaidVoid/zenity-rs/commit/c88e103bdbfa82c6fa06ccc77e894bdd7956f937))
+
 ## [0.3.0](https://github.com/QaidVoid/zenity-rs/compare/v0.2.15...v0.3.0) - 2026-09-09
 
 ### Added
