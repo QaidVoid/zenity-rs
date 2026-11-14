@@ -2,7 +2,10 @@
 
 use std::{ops::Deref, rc::Rc};
 
-use kbvm::{lookup::LookupTable, xkb::x11::KbvmX11Ext};
+use kbvm::{
+    lookup::LookupTable,
+    xkb::{Context, Keymap, rmlvo::Group, x11::KbvmX11Ext},
+};
 use x11rb::{
     connection::Connection as X11rbConnection,
     properties::WmSizeHints,
@@ -39,6 +42,8 @@ x11rb::atom_manager! {
         _NET_WM_WINDOW_TYPE_DIALOG,
 
         _NET_WM_MOVERESIZE,
+
+        _XKB_RULES_NAMES,
     }
 }
 
@@ -354,16 +359,9 @@ impl X11Window {
         .set_normal_hints(&conn.inner, window)?
         .check()?;
 
-        // Initialize keyboard handling with kbvm
-        conn.setup_xkb_extension()
-            .map_err(|_| Error::X11(X11Error::NoVisual))?;
-        let device_id = conn
-            .get_xkb_core_device_id()
-            .map_err(|_| Error::X11(X11Error::NoVisual))?;
-        let keymap = conn
-            .get_xkb_keymap(device_id)
-            .map_err(|_| Error::X11(X11Error::NoVisual))?;
-        let lookup_table = keymap.to_builder().build_lookup_table();
+        let lookup_table = load_keymap(&conn, screen.root, atoms._XKB_RULES_NAMES)
+            .to_builder()
+            .build_lookup_table();
 
         // Create cursors from the cursor font for the default arrow only.
         // IMPORTANT: do NOT set any window cursor during creation — letting the
@@ -537,6 +535,42 @@ impl X11Window {
             _ => return None,
         })
     }
+}
+
+/// Reads the server's keymap, or compiles one from the RMLVO names the server
+/// publishes on the root window when that fails. kbvm cannot read keymaps whose
+/// key types leave a level unnamed, such as the one `numpad:mac` produces,
+/// because it asks the server for the name of atom 0.
+fn load_keymap(conn: &Connection, root: xproto::Window, rules_names: xproto::Atom) -> Keymap {
+    let from_server = conn
+        .setup_xkb_extension()
+        .and_then(|_| conn.get_xkb_core_device_id())
+        .and_then(|device| conn.get_xkb_keymap(device));
+    if let Ok(keymap) = from_server {
+        return keymap;
+    }
+
+    let value = conn
+        .get_property(false, root, rules_names, AtomEnum::STRING, 0, 1024)
+        .ok()
+        .and_then(|cookie| cookie.reply().ok())
+        .map(|reply| reply.value)
+        .unwrap_or_default();
+    let value = String::from_utf8_lossy(&value);
+    let mut fields = value.split('\0').map(|s| Some(s).filter(|s| !s.is_empty()));
+    let [rules, model, layout, variant, options] = std::array::from_fn(|_| fields.next().flatten());
+
+    let groups: Option<Vec<Group>> = layout.map(|layout| {
+        Group::from_layouts_and_variants(layout, variant.unwrap_or_default()).collect()
+    });
+    let options: Option<Vec<&str>> = options.map(|options| options.split(',').collect());
+    Context::default().keymap_from_names(
+        Vec::new(),
+        rules,
+        model,
+        groups.as_deref(),
+        options.as_deref(),
+    )
 }
 
 fn convert_modifiers(state: KeyButMask) -> Modifiers {
