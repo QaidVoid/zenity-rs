@@ -2,7 +2,7 @@
 name = "zenity-rs"
 version = "0.3.0"
 edition = "2024"
-rust-version = "1.88"
+rust-version = "1.95"
 license = "MIT"
 description = "Display simple GUI dialogs from the command line"
 keywords = ["zenity", "dialog", "gui", "cli"]
@@ -30,13 +30,13 @@ ab_glyph = { version = "0.2", features = ["libm"] }
 lexopt = "0.3"
 
 # Misc
-bitflags = "2.11"
-dirs = "6"
+bitflags = "2.13"
+dirs = "7"
 libc = "0.2"
 
 # X11 backend (optional)
-x11rb = { version = "0.13", default-features = false, features = ["xkb", "shm"], optional = true }
-kbvm = { version = "0.1", features = ["x11"], optional = true }
+x11rb = { version = "0.14", default-features = false, features = ["xkb", "shm"], optional = true }
+kbvm = { version = "0.2", features = ["x11"], optional = true }
 
 # Wayland backend (optional)
 wayland-client = { version = "0.31", default-features = false, optional = true }
