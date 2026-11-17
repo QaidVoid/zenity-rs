@@ -200,7 +200,16 @@ zenity-rs --forms --add-entry="First" --add-entry="Last" --separator=","
 --width=N         # Set dialog width
 --height=N        # Set dialog height
 --timeout=N       # Auto-close after N seconds
+--app-id=ID       # Set the window identity (WM_CLASS on X11, app_id on Wayland)
+--class=CLASS     # Set only the X11 WM_CLASS resource class (for compatibility)
+--name=NAME       # Set only the X11 WM_CLASS resource name (for compatibility)
 ```
+
+`--app-id` sets the window identity as given, so short names like `winetricks`
+work as well as D-Bus-style IDs such as `com.example.MyApp`. On X11 it becomes
+`WM_CLASS`, on Wayland the `xdg_toplevel` `app_id`. `--class` and `--name` are
+the older GDK options for setting the two halves of `WM_CLASS`; when no
+`--app-id` is given they also provide the Wayland `app_id`.
 
 ## Exit Codes
 

@@ -2,11 +2,13 @@
 //!
 //! This library provides simple GUI dialogs for shell scripts and command-line tools.
 
+pub mod app_id;
 pub(crate) mod backend;
 pub mod error;
 pub(crate) mod render;
 pub mod ui;
 
+pub use app_id::{set_app_id, set_wm_class, set_wm_name};
 pub use error::Error;
 pub use ui::{
     ButtonPreset, Colors, DialogResult, Icon, THEME_DARK, THEME_LIGHT,
