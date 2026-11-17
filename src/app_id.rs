@@ -47,10 +47,11 @@ fn resource_string(value: impl Into<String>) -> String {
 
 /// Overrides the process-wide application identifier.
 ///
-/// The value is used verbatim; no validation is performed so that short
-/// names (e.g. `winetricks`) can be used for window matching.
+/// The value is used as-is, without validation, so short names (e.g.
+/// `winetricks`) work for window matching. Like the X11 setters, an embedded
+/// NUL terminates it, which also keeps it safe for the Wayland string type.
 pub fn set_app_id(id: impl Into<String>) {
-    let id = id.into();
+    let id = resource_string(id);
     write_identity(|identity| identity.app_id = Some(id));
 }
 
@@ -139,6 +140,16 @@ mod tests {
     #[test]
     fn resource_strings_stop_at_nul() {
         assert_eq!(resource_string("My\0Trailing"), "My");
+    }
+
+    #[test]
+    fn set_app_id_stops_at_nul() {
+        set_app_id("tool\0suffix");
+        let identity = identity().read().unwrap_or_else(|e| e.into_inner());
+        #[cfg(feature = "x11")]
+        assert_eq!(wm_class_from(&identity), b"tool\0tool\0");
+        #[cfg(feature = "wayland")]
+        assert_eq!(app_id_from(&identity), "tool");
     }
 
     #[cfg(feature = "x11")]
