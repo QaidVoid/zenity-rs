@@ -1,4 +1,14 @@
 
+## [0.3.2](https://github.com/QaidVoid/zenity-rs/compare/v0.3.1...v0.3.2) - 2026-11-18
+
+### Added
+
+- Add --app-id, --class and --name window identity options ([#60](https://github.com/QaidVoid/zenity-rs/pull/60)) - ([fa6672a](https://github.com/QaidVoid/zenity-rs/commit/fa6672ae3553ed4d9bb27a9183318f1be7a05171))
+
+### Other
+
+- Add fmt, clippy, test and MSRV checks - ([c14472b](https://github.com/QaidVoid/zenity-rs/commit/c14472be2ef25f95ad0db093300eee922e75f6b0))
+
 ## [0.3.1](https://github.com/QaidVoid/zenity-rs/compare/v0.3.0...v0.3.1) - 2026-11-14
 
 ### Fixed
