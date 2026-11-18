@@ -82,7 +82,6 @@ impl DisplayConnection for Connection {
 }
 
 const MOVERESIZE_MOVE: u32 = 8;
-const WM_CLASS: &[u8] = b"zenity\0Zenity\0";
 
 // X11 cursor font character constants
 const XC_LEFT_PTR: u16 = 68; // Default arrow
@@ -420,7 +419,8 @@ impl X11Window {
             upload_buf: Vec::new(),
             shm,
         };
-        win.set_class(WM_CLASS)?;
+        let wm_class = crate::app_id::wm_class();
+        win.set_class(&wm_class)?;
         win.set_window_type(WindowType::Dialog)?;
 
         Ok(win)

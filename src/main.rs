@@ -180,6 +180,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
     let mut height: Option<u32> = None;
     let mut no_wrap = false;
 
+    // Window identity
+    let mut app_id: Option<String> = None;
+    let mut wm_class: Option<String> = None;
+    let mut wm_name: Option<String> = None;
+
     // Shared options (for list, forms, file-selector)
     let mut separator = String::from("|");
     let mut multiple_mode = false;
@@ -287,6 +292,11 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 Long("ok-label") => ok_label = parser.value()?.string()?,
                 Long("cancel-label") => cancel_label = parser.value()?.string()?,
                 Long("separator") => separator = parser.value()?.string()?,
+                Long("app-id") => app_id = Some(parser.value()?.string()?),
+                // GDK options from GTK2/GTK3, kept for compatibility. They set
+                // one half of X11 WM_CLASS and stand in for --app-id on Wayland.
+                Long("class") => wm_class = Some(parser.value()?.string()?),
+                Long("name") => wm_name = Some(parser.value()?.string()?),
 
                 // Progress options
                 Long("percentage") => percentage = parser.value()?.string()?.parse()?,
@@ -387,6 +397,18 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         Ok(Some(code)) => return Ok(code),
         Ok(None) => {}
         Err(_) => return Ok(usage_error()),
+    }
+
+    // Window identity. Values are taken as-is; no validation is done so
+    // simple names work for taskbar/desktop-file matching too.
+    if let Some(id) = app_id {
+        zenity_rs::set_app_id(id);
+    }
+    if let Some(class) = wm_class {
+        zenity_rs::set_wm_class(class);
+    }
+    if let Some(name) = wm_name {
+        zenity_rs::set_wm_class_instance(name);
     }
 
     // Resolved after parsing so the flag works on either side of --entry
@@ -830,6 +852,9 @@ USAGE:
     --switch              Suppress OK/Cancel buttons, only show extra buttons
     --no-markup           Do not enable pango markup (for compatibility)
     --ellipsize           Enable ellipsizing in dialog text (for compatibility)
+    --app-id=ID           Set the application identifier (WM_CLASS on X11, app_id on Wayland)
+    --class=CLASS         Set the WM_CLASS class on X11, app_id on Wayland (for compatibility)
+    --name=NAME           Set the WM_CLASS name on X11, app_id on Wayland (for compatibility)
     -h, --help            Print this help message
     --version             Print version information
 
