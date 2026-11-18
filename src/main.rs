@@ -293,8 +293,8 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
                 Long("cancel-label") => cancel_label = parser.value()?.string()?,
                 Long("separator") => separator = parser.value()?.string()?,
                 Long("app-id") => app_id = Some(parser.value()?.string()?),
-                // GDK options from GTK2/GTK3, kept for compatibility. Unlike
-                // --app-id they take any string and only affect X11 WM_CLASS.
+                // GDK options from GTK2/GTK3, kept for compatibility. They set
+                // one half of X11 WM_CLASS and stand in for --app-id on Wayland.
                 Long("class") => wm_class = Some(parser.value()?.string()?),
                 Long("name") => wm_name = Some(parser.value()?.string()?),
 
@@ -408,7 +408,7 @@ fn run() -> Result<i32, Box<dyn std::error::Error>> {
         zenity_rs::set_wm_class(class);
     }
     if let Some(name) = wm_name {
-        zenity_rs::set_wm_name(name);
+        zenity_rs::set_wm_class_instance(name);
     }
 
     // Resolved after parsing so the flag works on either side of --entry
