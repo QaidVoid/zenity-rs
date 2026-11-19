@@ -71,13 +71,12 @@ jobs:
           sudo apt-get install -y --no-install-recommends b3sum
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # nightly
+        uses: dtolnay/rust-toolchain@6c977a6ca4077a0ceb28ffbe03f59d46e9ac8772 # stable
         with:
           # the toolchain selector must be an explicit input now that the
           # action is pinned to a sha (the ref no longer carries it)
-          toolchain: nightly
+          toolchain: stable
           targets: ${{ matrix.build.TARGET }}
-          components: rust-src
 
       - name: Install zig
         if: ${{ matrix.build.ZIGTARGET }}
@@ -99,17 +98,14 @@ jobs:
 
       - name: Build
         run: |
-          # the profile only asks for panic = "abort" so the crate still builds
-          # on stable; nightly upgrades it to immediate-abort here
-          export RUSTFLAGS="-Z unstable-options -C panic=immediate-abort"
           if [ -n "${{ matrix.build.ZIGTARGET }}" ]; then
             TENV=$(echo "${{ matrix.build.TARGET }}" | tr 'a-z-' 'A-Z_')
             export CARGO_TARGET_${TENV}_LINKER="$RUNNER_TEMP/zigcc"
-            RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static -C link-self-contained=no"
+            export RUSTFLAGS="-C target-feature=+crt-static -C link-self-contained=no"
             export ZIG_GLOBAL_CACHE_DIR="$RUNNER_TEMP/zig-cache"
             export ZIG_LOCAL_CACHE_DIR="$RUNNER_TEMP/zig-cache"
           fi
-          cargo build --release --locked --target ${{ matrix.build.TARGET }} -Z build-std=std,panic_abort
+          cargo build --release --locked --target ${{ matrix.build.TARGET }}
 
       - name: Prepare release assets
         shell: bash
