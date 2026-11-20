@@ -88,13 +88,21 @@ jobs:
           mkdir -p "$RUNNER_TEMP/zig"
           tar xJf "$RUNNER_TEMP/zig.tar.xz" -C "$RUNNER_TEMP/zig" --strip-components=1
 
-      # with -C link-self-contained=no rustc passes no crt objects, so
-      # every linker arg can go straight to zig cc
+      # with -C link-self-contained=no rustc passes no crt objects, so the
+      # linker args can go straight to zig cc. The one exception is the
+      # -Wl,--no-rosegment that rustc adds for loongarch64, which zig cc
+      # rejects. It only tunes segment layout, so the wrapper drops it.
       - name: Create zig-cc linker wrapper
         if: ${{ matrix.build.ZIGTARGET }}
         run: |
-          printf '#!/bin/bash\nexec "%s" cc -target %s "$@"\n' \
-            "$RUNNER_TEMP/zig/zig" "${{ matrix.build.ZIGTARGET }}" > "$RUNNER_TEMP/zigcc"
+          cat > "$RUNNER_TEMP/zigcc" <<EOF
+          #!/bin/bash
+          args=()
+          for arg in "\$@"; do
+            [ "\$arg" = -Wl,--no-rosegment ] || args+=("\$arg")
+          done
+          exec "$RUNNER_TEMP/zig/zig" cc -target ${{ matrix.build.ZIGTARGET }} "\${args[@]}"
+          EOF
           chmod +x "$RUNNER_TEMP/zigcc"
 
       - name: Build
