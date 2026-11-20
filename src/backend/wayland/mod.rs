@@ -90,6 +90,10 @@ pub(super) struct WaylandState {
 
     // Input state
     last_serial: u32,
+    // Serial of the latest wl_pointer.enter, required by wl_pointer.set_cursor
+    pointer_serial: u32,
+    // Set on pointer enter; the cursor must be reapplied before it is defined
+    cursor_stale: bool,
     modifier_mask: kbvm::ModifierMask,
     keyboard_group: u32,
 
@@ -131,6 +135,8 @@ impl WaylandState {
             output_scale: 1,
             effective_scale: 1,
             last_serial: 0,
+            pointer_serial: 0,
+            cursor_stale: false,
             modifier_mask: kbvm::ModifierMask::NONE,
             keyboard_group: 0,
             lookup_table: None,
@@ -301,7 +307,7 @@ impl WaylandWindow {
 
             if let Some(pointer) = &self.state.pointer {
                 pointer.set_cursor(
-                    self.state.last_serial,
+                    self.state.pointer_serial,
                     Some(&self.cursor_surface),
                     xhot as i32,
                     yhot as i32,
@@ -309,6 +315,20 @@ impl WaylandWindow {
             }
             break;
         }
+    }
+
+    /// Dispatches queued events and reapplies the cursor after a pointer enter.
+    ///
+    /// The cursor image is undefined on enter until the client sets it, so
+    /// compositors may keep showing the previous surface's cursor otherwise.
+    fn dispatch_pending(&mut self) -> Result<(), Error> {
+        self.event_queue.dispatch_pending(&mut self.state)?;
+        if self.state.cursor_stale {
+            self.state.cursor_stale = false;
+            self.update_cursor();
+            self.conn.flush()?;
+        }
+        Ok(())
     }
 }
 
@@ -436,7 +456,7 @@ impl Window for WaylandWindow {
                 if let Some(guard) = self.event_queue.prepare_read() {
                     let _ = guard.read();
                 }
-                self.event_queue.dispatch_pending(&mut self.state)?;
+                self.dispatch_pending()?;
             }
             // ret == 0: timeout — loop will check repeat_key
             // ret < 0: interrupted — loop again
@@ -461,7 +481,7 @@ impl Window for WaylandWindow {
             let _ = guard.read();
         }
 
-        self.event_queue.dispatch_pending(&mut self.state)?;
+        self.dispatch_pending()?;
 
         Ok(self.state.pending_events.pop_front())
     }
@@ -713,6 +733,8 @@ impl Dispatch<WlPointer, ()> for WaylandState {
                 ..
             } => {
                 state.last_serial = serial;
+                state.pointer_serial = serial;
+                state.cursor_stale = true;
                 // Scale coordinates from logical to physical
                 state
                     .pending_events
