@@ -1,4 +1,14 @@
 
+## [0.3.3](https://github.com/QaidVoid/zenity-rs/compare/v0.3.2...v0.3.3) - 2026-11-20
+
+### Fixed
+
+- *(wayland)* Set cursor on pointer enter with the enter serial ([#64](https://github.com/QaidVoid/zenity-rs/pull/64)) - ([1eca5f0](https://github.com/QaidVoid/zenity-rs/commit/1eca5f04e7a80d778b64175b80743e7eda7f93ea))
+
+### Other
+
+- Drop --no-rosegment from loongarch64 zig cc links ([#66](https://github.com/QaidVoid/zenity-rs/pull/66)) - ([5ace06d](https://github.com/QaidVoid/zenity-rs/commit/5ace06d2e7404870a3025fe58dde9c013ae2c0bf))
+
 ## [0.3.2](https://github.com/QaidVoid/zenity-rs/compare/v0.3.1...v0.3.2) - 2026-11-18
 
 ### Added
